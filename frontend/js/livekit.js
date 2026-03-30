@@ -13,6 +13,7 @@ class LiveKitClient {
         this.localParticipant = null;
         this.knownParticipants = []; // Track known participants manually
         this.audioElements = []; // Store all audio elements for control
+        this.localAudioTrack = null; // Store local audio track for mute/unmute
     }
     
     /**
@@ -216,6 +217,9 @@ class LiveKitClient {
                     if (track.kind === 'audio') {
                         const pub = await this.localParticipant.publishTrack(track);
                         console.log('Published track via createLocalTracks:', pub);
+                        // Save reference to local audio track for mute/unmute
+                        this.localAudioTrack = track;
+                        console.log('Saved local audio track for mute:', this.localAudioTrack);
                     }
                 }
             }
@@ -361,16 +365,58 @@ class LiveKitClient {
         };
     }
     
-    /**
+/**
      * Set muted state (mute/unmute microphone)
      */
     setMuted(muted) {
         console.log('Setting mute state:', muted);
         
-        if (!this.localParticipant) {
-            console.warn('No local participant found');
-            return;
+        try {
+            // Use the saved local audio track
+            if (this.localAudioTrack) {
+                console.log('Using saved localAudioTrack:', this.localAudioTrack);
+                
+                if (muted) {
+                    // Mute - use the track's mute method
+                    this.localAudioTrack.mute().then(() => {
+                        console.log('Muted local audio track');
+                    }).catch(e => {
+                        console.warn('Error muting track:', e);
+                    });
+                } else {
+                    // Unmute - use the track's unmute method
+                    this.localAudioTrack.unmute().then(() => {
+                        console.log('Unmuted local audio track');
+                    }).catch(e => {
+                        console.warn('Error unmuting track:', e);
+                    });
+                }
+            } else {
+                console.warn('No local audio track saved');
+            }
+            
+            // Also try to handle via localParticipant
+            if (this.localParticipant) {
+                const audioPubs = this.localParticipant.audioPublications;
+                if (audioPubs && audioPubs.forEach) {
+                    audioPubs.forEach((pub) => {
+                        console.log('Audio publication:', pub.trackSid, 'isMuted:', pub.isMuted);
+                        if (pub.track) {
+                            if (muted) {
+                                pub.track.mute().catch(e => console.warn('Error:', e));
+                            } else {
+                                pub.track.unmute().catch(e => console.warn('Error:', e));
+                            }
+                        }
+                    });
+                }
+            }
+            
+            console.log('Mute state set to:', muted);
+        } catch (e) {
+            console.warn('Could not set mute:', e);
         }
+    }
         
         try {
             // Get local audio tracks directly - we need to find the actual track objects
@@ -456,23 +502,16 @@ class LiveKitClient {
         if (!this.room) return;
         
         try {
-            if (deafened) {
-                // Unsubscribe from all remote audio
-                this.room.participants.forEach(p => {
-                    p.audioPublications.forEach(pub => {
-                        if (pub.track) {
-                            pub.setSubscribed(false);
-                        }
-                    });
-                });
-            } else {
-                // Subscribe to all remote audio
-                this.room.participants.forEach(p => {
-                    p.audioPublications.forEach(pub => {
-                        if (pub.track) {
-                            pub.setSubscribed(true);
-                        }
-                    });
+            // Use remoteParticipants instead of participants
+            if (this.room.remoteParticipants) {
+                this.room.remoteParticipants.forEach(p => {
+                    if (p.audioPublications) {
+                        p.audioPublications.forEach(pub => {
+                            if (pub.track) {
+                                pub.setSubscribed(!deafened);
+                            }
+                        });
+                    }
                 });
             }
         } catch (e) {
