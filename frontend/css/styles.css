@@ -1,19 +1,21 @@
 /* Custom styles for Voice-Chat - Teamspeak Style */
 
-/* Base colors - Teamspeak dark theme */
+/* Base colors - VoiceSpace Theme (Discord + TeamSpeak vibes) */
 :root {
-    --bg-primary: #1e1e1e;
-    --bg-secondary: #252525;
-    --bg-tertiary: #2d2d2d;
-    --bg-hover: #323232;
-    --text-primary: #eeeeee;
-    --text-secondary: #aaaaaa;
-    --text-muted: #666666;
-    --accent: #4080d0;
-    --accent-hover: #5090e0;
-    --green-speaking: #4caf50;
-    --red-muted: #e53935;
-    --border: #3a3a3a;
+    --bg-primary: #1E1E1E;
+    --bg-secondary: #2C2F33;
+    --bg-tertiary: #36393F;
+    --bg-hover: #40444B;
+    --text-primary: #FFFFFF;
+    --text-secondary: #B9BBBE;
+    --text-muted: #72767D;
+    --accent: #F472B6;
+    --accent-hover: #E91E8C;
+    --green-speaking: #3BA55C;
+    --red-muted: #ED4245;
+    --border: #202225;
+    --pink-accent: #F472B6;
+    --pink-dark: #E91E8C;
 }
 
 /* Reset and base */
@@ -73,11 +75,13 @@ body {
 .server-icon:hover {
     border-radius: 16px;
     background: var(--accent);
+    color: white;
 }
 
 .server-icon.active {
     border-radius: 16px;
     background: var(--accent);
+    color: white;
 }
 
 /* ===== CHANNELS SIDEBAR ===== */
@@ -605,7 +609,7 @@ body {
 
 /* ===== AUTH VIEW ===== */
 .auth-view {
-    background: var(--bg-primary);
+    background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -614,10 +618,12 @@ body {
 
 .auth-card {
     background: var(--bg-secondary);
-    border-radius: 8px;
-    padding: 32px;
+    border-radius: 12px;
+    padding: 40px 32px;
     width: 100%;
-    max-width: 360px;
+    max-width: 380px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--border);
 }
 
 .auth-card h1 {
