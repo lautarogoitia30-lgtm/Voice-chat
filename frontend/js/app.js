@@ -241,7 +241,7 @@ async function handleLoginSubmit(e, elements) {
         
         // Fetch user profile to get avatar
         try {
-            const profileResponse = await fetch('http://localhost:8001/users/me', {
+            const profileResponse = await fetch('https://voice-chat-production-a794.up.railway.app/users/me', {
                 headers: { 'Authorization': 'Bearer ' + response.access_token }
             });
             if (profileResponse.ok) {
@@ -376,7 +376,7 @@ function renderMembers(members) {
         
         if (member.avatar_url) {
             // Use avatar image
-            const avatarSrc = member.avatar_url.startsWith('http') ? member.avatar_url : 'http://localhost:8001' + member.avatar_url;
+            const avatarSrc = member.avatar_url.startsWith('http') ? member.avatar_url : 'https://voice-chat-production-a794.up.railway.app' + member.avatar_url;
             avatarHtml = `<img src="${avatarSrc}" alt="${member.username}" class="member-avatar-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"><div class="member-avatar" style="display:none">${initial}</div>`;
         } else {
             avatarHtml = `<div class="member-avatar">${initial}</div>`;
@@ -569,7 +569,7 @@ async function handleInviteUser() {
         console.log('  - Username to invite:', username);
         console.log('  - Token:', token ? token.substring(0, 20) + '...' : 'NO TOKEN');
         
-        const response = await fetch(`http://localhost:8000/groups/${state.selectedGroup.id}/invite`, {
+        const response = await fetch(`https://voice-chat-production-a794.up.railway.app/groups/${state.selectedGroup.id}/invite`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -654,7 +654,7 @@ async function handleFileUpload(input) {
     
     try {
         // Upload file
-        const response = await fetch('http://localhost:8001/files/upload', {
+        const response = await fetch('https://voice-chat-production-a794.up.railway.app/files/upload', {
             method: 'POST',
             headers: {
                 'Authorization': 'Bearer ' + API.getAuthToken()
@@ -726,12 +726,12 @@ function renderFileMessage(message) {
     if (isImage) {
         fileHtml = `
             <div class="message-file">
-                <img src="http://localhost:8001${fileInfo.url}" alt="${fileInfo.filename}" onclick="window.open(this.src, '_blank')">
+                <img src="https://voice-chat-production-a794.up.railway.app${fileInfo.url}" alt="${fileInfo.filename}" onclick="window.open(this.src, '_blank')">
                 <div class="message-file-info">
                     <div class="message-file-name">${fileInfo.filename}</div>
                     <div class="message-file-size">${sizeStr}</div>
                 </div>
-                <a href="http://localhost:8001${fileInfo.url}" target="_blank" class="message-file-download">Abrir</a>
+                <a href="https://voice-chat-production-a794.up.railway.app${fileInfo.url}" target="_blank" class="message-file-download">Abrir</a>
             </div>
         `;
     } else {
@@ -742,7 +742,7 @@ function renderFileMessage(message) {
                     <div class="message-file-name">${fileInfo.filename}</div>
                     <div class="message-file-size">${sizeStr}</div>
                 </div>
-                <a href="http://localhost:8001${fileInfo.url}" target="_blank" class="message-file-download">Descargar</a>
+                <a href="https://voice-chat-production-a794.up.railway.app${fileInfo.url}" target="_blank" class="message-file-download">Descargar</a>
             </div>
         `;
     }
@@ -1103,7 +1103,7 @@ async function updateVoiceParticipantsDisplay() {
             // Check if participant has avatar
             let avatarHtml = '';
             if (p.avatar_url) {
-                const avatarSrc = p.avatar_url.startsWith('http') ? p.avatar_url : 'http://localhost:8001' + p.avatar_url;
+                const avatarSrc = p.avatar_url.startsWith('http') ? p.avatar_url : 'https://voice-chat-production-a794.up.railway.app' + p.avatar_url;
                 avatarHtml = `<img src="${avatarSrc}" alt="${p.username}" class="member-avatar-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"><div class="member-avatar" style="display:none">${initial}</div>`;
             } else {
                 avatarHtml = `<div class="member-avatar">${initial}</div>`;
@@ -1425,7 +1425,7 @@ function updateParticipantsList() {
                 
                 let avatarHtml = '';
                 if (avatarUrl) {
-                    const avatarSrc = avatarUrl.startsWith('http') ? avatarUrl : 'http://localhost:8001' + avatarUrl;
+                    const avatarSrc = avatarUrl.startsWith('http') ? avatarUrl : 'https://voice-chat-production-a794.up.railway.app' + avatarUrl;
                     avatarHtml = `<img src="${avatarSrc}" alt="${state.currentUser?.username}" class="member-avatar-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"><div class="member-avatar" style="display:none">${initial}</div>`;
                 } else {
                     avatarHtml = `<div class="member-avatar">${initial}</div>`;
@@ -1456,7 +1456,7 @@ function updateParticipantsList() {
             // Check if participant has avatar
             let avatarHtml = '';
             if (p.avatar_url) {
-                const avatarSrc = p.avatar_url.startsWith('http') ? p.avatar_url : 'http://localhost:8001' + p.avatar_url;
+                const avatarSrc = p.avatar_url.startsWith('http') ? p.avatar_url : 'https://voice-chat-production-a794.up.railway.app' + p.avatar_url;
                 avatarHtml = `<img src="${avatarSrc}" alt="${p.name}" class="member-avatar-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"><div class="member-avatar" style="display:none">${initial}</div>`;
             } else {
                 avatarHtml = `<div class="member-avatar">${initial}</div>`;
@@ -1788,7 +1788,7 @@ function switchSettingsTab(tabName) {
 // Load profile settings from API
 async function loadProfileSettings() {
     try {
-        const response = await fetch('http://localhost:8001/users/me', {
+        const response = await fetch('https://voice-chat-production-a794.up.railway.app/users/me', {
             headers: {
                 'Authorization': 'Bearer ' + API.getAuthToken()
             }
@@ -1807,7 +1807,7 @@ async function loadProfileSettings() {
         // Update avatar
         const avatarImg = document.getElementById('settings-avatar');
         if (user.avatar_url) {
-            avatarImg.src = user.avatar_url.startsWith('http') ? user.avatar_url : 'http://localhost:8001' + user.avatar_url;
+            avatarImg.src = user.avatar_url.startsWith('http') ? user.avatar_url : 'https://voice-chat-production-a794.up.railway.app' + user.avatar_url;
         } else {
             // Default avatar with first letter
             avatarImg.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" fill="%234080d0"/><text x="50" y="65" text-anchor="middle" fill="white" font-size="40">' + (user.username?.charAt(0).toUpperCase() || 'U') + '</text></svg>';
@@ -1825,7 +1825,7 @@ async function saveProfileSettings() {
         const avatar_url = document.getElementById('settings-avatar-url').value;
         const bio = document.getElementById('settings-bio').value;
         
-        const response = await fetch('http://localhost:8001/users/me', {
+        const response = await fetch('https://voice-chat-production-a794.up.railway.app/users/me', {
             method: 'PUT',
             headers: {
                 'Authorization': 'Bearer ' + API.getAuthToken(),
@@ -1893,7 +1893,7 @@ async function handleAvatarUpload(input) {
     formData.append('file', file);
     
     try {
-        const response = await fetch('http://localhost:8001/users/me/avatar', {
+        const response = await fetch('https://voice-chat-production-a794.up.railway.app/users/me/avatar', {
             method: 'POST',
             headers: {
                 'Authorization': 'Bearer ' + API.getAuthToken()
@@ -1911,7 +1911,7 @@ async function handleAvatarUpload(input) {
         console.log('Avatar uploaded, URL:', data.avatar_url);
         
         // Update the input with the full URL
-        const fullUrl = 'http://localhost:8001' + data.avatar_url;
+        const fullUrl = 'https://voice-chat-production-a794.up.railway.app' + data.avatar_url;
         document.getElementById('settings-avatar-url').value = fullUrl;
         
         // Auto-save the profile

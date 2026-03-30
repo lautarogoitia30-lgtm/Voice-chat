@@ -3,7 +3,7 @@
  * Handles all HTTP requests with JWT authentication.
  */
 
-const API_BASE = 'http://localhost:8001';
+const API_BASE = 'https://voice-chat-production-a794.up.railway.app';
 
 // JWT token storage
 let authToken = localStorage.getItem('voice_chat_token');
