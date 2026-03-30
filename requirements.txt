@@ -1,0 +1,29 @@
+# FastAPI and server
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+
+# Database
+sqlalchemy==2.0.35
+aiosqlite==0.20.0
+
+# Authentication
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.12
+
+# Validation
+pydantic==2.9.2
+pydantic-settings==2.6.1
+
+# File handling
+aiofiles==24.1.0
+
+# LiveKit for voice
+livekit==0.16.2
+livekit-agents==0.8.4
+
+# Environment variables
+python-dotenv==1.0.1
+
+# Python typing
+typing-extensions==4.12.2

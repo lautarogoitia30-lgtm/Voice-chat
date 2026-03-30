@@ -1,0 +1,1374 @@
+================================================================================
+                    VOICE-CHAT - DOCUMENTACIÓN COMPLETA
+================================================================================
+
+================================================================================
+                           ÍNDICE
+================================================================================
+
+1. Introducción al Proyecto
+2. Arquitectura General
+3. Stack Tecnológico
+4. Estructura de Archivos
+5. Base de Datos
+6. Backend - Explicación Detallada
+   6.1 Modelos (models.py)
+   6.2 Autenticación (auth.py)
+   6.3 Rutas de Autenticación (routes/auth.py)
+   6.4 Rutas de Grupos (routes/groups.py)
+   6.5 Rutas de Canales (routes/channels.py)
+   6.6 Rutas de LiveKit (routes/livekit.py)
+   6.7 WebSocket (websocket.py)
+7. Frontend - Explicación Detallada
+   7.1 HTML Principal (index.html)
+   7.2 API Client (js/api.js)
+   7.3 WebSocket Client (js/websocket.js)
+   7.4 LiveKit Client (js/livekit.js)
+   7.5 Lógica Principal (js/app.js)
+8. Cómo Funciona el Chat de Voz (LiveKit)
+9. Cómo Funciona el Chat de Texto (WebSocket)
+10. Configuración y Variables de Entorno
+11. Cómo Ejecutar el Proyecto
+12. Problemas Comunes y Soluciones
+13. Próximos Pasos (Settings)
+
+================================================================================
+                     1. INTRODUCCIÓN AL PROYECTO
+================================================================================
+
+Voice-Chat es una aplicación de chat de voz y texto similar a Discord o 
+TeamSpeak. Permite:
+
+✓ Crear grupos (servidores)
+✓ Crear canales de texto y voz dentro de los grupos
+✓ Chatear en tiempo real por texto
+✓ Chatear en tiempo real por voz (usando LiveKit)
+✓ Invitar usuarios a grupos
+
+================================================================================
+                     2. ARQUITECTURA GENERAL
+================================================================================
+
+El proyecto tiene una arquitectura cliente-servidor típica:
+
+    ┌─────────────────┐          ┌─────────────────┐
+    │                 │          │                 │
+    │   FRONTEND      │◄────────►│   BACKEND       │
+    │   (Navegador)  │   HTTP   │   (FastAPI)     │
+    │                 │          │                 │
+    └─────────────────┘          └─────────────────┘
+            │                            │
+            │ WebSocket                  │ SQLite
+            │                            │
+            ▼                            ▼
+    ┌─────────────────┐          ┌─────────────────┐
+    │  Chat de Texto  │          │  Base de Datos  │
+    │  (tiempo real) │          │   (SQLite)      │
+    └─────────────────┘          └─────────────────┘
+                                        │
+                                        ▼
+                               ┌─────────────────┐
+                               │   LiveKit       │
+                               │  (Voz/音频)     │
+                               └─────────────────┘
+
+FLUJO DE DATOS:
+
+1. Usuario se registra/login → Backend verifica y devuelve JWT token
+2. Frontend guarda el token en localStorage
+3. Para chatear por texto → WebSocket conecta directamente
+4. Para chatear por voz → Backend genera token de LiveKit y conecta
+
+================================================================================
+                     3. STACK TECNOLÓGICO
+================================================================================
+
+BACKEND:
+- Python 3.11+
+- FastAPI (framework web)
+- SQLAlchemy (ORM para base de datos)
+- SQLite (base de datos)
+- JWT (autenticación)
+- bcrypt (encriptación de contraseñas)
+- LiveKit (servicio de voz)
+- WebSocket (chat en tiempo real)
+
+FRONTEND:
+- HTML5 + CSS3
+- Tailwind CSS (estilos)
+- JavaScript vanilla (sin frameworks)
+- LiveKit Client (conexión de voz)
+- WebSocket API (chat en tiempo real)
+
+================================================================================
+                     4. ESTRUCTURA DE ARCHIVOS
+================================================================================
+
+Voice-Chat/
+│
+├── backend/                    # Código del servidor
+│   ├── __init__.py
+│   ├── main.py                # Entry point de FastAPI
+│   ├── models.py              # Modelos de la base de datos
+│   ├── schemas.py             # Esquemas Pydantic (validación)
+│   ├── auth.py                # Funciones de autenticación
+│   ├── database.py             # Configuración de la DB
+│   │
+│   └── routes/                 # Rutas de la API
+│       ├── __init__.py
+│       ├── auth.py             # /auth/register, /auth/login
+│       ├── groups.py           # /groups (crear, listar, invitar)
+│       ├── channels.py         # /channels (crear canales, voz)
+│       └── livekit.py          # /livekit/token (token para voz)
+│
+│   └── websocket.py            # Chat de texto en tiempo real
+│
+├── frontend/                  # Código del navegador
+│   ├── index.html             # Página principal
+│   ├── css/
+│   │   └── styles.css         # Estilos personalizados
+│   │
+│   └── js/
+│       ├── api.js              # Cliente HTTP (llamadas al backend)
+│       ├── websocket.js        # Cliente WebSocket (chat texto)
+│       ├── livekit.js          # Cliente LiveKit (chat voz)
+│       └── app.js              # Lógica principal de la app
+│
+├── voice_chat.db              # Base de datos SQLite
+├── .env                       # Variables de entorno
+└── DOCUMENTACION.txt          # Este archivo
+
+================================================================================
+                     5. BASE DE DATOS
+================================================================================
+
+La base de datos tiene las siguientes tablas:
+
+TABLA: users
+├── id (INTEGER PRIMARY KEY)      - ID único del usuario
+├── username (TEXT)               - Nombre de usuario
+├── email (TEXT)                  - Email del usuario
+├── password_hash (TEXT)          - Contraseña encriptada
+└── created_at (DATETIME)        - Fecha de creación
+
+TABLA: groups
+├── id (INTEGER PRIMARY KEY)      - ID único del grupo
+├── name (TEXT)                   - Nombre del grupo
+├── owner_id (INTEGER)            - ID del usuario que creó el grupo
+└── created_at (DATETIME)        - Fecha de creación
+
+TABLA: channels
+├── id (INTEGER PRIMARY KEY)      - ID único del canal
+├── group_id (INTEGER)           - ID del grupo al que pertenece
+├── name (TEXT)                  - Nombre del canal
+├── type (TEXT)                  - "text" o "voice"
+└── created_at (DATETIME)       - Fecha de creación
+
+TABLA: group_members
+├── id (INTEGER PRIMARY KEY)
+├── group_id (INTEGER)           - ID del grupo
+├── user_id (INTEGER)            - ID del usuario
+└── joined_at (DATETIME)         - Fecha en que se unió
+
+TABLA: voice_participants
+├── id (INTEGER PRIMARY KEY)
+├── channel_id (INTEGER)         - ID del canal de voz
+├── user_id (INTEGER)            - ID del usuario
+└── joined_at (DATETIME)         - Fecha en que se unió al voz
+
+RELACIONES ENTRE TABLAS:
+
+users (1) ──────< (N) group_members
+users (1) ──────< (N) groups (como owner)
+groups (1) ─────< (N) channels
+groups (1) ─────< (N) group_members
+channels (1) ──< (N) voice_participants
+
+================================================================================
+                     6. BACKEND - EXPLICACIÓN DETALLADA
+================================================================================
+
+-----------------------------------------------------------------
+6.1 MODELOS (backend/models.py)
+-----------------------------------------------------------------
+
+Los modelos definen la estructura de las tablas en la base de datos.
+
+    class User(Base):
+        - id: Integer primary key
+        - username: String(50) unique - NO puede haber dos usuarios con mismo nombre
+        - email: String(100) unique - NO puede haber dos usuarios con mismo email
+        - password_hash: String - Contraseña encriptada con bcrypt
+        - created_at: DateTime - Cuándo se creó el usuario
+
+    class Group(Base):
+        - id: Integer primary key
+        - name: String(100) - Nombre del grupo
+        - owner_id: Integer FK - Quién creó el grupo
+        - owner: Relationship - Relación con User
+        - created_at: DateTime
+
+    class Channel(Base):
+        - id: Integer primary key
+        - group_id: Integer FK - A qué grupo pertenece
+        - name: String(100) - Nombre del canal
+        - type: Enum - "text" o "voice"
+        - created_at: DateTime
+
+    class GroupMember(Base):
+        - id: Integer primary key
+        - group_id: Integer FK
+        - user_id: Integer FK
+        - joined_at: DateTime
+
+    class VoiceParticipant(Base):
+        - id: Integer primary key
+        - channel_id: Integer FK - Canal de voz donde está
+        - user_id: Integer FK - Usuario que está en voz
+        - joined_at: DateTime
+
+-----------------------------------------------------------------
+6.2 AUTENTICACIÓN (backend/auth.py)
+-----------------------------------------------------------------
+
+Este archivo contiene las funciones de seguridad:
+
+A) hash_password(password)
+   - Recibe: "micontraseña"
+   - Retorna: "$2b$12$..." (hash de bcrypt)
+   - Usa: bcrypt.gensalt() y bcrypt.hashpw()
+
+B) verify_password(plain_password, hashed_password)
+   - Recibe: contraseña plana y hash guardado
+   - Retorna: True si coinciden, False si no
+   - Usa: bcrypt.checkpw()
+
+C) create_jwt_token(user_id, username)
+   - Recibe: user_id=1, username="Lauti"
+   - Retorna: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+   - El JWT contiene: sub (user_id), username, exp (expiración)
+   - Expira en 1440 minutos (24 horas) por defecto
+
+D) verify_jwt_token(token)
+   - Recibe: el token JWT
+   - Retorna: {"user_id": 1, "username": "Lauti", "exp": ...}
+   - Lanza excepción si el token está expirado o es inválido
+
+E) get_current_user(credentials)
+   - Es una dependencia de FastAPI
+   - Se usa en las rutas que requieren autenticación
+   - Lee el header "Authorization: Bearer <token>"
+   - Retorna el diccionario con user_id y username
+
+-----------------------------------------------------------------
+6.3 RUTAS DE AUTENTICACIÓN (backend/routes/auth.py)
+-----------------------------------------------------------------
+
+Son los endpoints para registro y login:
+
+POST /auth/register
+- Input: {"username": "...", "email": "...", "password": "..."}
+- Proceso:
+  1. Verifica que el username no exista
+  2. Verifica que el email no exista
+  3. Hashea la contraseña
+  4. Crea el usuario en la DB
+- Output: {"id": 1, "username": "Lauti", "email": "lauti@test.com"}
+
+POST /auth/login
+- Input: {"username": "Lauti", "password": "password123"}
+- Proceso:
+  1. Busca el usuario por username
+  2. Verifica la contraseña con verify_password
+  3. Crea un JWT token con create_jwt_token
+- Output: {
+    "access_token": "eyJhbGci...",
+    "token_type": "bearer",
+    "user_id": 1,
+    "username": "Lauti"
+  }
+
+-----------------------------------------------------------------
+6.4 RUTAS DE GRUPOS (backend/routes/groups.py)
+-----------------------------------------------------------------
+
+Endpoints para gestionar grupos:
+
+GET /groups
+- Requiere: JWT token
+- Proceso: Busca todos los grupos donde el usuario es miembro
+- Output: [{"id": 1, "name": "Hola", "owner_id": 1}, ...]
+
+POST /groups
+- Requiere: JWT token
+- Input: {"name": "Mi Grupo"}
+- Proceso:
+  1. Crea el grupo con el usuario actual como owner
+  2. Agrega al owner como miembro automáticamente
+- Output: {"id": 2, "name": "Mi Grupo", "owner_id": 1}
+
+GET /groups/{group_id}
+- Requiere: JWT token
+- Proceso: Devuelve los detalles del grupo
+- Output: {"id": 1, "name": "Hola", "owner_id": 1, "member_count": 2}
+
+POST /groups/{group_id}/invite
+- Requiere: JWT token
+- Input: {"username": "MrPorteno"}
+- Proceso:
+  1. Busca el usuario a invitar
+  2. Verifica que el actual sea miembro del grupo
+  3. Agrega el usuario a group_members
+- Output: {"status": "ok", "message": "User MrPorteno added to group"}
+
+GET /groups/{group_id}/members
+- Requiere: JWT token
+- Proceso: Lista todos los miembros del grupo
+- Output: [{"id": 1, "username": "Lauti", "email": "..."}, ...]
+
+-----------------------------------------------------------------
+6.5 RUTAS DE CANALES (backend/routes/channels.py)
+-----------------------------------------------------------------
+
+Endpoints para gestionar canales de texto y voz:
+
+GET /channels/groups/{group_id}/channels
+- Requiere: JWT token
+- Proceso: Lista todos los canales de un grupo
+- Output: [{"id": 1, "group_id": 1, "name": "General", "type": "voice"}, ...]
+
+POST /channels/groups/{group_id}/channels
+- Requiere: JWT token
+- Input: {"name": "General", "type": "voice"}
+- Proceso: Crea un nuevo canal en el grupo
+- Output: {"id": 2, "group_id": 1, "name": "General", "type": "voice"}
+
+POST /channels/{channel_id}/voice/join
+- Requiere: JWT token
+- Proceso:
+  1. Verifica que el canal sea de tipo "voice"
+  2. Verifica que el usuario sea miembro del grupo
+  3. Agrega el usuario a voice_participants
+- Output: {"status": "ok", "message": "Joined voice channel"}
+
+POST /channels/{channel_id}/voice/leave
+- Requiere: JWT token
+- Proceso: Elimina el usuario de voice_participants
+- Output: {"status": "ok", "message": "Left voice channel"}
+
+GET /channels/{channel_id}/voice/participants
+- Requiere: JWT token
+- Proceso: Lista quién está actualmente en el canal de voz
+- Output: [{"user_id": 1, "username": "Lauti", "joined_at": "..."}, ...]
+
+-----------------------------------------------------------------
+6.6 RUTAS DE LIVEKIT (backend/routes/livekit.py)
+-----------------------------------------------------------------
+
+Endpoint para generar el token de voz:
+
+POST /livekit/token
+- Requiere: JWT token
+- Input: {"channel_id": 1}
+- Proceso:
+  1. Verifica que el canal exista y sea de voz
+  2. Verifica que el usuario sea miembro del grupo
+  3. Genera un token de LiveKit con:
+     - identity = str(user_id)  → "1" o "2"
+     - name = username           → "Lauti" o "MrPorteno"
+     - room = f"channel-{channel_id}" → "channel-1"
+- Output: {
+    "token": "eyJhbGci...",
+    "url": "wss://...",
+    "room_name": "channel-1"
+  }
+
+El token permite al frontend conectarse a LiveKit como ese usuario
+específico. El "identity" es lo que usa LiveKit para identificar a
+cada participante en la sala.
+
+-----------------------------------------------------------------
+6.7 WEBSOCKET (backend/websocket.py)
+-----------------------------------------------------------------
+
+Maneja el chat de texto en tiempo real:
+
+WebSocket /ws/chat/{channel_id}
+- Se conecta cuando el usuario entra a un canal de texto
+- Recibe mensajes JSON: {
+    "channel_id": 1,
+    "sender_id": 1,
+    "sender_username": "Lauti",
+    "content": "Hola!",
+    "timestamp": "2024-01-01T12:00:00"
+  }
+- Reenvía el mensaje a todos los demás conectados a ese canal
+
+================================================================================
+                     7. FRONTEND - EXPLICACIÓN DETALLADA
+================================================================================
+
+-----------------------------------------------------------------
+7.1 HTML PRINCIPAL (frontend/index.html)
+-----------------------------------------------------------------
+
+Estructura de la página:
+
+    <body>
+      <!-- Vista de Auth (Login/Register) -->
+      <div id="auth-view">
+        <form id="login-form">...</form>
+        <form id="register-form">...</form>
+      </div>
+      
+      <!-- Vista Principal (después de login) -->
+      <div id="app-view" class="hidden">
+        
+        <!-- Sidebar Izquierdo (Grupos) -->
+        <div class="servers-sidebar">
+          <div class="server-icon">💬</div>  <!-- Icono del grupo -->
+          <button onclick="loadGroups()">🔄</button>  <!-- Actualizar -->
+          <button onclick="showCreateGroupModal()">➕</button>  <!-- Crear -->
+        </div>
+        
+        <!-- Sidebar Central (Canales) -->
+        <div class="channels-sidebar">
+          <h2 id="selected-group-name">Grupo</h2>
+          <div id="groups-list">...</div>
+          <div id="channels-list">...</div>
+          <button id="create-channel-btn">➕ Nuevo Canal</button>
+          <button id="invite-user-btn">👥 Invitar</button>
+          <div id="members-section">...</div>
+        </div>
+        
+        <!-- Área Principal (Chat) -->
+        <div class="main-content">
+          <h2 id="selected-channel-name">Canal</h2>
+          
+          <!-- Chat de Texto -->
+          <div id="text-chat" class="hidden">
+            <div id="messages-list">...</div>
+            <form id="message-form">
+              <input id="message-input">
+            </form>
+          </div>
+          
+          <!-- Chat de Voz -->
+          <div id="voice-chat" class="hidden">
+            <div id="participants-list">...</div>
+          </div>
+          
+          <!-- Controles de Voz -->
+          <div id="voice-controls" class="hidden">
+            <button id="mute-mic-btn">🎤</button>
+            <button id="deaf-btn">🔊</button>
+            <button id="join-voice-btn">📞</button>
+            <button id="leave-voice-btn" class="hidden">📵</button>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Modales -->
+      <div id="create-group-modal" class="hidden">...</div>
+      <div id="create-channel-modal" class="hidden">...</div>
+      
+      <!-- Scripts -->
+      <script src="js/api.js"></script>
+      <script src="js/websocket.js"></script>
+      <script src="js/livekit.js"></script>
+      <script src="js/app.js"></script>
+    </body>
+
+-----------------------------------------------------------------
+7.2 API CLIENT (frontend/js/api.js)
+-----------------------------------------------------------------
+
+Maneja todas las comunicaciones HTTP con el backend:
+
+CONSTANTES:
+    const API_BASE = 'http://localhost:8001';
+
+FUNCIONES PRINCIPALES:
+
+A) API.auth.register(username, email, password)
+   - Llama: POST /auth/register
+   - Retorna: {id, username, email}
+
+B) API.auth.login(username, password)
+   - Llama: POST /auth/login
+   - Retorna: {access_token, token_type, user_id, username}
+   - Guarda el token en localStorage
+
+C) API.groups.list()
+   - Llama: GET /groups
+   - Retorna: [{id, name, owner_id}, ...]
+
+D) API.groups.create(name)
+   - Llama: POST /groups
+   - Retorna: {id, name, owner_id}
+
+E) API.groups.invite(groupId, username)
+   - Llama: POST /groups/{groupId}/invite
+   - Retorna: {status, message}
+
+F) API.groups.getMembers(groupId)
+   - Llama: GET /groups/{groupId}/members
+   - Retorna: [{id, username, email}, ...]
+
+G) API.channels.list(groupId)
+   - Llama: GET /channels/groups/{groupId}/channels
+   - Retorna: [{id, group_id, name, type}, ...]
+
+H) API.channels.joinVoice(channelId)
+   - Llama: POST /channels/{channelId}/voice/join
+   - Retorna: {status, message}
+
+I) API.channels.leaveVoice(channelId)
+   - Llama: POST /channels/{channelId}/voice/leave
+   - Retorna: {status, message}
+
+J) API.channels.getVoiceParticipants(channelId)
+   - Llama: GET /channels/{channelId}/voice/participants
+   - Retorna: [{user_id, username, joined_at}, ...]
+
+K) API.livekit.getToken(channelId)
+   - Llama: POST /livekit/token
+   - Retorna: {token, url, room_name}
+
+-----------------------------------------------------------------
+7.3 WEBSOCKET CLIENT (frontend/js/websocket.js)
+-----------------------------------------------------------------
+
+Maneja la conexión de WebSocket para chat de texto:
+
+CONSTANTES:
+    const WS_BASE = 'ws://localhost:8001';
+
+MÉTODOS:
+
+A) wsClient.connect(channelId)
+   - Conecta a: ws://localhost:8001/ws/chat/{channelId}
+   - Establece callbacks: onOpen, onMessage, onClose, onError
+   - Intenta reconectar automáticamente si se desconecta
+
+B) wsClient.send(message)
+   - Envía un mensaje JSON por WebSocket
+   - message = JSON.stringify({
+       channel_id: 1,
+       sender_id: 1,
+       sender_username: "Lauti",
+       content: "Hola!",
+       timestamp: new Date()
+     })
+
+C) wsClient.disconnect()
+   - Cierra la conexión WebSocket
+
+EVENTOS:
+
+- onMessage: Se dispara cuando llega un mensaje
+  - El app.js lo usa para mostrar el mensaje en pantalla
+
+-----------------------------------------------------------------
+7.4 LIVEKIT CLIENT (frontend/js/livekit.js)
+-----------------------------------------------------------------
+
+Maneja la conexión de voz usando LiveKit:
+
+MÉTODOS:
+
+A) livekitClient.connect(url, token)
+   - url: "wss://..." (del token de /livekit/token)
+   - token: "eyJ..." (del token de /livekit/token)
+   - Proceso:
+     1. Crea una Room de LiveKit
+     2. Configura eventos:
+        - ConnectionStateChanged
+        - ParticipantConnected
+        - ParticipantDisconnected
+        - TrackSubscribed (audio recibido)
+        - TrackUnsubscribed
+        - ActiveSpeakersChanged
+     3. Conecta al room
+     4. Guarda localParticipant
+
+B) livekitClient.publishMicrophone()
+   - Solicita acceso al micrófono del navegador
+   - Publica el track de audio en el room
+   - Usa setMicrophoneEnabled(true) de LiveKit v2
+
+C) livekitClient.getParticipants()
+   - Retorna array de participantes remotos
+   - Cada participante tiene: identity, name, isSpeaking
+
+D) livekitClient.setMuted(muted)
+   - muted = true: silencia el micrófono
+   - muted = false: activa el micrófono
+
+E) livekitClient.setDeafened(deafened)
+   - deafened = true: silenciar speakers
+   - deafened = false: activar speakers
+
+F) livekitClient.disconnect()
+   - Desconecta del room de LiveKit
+
+EVENTOS IMPORTANTES:
+
+- TrackSubscribed: Se dispara cuando alguien publica audio
+  - El código hace: track.attach() para reproducir el audio
+  - Crea un elemento <audio> y lo agrega al DOM
+
+- ParticipantConnected/Disconnected: Notifica cuando alguien entra/sale
+
+-----------------------------------------------------------------
+7.5 LÓGICA PRINCIPAL (frontend/js/app.js)
+-----------------------------------------------------------------
+
+Este es el archivo más grande que maneja toda la UI:
+
+ESTADO DE LA APP (state):
+    const state = {
+      currentUser: {username, user_id},  // Usuario actual
+      groups: [],                         // Lista de grupos
+      selectedGroup: null,                // Grupo seleccionado
+      selectedChannel: null,              // Canal seleccionado
+      isInVoice: false,                  // Está en voz?
+      isMuted: false,                     // Micrófono silenciado?
+      isDeafened: false,                  // Speakers silenciados?
+    };
+
+FUNCIONES PRINCIPALES:
+
+A) init()
+   - Se ejecuta cuando carga la página
+   - Verifica si hay token en localStorage
+   - Si hay token: muestra la app (showAppView)
+   - Si no hay: muestra login (showAuthView)
+
+B) handleLoginSubmit(e, elements)
+   - Procesa el formulario de login
+   - Llama API.auth.login
+   - Guarda token y usuario en state
+   - Guarda en localStorage para persistencia
+   - Muestra la vista principal
+
+C) handleRegisterSubmit(e, elements)
+   - Procesa el formulario de registro
+   - Crea usuario y hace login automáticamente
+
+D) loadGroups()
+   - Llama API.groups.list()
+   - Actualiza state.groups
+   - Llama renderGroups()
+
+E) renderGroups()
+   - Dibuja la lista de grupos en el sidebar
+   - Selecciona el primer grupo automáticamente
+
+F) selectGroup(group)
+   - Guarda el grupo seleccionado
+   - Carga los miembros del grupo
+   - Carga los canales del grupo
+   - Dibuja los canales
+
+G) renderChannels(channels)
+   - Dibuja los canales separados por tipo:
+     - Canales de voz (tipo "voice")
+     - Canales de texto (tipo "text")
+
+H) selectChannel(channel)
+   - Guarda el canal seleccionado
+   - Si es de texto: muestra textChat, conecta WebSocket
+   - Si es de voz: muestra voiceChat
+
+I) handleJoinVoice()
+   - Flujo completo para unirse a voz:
+     1. API.channels.joinVoice() - registra en DB
+     2. API.livekit.getToken() - obtiene token de LiveKit
+     3. livekitClient.connect() - conecta a LiveKit
+     4. livekitClient.publishMicrophone() - activa el mic
+     5. Actualiza state.isInVoice = true
+     6. Actualiza la UI
+
+J) handleLeaveVoice()
+   - Desconecta del room de LiveKit
+   - Llama API.channels.leaveVoice()
+   - Actualiza state.isInVoice = false
+
+K) updateVoiceControlsUI()
+   - Muestra/oculta botones según el estado
+   - Actualiza iconos de mute/deafen
+
+L) updateParticipantsList()
+   - Dibuja la lista de participantes en el panel de voz
+   - Muestra quién está hablando (isSpeaking)
+
+================================================================================
+                     8. CÓMO FUNCIONA EL CHAT DE VOZ (LIVEKIT)
+================================================================================
+
+ENTENDIENDO LIVEKIT:
+
+LiveKit es un servicio de WebRTC que maneja la transmisión de audio/video
+en tiempo real. Nosotros usamos solo audio (voz).
+
+CONCEPTOS CLAVE:
+
+A) ROOM (Sala)
+   - Es donde los participantes se conectan
+   - Cada canal de voz tiene su propio room
+   - Nombre del room: "channel-{channel_id}" ej: "channel-1"
+   - URL del room: wss://... (proporcionado por LiveKit)
+
+B) PARTICIPANT (Participante)
+   - Cada usuario que se conecta a un room
+   - Tiene un identity único (su user_id como string: "1", "2")
+   - Tiene un name (su username: "Lauti", "MrPorteno")
+
+C) TRACK (Pista)
+   - Audio o video publicado por un participante
+   - Nosotros usamos solo audio
+   - Cuando publicás tu micrófono, creás un audio track
+   - Cuando recibís audio de otro, lo llamás "subscribed"
+
+FLUJO COMPLETO DE VOZ:
+
+1. Usuario hace click en "Unirse"
+
+2. Frontend llama: API.channels.joinVoice(channelId)
+   - Backend: Agrega usuario a voice_participants en DB
+
+3. Frontend llama: API.livekit.getToken(channelId)
+   - Backend: Genera token JWT con:
+     * identity = "1" (el user_id)
+     * name = "Lauti"
+     * room = "channel-1"
+   - Retorna: {token, url, room_name}
+
+4. Frontend llama: livekitClient.connect(url, token)
+   - LiveKit: Valida el token
+   - LiveKit: Crea la conexión WebRTC
+   - LiveKit: Emite evento "ParticipantActive" para el usuario local
+
+5. Frontend llama: livekitClient.publishMicrophone()
+   - Navegador: Solicita acceso al micrófono
+   - LiveKit: Recibe el audio y lo publica en el room
+   - Otros participantes: Reciben evento "TrackSubscribed"
+
+6. Cuando otro usuario se conecta:
+   - Tu frontend recibe: "ParticipantConnected"
+   - Tu código lo agrega a la lista de participantes
+
+7. Cuando alguien habla:
+   - LiveKit detecta quién tiene audio activo
+   - Emite: "ActiveSpeakersChanged"
+   - Tu código actualiza la UI para mostrar quién habla
+
+8. Cuando alguien se va:
+   - LiveKit emite: "ParticipantDisconnected"
+   - Tu código lo remueve de la lista
+
+9. Para escuchar audio:
+   - Cuando llega un TrackSubscribed con kind="audio"
+   - Tu código hace: const audioElement = track.attach()
+   - Esto crea un <audio> HTML que reproduce el audio
+
+================================================================================
+                     9. CÓMO FUNCIONA EL CHAT DE TEXTO (WEBSOCKET)
+================================================================================
+
+El chat de texto usa WebSocket, una conexión bidireccional permanente
+entre el navegador y el servidor.
+
+FLUJO:
+
+1. Usuario entra a un canal de texto
+
+2. Frontend: wsClient.connect(channelId)
+   - Conecta a: ws://localhost:8001/ws/chat/1
+   - El backend acepta la conexión
+
+3. Usuario escribe un mensaje y presiona "Enviar"
+
+4. Frontend: wsClient.send(JSON.stringify(mensaje))
+   - Envía: {
+       channel_id: 1,
+       sender_id: 1,
+       sender_username: "Lauti",
+       content: "Hola!",
+       timestamp: "2024-01-01T12:00:00"
+     }
+
+5. Backend (websocket.py):
+   - Recibe el mensaje
+   - Lo reenvía a TODOS los WebSockets conectados a ese canal
+   - (excepto el que lo envió, o a todos según la implementación)
+
+6. Frontend (onMessage):
+   - Recibe el mensaje JSON
+   - Lo parsea
+   - Llama handleWebSocketMessage(message)
+   - Crea un elemento DOM y lo agrega a messagesList
+
+================================================================================
+                     10. CONFIGURACIÓN Y VARIABLES DE ENTORNO
+================================================================================
+
+El archivo .env contiene las configuraciones del proyecto:
+
+    # JWT Secret - Clave para firmar los tokens
+    SECRET_KEY=dev-secret-key-change-in-production
+    
+    # Algoritmo de JWT
+    ALGORITHM=HS256
+    
+    # Tiempo de expiración del token (en minutos)
+    ACCESS_TOKEN_EXPIRE_MINUTES=1440
+    
+    # URL de la base de datos
+    DATABASE_URL=sqlite+aiosqlite:///./voice_chat.db
+    
+    # LiveKit Configuration (OBLIGATORIO para voz)
+    LIVEKIT_URL=wss://your-livekit-server.com
+    LIVEKIT_API_KEY=your-api-key
+    LIVEKIT_API_SECRET=your-api-secret
+
+PARA USAR LIVEKIT:
+
+1. Crear cuenta en livekit.io
+2. Crear un proyecto
+3. Obtener URL, API Key y API Secret
+4. Ponerlos en el .env
+
+================================================================================
+                     11. CÓMO EJECUTAR EL PROYECTO
+================================================================================
+
+PASO 1: Instalar dependencias
+
+    pip install -r requirements.txt
+
+PASO 2: Configurar .env
+
+    cp .env.example .env
+    # Editar .env con tus valores de LiveKit
+
+PASO 3: Iniciar el backend
+
+    python -m uvicorn backend.main:app --host 127.0.0.1 --port 8001
+
+PASO 4: Abrir el navegador
+
+    http://127.0.0.1:8001
+
+PARA DESARROLLO:
+
+- El backend reload automáticamente cuando cambiás archivos
+- Para forzar reload del frontend, cambiar el número en el HTML:
+  <script src="js/app.js?v=5"> → <script src="js/app.js?v=6">
+
+================================================================================
+                     12. PROBLEMAS COMUNES Y SOLUCIONES
+================================================================================
+
+PROBLEMA: "Users can't see each other in voice"
+
+CAUSA: Ambos usuarios tenían el mismo user_id (misma cuenta)
+
+SOLUCIÓN: 
+1. Verificar que hay 2 usuarios diferentes en la DB
+2. Cada usuario debe hacer login con cuenta propia
+3. El identity en LiveKit es el user_id, debe ser diferente
+
+---
+
+PROBLEMA: "createMicrophoneTracks is not a function"
+
+CAUSA: La API de LiveKit cambió en v2
+
+SOLUCIÓN: Usar createLocalTracks en vez de createMicrophoneTracks
+
+---
+
+PROBLEMA: "Connection refused on port 8000"
+
+CAUSA: El puerto ya está en uso
+
+SOLUCIÓN: Usar otro puerto: python -m uvicorn ... --port 8001
+
+---
+
+PROBLEMA: "Token expired"
+
+CAUSA: El JWT expiró (24 horas por defecto)
+
+SOLUCIÓN: Hacer login de nuevo para obtener nuevo token
+
+---
+
+PROBLEMA: "Cannot connect to LiveKit"
+
+CAUSA: Variables de entorno de LiveKit no configuradas
+
+SOLUCIÓN: Configurar LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET
+
+================================================================================
+                     13. PRÓXIMOS PASOS - SETTINGS
+================================================================================
+
+AGREGAR SECCIÓN DE SETTINGS TIPO DISCORD:
+
+13.1 CONFIGURACIÓN DE PERFIL
+    - Cambiar username
+    - Cambiar avatar (URL o canvas)
+    - Cambiar email
+    - Cambiar contraseña
+    - Eliminar cuenta
+
+13.2 CONFIGURACIÓN DE AUDIO
+    - Selector de dispositivo de entrada (micrófono)
+    - Selector de dispositivo de salida (speakers)
+    - Slider de volumen de entrada
+    - Slider de volumen de salida
+    - Test de micrófono (grabar y reproducir)
+    - Supresión de ruido (Noise suppression)
+    - Cancelación de eco (Echo cancellation)
+
+13.3 CONFIGURACIÓN DE NOTIFICACIONES
+    - Activar/desactivar notificaciones
+    - Sonido de notificaciones
+    - Notificaciones por mencionar
+    - Notificaciones de mensajes directos
+
+13.4 APARIENCIA
+    - Tema claro/oscuro
+    - Tamaño de fuente
+    - Emojis emoji
+
+13.5 IMPLEMENTACIÓN SUGERIDA
+
+    a) Nueva ruta backend:
+       - PUT /users/me - actualizar perfil
+       - PUT /users/me/password - cambiar contraseña
+       - GET /users/me/audio-devices - obtener devices disponibles
+    
+    b) Nueva página/panel en frontend:
+       - Modal o página de settings
+       - Pestañas para cada sección
+       - Guardado automático o botón "Guardar cambios"
+
+================================================================================
+                     14. ACTUALIZACIONES DEL 29 DE MARZO 2026
+================================================================================
+
+En esta sección documentamos todas las nuevas funcionalidades agregadas
+al proyecto el día 29 de Marzo de 2026.
+
+================================================================================
+                     14.1 SECCIÓN DE SETTINGS (COMPLETA)
+================================================================================
+
+El día de hoy implementamos una sección completa de Settings (Configuración)
+similar a Discord, con múltiples pestañas:
+
+-------------------------------------------------------------------------
+14.1.1 PERFIL
+-------------------------------------------------------------------------
+
+UBICACIÓN: frontend/index.html (líneas ~218-247)
+
+Qué permite hacer:
+- Cambiar nombre de usuario (username)
+- Cambiar avatar de dos formas:
+  * Subiendo una imagen desde el navegador
+  * Poniendo una URL de imagen
+- Cambiar la "bio" (descripción/sobre mí)
+
+Backend involucrado:
+- backend/routes/users.py - nuevas rutas creadas
+- backend/models.py - agregados campos avatar_url y bio a User
+
+Endpoints del backend:
+- GET /users/me - obtener perfil del usuario actual
+- PUT /users/me - actualizar perfil (username, email, bio, avatar_url)
+- POST /users/me/avatar - subir imagen de avatar
+
+Cómo funciona la subida de imágenes:
+1. El usuario selecciona un archivo de imagen
+2. Se envía al backend via FormData
+3. El backend valida:
+   - Tipo de archivo (solo JPEG, PNG, GIF, WebP)
+   - Tamaño máximo (5MB)
+4. Se genera un nombre único con UUID
+5. Se guarda en backend/uploads/avatars/
+6. Se devuelve la URL para mostrar en el frontend
+
+-------------------------------------------------------------------------
+14.1.2 AUDIO
+-------------------------------------------------------------------------
+
+UBICACIÓN: frontend/index.html (líneas ~253-305)
+
+Qué permite hacer:
+- Selector de dispositivo de entrada (micrófono)
+- Selector de dispositivo de salida (speakers/auriculares)
+- Slider de volumen de entrada
+- Slider de volumen de salida
+- Toggle de supresión de ruido
+- Toggle de cancelación de eco
+- Test de micrófono (grabar y reproducir)
+
+Cómo funciona el test de micrófono:
+1. Usuario hace click en "Iniciar test"
+2. Se solicita acceso al micrófono del navegador
+3. Se graba audio con MediaRecorder
+4. Se detiene la grabación
+5. Se reproduce el audio grabado
+6. El usuario puede ajustar el volumen de salida
+
+Las preferencias de audio se guardan en localStorage del navegador:
+- voice_chat_input_device
+- voice_chat_output_device
+- voice_chat_input_volume
+- voice_chat_output_volume
+
+-------------------------------------------------------------------------
+14.1.3 NOTIFICACIONES
+-------------------------------------------------------------------------
+
+UBICACIÓN: frontend/index.html (líneas ~313-359)
+
+Qué permite hacer:
+- Activar/desactivar notificaciones globalmente
+- Sonido de notificaciones (beep)
+- Notificaciones cuando te mencionan (@tu_usuario)
+- Notificaciones para todos los mensajes
+
+Cómo funciona:
+- Usa la API de notificaciones del navegador (Notification API)
+- Si el usuario permite, muestra notificaciones del sistema
+- También reproduce un sonido usando Web Audio API
+
+Cuando alguien te menciona:
+- El mensaje llega por WebSocket
+- Se verifica si contiene "@tu_usuario"
+- Si es así, se muestra la notificación
+
+Funciones JavaScript importantes:
+- loadNotificationSettings() - carga preferencias
+- saveNotificationSettings() - guarda preferencias
+- showBrowserNotification() - muestra notificación
+- playNotificationSound() - reproduce sonido
+- shouldNotifyForMessage() - verifica si debe notificar
+
+-------------------------------------------------------------------------
+14.1.4 PRIVACIDAD
+-------------------------------------------------------------------------
+
+UBICACIÓN: frontend/index.html (líneas ~361-415)
+
+Qué permite hacer:
+- Visibilidad del estado (todos/friends/nadie)
+- Mostrar actividad de voz
+- Confirmaciones de lectura
+- Mostrar cuando estás escribiendo
+- Solicitudes de mensaje
+- Tamaño máximo de archivos (10/25/50/100 MB)
+
+Estas preferencias se guardan en localStorage:
+- voice_chat_privacy_status
+- voice_chat_privacy_voice_activity
+- voice_chat_privacy_read_receipts
+- voice_chat_privacy_typing
+- voice_chat_privacy_msg_requests
+- voice_chat_privacy_file_size
+
+-------------------------------------------------------------------------
+14.1.5 APARIENCIA
+-------------------------------------------------------------------------
+
+UBICACIÓN: frontend/index.html (líneas ~417-435)
+
+Qué permite hacer:
+- Cambiar tema (oscuro/claro)
+- Cambiar tamaño de texto (pequeño/mediano/grande)
+
+Cómo funciona:
+- Se aplica una clase al body: "light-theme" o "font-small/medium/large"
+- El CSS tiene estilos específicos para cada tema
+
+Temas disponibles:
+- Oscuro (dark): Colores oscuros por defecto
+- Claro (light): Colores claros, requiere CSS adicional
+
+================================================================================
+                     14.2 TRANSFERENCIA DE ARCHIVOS
+================================================================================
+
+UBICACIÓN: 
+- Backend: backend/routes/files.py (NUEVO ARCHIVO)
+- Frontend: frontend/index.html, frontend/js/app.js
+
+-------------------------------------------------------------------------
+14.2.1 BACKEND - SUBIDA DE ARCHIVOS
+-------------------------------------------------------------------------
+
+Se creó un nuevo archivo: backend/routes/files.py
+
+Endpoint: POST /files/upload
+
+Qué hace:
+1. Recibe el archivo via UploadFile
+2. Valida el tipo de archivo (solo tipos permitidos)
+3. Valida el tamaño (máximo 10MB)
+4. Genera un nombre único con UUID
+5. Guarda el archivo en backend/uploads/files/
+6. Devuelve información del archivo
+
+Tipos de archivos permitidos:
+- Imágenes: image/jpeg, image/png, image/gif, image/webp
+- Documentos: application/pdf, text/plain
+- Audio: audio/mpeg, audio/wav, audio/ogg
+- Video: video/mp4, video/webm
+- Comprimidos: application/zip, application/x-rar-compressed
+
+-------------------------------------------------------------------------
+14.2.2 FRONTEND - INTERFAZ DE USUARIO
+-------------------------------------------------------------------------
+
+Se agregó un botón 📎 en el área de mensajes del chat de texto.
+
+HTML (frontend/index.html):
+- Input type="file" oculto
+- Label que funciona como botón
+- onchange="handleFileUpload(this)"
+
+JavaScript (frontend/js/app.js):
+- handleFileUpload(): sube el archivo al backend
+- renderFileMessage(): muestra el archivo en el chat
+- formatFileSize(): formatea el tamaño (KB, MB)
+
+Cómo se muestra el archivo:
+- Imágenes: se muestra la miniatura
+- Otros archivos: icono según tipo + nombre + tamaño + botón descargar
+
+El mensaje se envía por WebSocket con formato:
+{
+  content: "[FILE:{...}]",
+  is_file: true,
+  file_info: {...}
+}
+
+================================================================================
+                     14.3 EDITAR Y ELIMINAR GRUPOS Y CANALES
+================================================================================
+
+-------------------------------------------------------------------------
+14.3.1 BACKEND - ENDPOINTS NUEVOS
+-------------------------------------------------------------------------
+
+GRUPOS (backend/routes/groups.py):
+
+PUT /groups/{group_id}
+- Actualiza el nombre del grupo
+- Solo el owner (dueño) puede editar
+- Requiere: { "name": "nuevo_nombre" }
+- Retorna: grupo actualizado
+
+DELETE /groups/{group_id}
+- Elimina el grupo y todas sus relaciones
+- Solo el owner puede eliminar
+- Elimina primero todos los miembros
+- Luego elimina el grupo
+
+CANALES (backend/routes/channels.py):
+
+PUT /channels/{channel_id}
+- Actualiza nombre y/o tipo del canal
+- Cualquier miembro del grupo puede editar
+- Requiere: { "name": "...", "type": "voice|text" }
+
+DELETE /channels/{channel_id}
+- Elimina el canal
+- Cualquier miembro del grupo puede eliminar
+- Elimina participantes de voz primero
+
+-------------------------------------------------------------------------
+14.3.2 FRONTEND - INTERFAZ DE USUARIO
+-------------------------------------------------------------------------
+
+EDITAR GRUPO:
+- Click en el botón ✏️ al lado del nombre del grupo
+- Se abre modal con opciones de editar
+- Campo para nuevo nombre
+- Botón rojo "Eliminar Grupo"
+- Solo visible para el owner
+
+EDITAR CANAL:
+- Click derecho sobre cualquier canal
+- Se abre modal de edición
+- Campo para nombre
+- Selector para tipo (voice/text)
+- Botón rojo "Eliminar Canal"
+
+MODALES CREADOS:
+- edit-group-modal: para editar/eliminar grupos
+- edit-channel-modal: para editar/eliminar canales
+
+-------------------------------------------------------------------------
+14.3.3 FUNCIONES JAVASCRIPT
+-------------------------------------------------------------------------
+
+Grupo:
+- showEditGroupModal(): muestra el modal
+- hideEditGroupModal(): oculta el modal
+- handleEditGroup(e): procesa el formulario de edición
+- deleteGroup(): elimina el grupo
+
+Canal:
+- showEditChannelModal(channel): muestra el modal con datos
+- hideEditChannelModal(): oculta el modal
+- handleEditChannel(e): procesa el formulario de edición
+- deleteChannel(): elimina el canal
+
+================================================================================
+                     14.4 MEJORAS ADICIONALES
+================================================================================
+
+-------------------------------------------------------------------------
+14.4.1 CORRECCIÓN DE ANÓNIMO EN MENSAJES
+-------------------------------------------------------------------------
+
+PROBLEMA: Los mensajes mostraban "Anonymous" como remitente
+
+CAUSA: El WebSocket no estaba enviando el token JWT
+
+SOLUCIÓN: 
+- frontend/js/websocket.js: se agregó el token a la URL del WebSocket
+- backend/main.py: se lee el token de la query string
+- backend/websocket.py: se verifica el token y obtiene datos del usuario
+
+URL del WebSocket ahora incluye el token:
+ws://localhost:8001/ws/chat/{channelId}?token={jwt_token}
+
+-------------------------------------------------------------------------
+14.4.2 BOTÓN CERRAR SESIÓN EN SETTINGS
+-------------------------------------------------------------------------
+
+Se agregó un botón "Cerrar Sesión" en el sidebar de Settings.
+Ubicación: frontend/index.html (líneas ~155-158)
+
+Funcionalidad:
+- Pregunta confirmación antes de cerrar
+- Limpia localStorage (token, username, user_id, avatar)
+- Desconecta del canal de voz
+- Desconecta el WebSocket
+- Muestra la vista de autenticación
+
+-------------------------------------------------------------------------
+14.4.3 BOTÓN X PARA CERRAR SETTINGS
+-------------------------------------------------------------------------
+
+Se agregó un botón de cierre (X) en la esquina superior derecha
+del modal de Settings.
+
+Características:
+- Click en X cierra el modal
+- Click afuera del modal también lo cierra
+- Estilo CSS mejorado
+
+================================================================================
+                     14.5 AVATARES EN MIEMBROS Y VOZ
+================================================================================
+
+-------------------------------------------------------------------------
+14.5.1 BACKEND
+-------------------------------------------------------------------------
+
+Se modificó la ruta de miembros de grupo:
+GET /groups/{group_id}/members
+
+Ahora devuelve además de id, username, email:
+- avatar_url: URL de la imagen de perfil
+- bio: descripción del usuario
+
+También se modificó:
+GET /channels/{channel_id}/voice/participants
+
+Para devolver avatar_url de cada participante.
+
+-------------------------------------------------------------------------
+14.5.2 FRONTEND
+-------------------------------------------------------------------------
+
+Se modificó renderMembers() para mostrar avatares:
+- Si tiene avatar_url: muestra la imagen
+- Si no tiene: muestra la inicial del nombre
+- Si la imagen falla: muestra la inicial
+
+Se guardó el avatar en localStorage:
+- voice_chat_avatar_url
+
+Se cargó el avatar al hacer login:
+- fetch('/users/me') para obtener datos actualizados
+
+================================================================================
+                     15. RESUMEN DE ARCHIVOS CREADOS/MODIFICADOS
+================================================================================
+
+ARCHIVOS CREADOS:
+- backend/routes/files.py - manejo de archivos
+- backend/routes/users.py - gestión de usuarios/perfil
+- uploads/avatars/ - directorio para avatares
+- uploads/files/ - directorio para archivos subidos
+
+ARCHIVOS MODIFICADOS:
+- backend/models.py - agregados avatar_url y bio a User
+- backend/schemas.py - agregados esquemas UserUpdate, UserResponse
+- backend/routes/groups.py - agregados PUT y DELETE
+- backend/routes/channels.py - agregados PUT y DELETE
+- backend/main.py - registradas nuevas rutas
+- frontend/index.html - modales de settings, edición, archivos
+- frontend/css/styles.css - estilos para todas las features nuevas
+- frontend/js/api.js - nuevas funciones para users, files, edit/delete
+- frontend/js/app.js - lógica completa de settings y edición
+- frontend/js/websocket.js - token agregado a la conexión
+
+================================================================================
+                     16. ESTADO ACTUAL DEL PROYECTO
+================================================================================
+
+FUNCIONALIDADES IMPLEMENTADAS:
+
+✓ Autenticación (registro, login, JWT)
+✓ Grupos (crear, editar, eliminar, invitar)
+✓ Canales de texto (crear, editar, eliminar)
+✓ Canales de voz (crear, editar, eliminar)
+✓ Chat de texto en tiempo real (WebSocket)
+✓ Chat de voz (LiveKit)
+✓ Settings completo:
+  - Perfil (avatar, username, bio)
+  - Audio (dispositivos, volumen, test)
+  - Notificaciones (sonido, menciones)
+  - Privacidad (visibilidad, actividad)
+  - Apariencia (tema, tamaño texto)
+✓ Transferencia de archivos
+✓ Avatares en miembros y voz
+✓ Editar/eliminar grupos y canales
+
+USUARIOS CREADOS:
+- Lauti (id: 1), password: password123
+- MrPorteno (id: 2), password: password123
+
+SERVIDOR:
+- Backend corriendo en puerto 8001
+- Puerto 8000 está ocupado por otro proceso
+
+================================================================================
+                           FIN DEL DOCUMENTO
+================================================================================
+
+Última actualización: 29 de Marzo de 2026
+Versión del proyecto: 1.1
+Autores: Lauti y MrPorteno
+
