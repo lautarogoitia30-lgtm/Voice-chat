@@ -369,9 +369,9 @@ class LiveKitClient {
             isSpeaking: this.localParticipant.isSpeaking,
             audioTracks: this.localParticipant.audioPublications
         };
-    }
+}
     
-/**
+    /**
      * Set muted state (mute/unmute microphone)
      */
     setMuted(muted) {
@@ -412,72 +412,6 @@ class LiveKitClient {
                                 pub.track.mute().catch(e => console.warn('Error:', e));
                             } else {
                                 pub.track.unmute().catch(e => console.warn('Error:', e));
-                            }
-                        }
-                    });
-                }
-            }
-            
-            console.log('Mute state set to:', muted);
-        } catch (e) {
-            console.warn('Could not set mute:', e);
-        }
-    }
-        
-        try {
-            // Get local audio tracks directly - we need to find the actual track objects
-            const audioTracks = [];
-            
-            // Method 1: Get from localParticipant.tracks (Map)
-            if (this.localParticipant.tracks instanceof Map) {
-                this.localParticipant.tracks.forEach((publication) => {
-                    if (publication.kind === 'audio' || (publication.track && publication.track.kind === 'audio')) {
-                        audioTracks.push({ publication, track: publication.track });
-                    }
-                });
-            }
-            
-            console.log('Found audio tracks:', audioTracks.length);
-            
-            // Mute/unmute each audio track
-            audioTracks.forEach(({ publication, track }) => {
-                console.log('Processing track:', publication.trackSid, 'isMuted:', publication.isMuted);
-                
-                if (muted) {
-                    // Mute the track
-                    if (track && !publication.isMuted) {
-                        track.mute().then(() => {
-                            console.log('Track muted successfully');
-                        }).catch(e => {
-                            console.warn('Error muting track:', e);
-                        });
-                    }
-                } else {
-                    // Unmute the track
-                    if (track && publication.isMuted) {
-                        track.unmute().then(() => {
-                            console.log('Track unmuted successfully');
-                        }).catch(e => {
-                            console.warn('Error unmuting track:', e);
-                        });
-                    }
-                }
-            });
-            
-            // Method 2: Also check room.localParticipant.audioTracks (if exists)
-            if (this.room && this.room.localParticipant && this.room.localParticipant.audioTracks) {
-                const audioTracksMap = this.room.localParticipant.audioTracks;
-                if (audioTracksMap instanceof Map) {
-                    audioTracksMap.forEach((publication) => {
-                        console.log('Audio track from room:', publication.trackSid, 'isMuted:', publication.isMuted);
-                        
-                        if (muted) {
-                            if (publication.track && !publication.isMuted) {
-                                publication.track.mute().catch(e => console.warn('Error:', e));
-                            }
-                        } else {
-                            if (publication.track && publication.isMuted) {
-                                publication.track.unmute().catch(e => console.warn('Error:', e));
                             }
                         }
                     });
