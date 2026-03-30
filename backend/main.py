@@ -56,8 +56,15 @@ app.add_middleware(
 app.mount("/js", StaticFiles(directory=str(FRONTEND_DIR / "js")), name="js")
 app.mount("/css", StaticFiles(directory=str(FRONTEND_DIR / "css")), name="css")
 
-# Serve uploaded files (avatars)
+# Serve uploaded files (avatars and files)
 UPLOADS_DIR = BASE_DIR / "uploads"
+# Create uploads directories if they don't exist
+AVATARS_DIR = UPLOADS_DIR / "avatars"
+FILES_DIR = UPLOADS_DIR / "files"
+UPLOADS_DIR.mkdir(exist_ok=True)
+AVATARS_DIR.mkdir(exist_ok=True)
+FILES_DIR.mkdir(exist_ok=True)
+
 app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR), html=True), name="uploads")
 
 # Include routers
