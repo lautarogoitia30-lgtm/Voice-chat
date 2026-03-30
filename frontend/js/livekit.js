@@ -5,7 +5,7 @@
  */
 
 // DEBUG: Make sure this is the latest version
-console.log('=== LIVEKIT CLIENT v3 LOADED ===');
+console.log('=== LIVEKIT CLIENT v4 LOADED ===');
 
 class LiveKitClient {
     constructor() {
@@ -27,14 +27,20 @@ class LiveKitClient {
             console.log('Connecting to LiveKit room at:', url);
             
             // Import LiveKit client library
+            console.log('Importing LiveKit...');
             const livekit = await import('https://cdn.jsdelivr.net/npm/livekit-client@2/+esm');
+            console.log('LiveKit imported:', livekit);
+            
             const { Room, RoomEvent } = livekit;
+            console.log('Room class:', Room);
             
             this.room = new Room({
                 adaptiveStream: true,
                 dynacast: true,
                 autoSubscribe: true, // Important: automatically subscribe to remote tracks
             });
+            
+            console.log('Room created:', this.room);
             
             // Set up event listeners
             this.room
