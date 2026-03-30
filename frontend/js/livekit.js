@@ -373,41 +373,62 @@ class LiveKitClient {
         }
         
         try {
-            // Get all audio publications
-            const audioPubs = this.localParticipant.audioPublications;
+            // Get local tracks from the room
+            const localTracks = this.localParticipant.tracks;
+            console.log('Local tracks:', localTracks);
             
-            console.log('Audio publications:', audioPubs.size);
-            
-            audioPubs.forEach((pub) => {
-                console.log('Processing audio publication:', pub.trackSid, 'isMuted:', pub.isMuted);
-                
-                if (muted) {
-                    // Mute - disable the track
-                    if (pub.track && !pub.isMuted) {
-                        pub.mute();
-                        console.log('Muted track:', pub.trackSid);
-                    }
-                } else {
-                    // Unmute - enable the track
-                    if (pub.track && pub.isMuted) {
-                        pub.unmute();
-                        console.log('Unmuted track:', pub.trackSid);
-                    }
-                }
-            });
-            
-            // Also handle the local audio tracks directly
-            if (this.localParticipant && this.localParticipant.tracks) {
-                this.localParticipant.tracks.forEach((publication) => {
-                    if (publication.track && publication.track.kind === 'audio') {
+            if (localTracks) {
+                localTracks.forEach((publication) => {
+                    console.log('Track publication:', publication.trackSid, 'kind:', publication.kind, 'isMuted:', publication.isMuted);
+                    
+                    // Check if this is an audio track
+                    if (publication.kind === 'audio' || (publication.track && publication.track.kind === 'audio')) {
                         if (muted) {
-                            publication.track.enabled = false;
+                            // Mute - disable/enable the track
+                            if (publication.track) {
+                                publication.track.enabled = false;
+                                console.log('Disabled audio track');
+                            }
+                            // Also call mute on the publication
+                            if (!publication.isMuted) {
+                                publication.mute();
+                                console.log('Muted publication');
+                            }
                         } else {
-                            publication.track.enabled = true;
+                            // Unmute - enable the track
+                            if (publication.track) {
+                                publication.track.enabled = true;
+                                console.log('Enabled audio track');
+                            }
+                            // Also call unmute on the publication
+                            if (publication.isMuted) {
+                                publication.unmute();
+                                console.log('Unmuted publication');
+                            }
                         }
                     }
                 });
             }
+            
+            // Also try to handle via room's local participant
+            if (this.room && this.room.localParticipant) {
+                const roomLocalTracks = this.room.localParticipant.tracks;
+                if (roomLocalTracks) {
+                    roomLocalTracks.forEach((publication) => {
+                        if (publication.kind === 'audio' || (publication.track && publication.track.kind === 'audio')) {
+                            if (muted) {
+                                publication.track.enabled = false;
+                                if (!publication.isMuted) publication.mute();
+                            } else {
+                                publication.track.enabled = true;
+                                if (publication.isMuted) publication.unmute();
+                            }
+                        }
+                    });
+                }
+            }
+            
+            console.log('Mute state set to:', muted);
         } catch (e) {
             console.warn('Could not set mute:', e);
         }
