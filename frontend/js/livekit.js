@@ -184,7 +184,7 @@ class LiveKitClient {
     
     /**
      * Publish local microphone to the room
-     * Using LiveKit v2 API - createLocalTracks instead of createMicrophoneTracks
+     * SIMPLE: Use setMicrophoneEnabled - LiveKit maneja todo automáticamente
      */
     async publishMicrophone() {
         console.log('=== PUBLISH MICROPHONE ===');
@@ -196,40 +196,9 @@ class LiveKitClient {
         
         try {
             // Use LiveKit's built-in method to enable mic
+            // Esto crea el track, lo publica, y maneja mute/unmute automáticamente
             console.log('Enabling microphone via setMicrophoneEnabled...');
-            
-            // This method enables and publishes the microphone automatically
             await this.localParticipant.setMicrophoneEnabled(true);
-            
-            console.log('Microphone enabled via setMicrophoneEnabled!');
-            
-            // Also try the v2 API way as backup - using createLocalTracks
-            console.log('Also trying createLocalTracks v2 API...');
-            
-            // Import from LiveKit v2
-            const livekit = await import('https://cdn.jsdelivr.net/npm/livekit-client@2/+esm');
-            
-            if (livekit.createLocalTracks) {
-                // LiveKit v2 API - createLocalTracks
-                const tracks = await livekit.createLocalTracks({
-                    audio: true,
-                    video: false
-                });
-                
-                console.log('Created tracks via createLocalTracks:', tracks);
-                
-                // Publish audio tracks only
-                for (const track of tracks) {
-                    if (track.kind === 'audio') {
-                        const pub = await this.localParticipant.publishTrack(track);
-                        console.log('Published track via createLocalTracks:', pub);
-                        // Save reference to local audio track for mute/unmute
-                        this.localAudioTrack = track;
-                        console.log('Saved local audio track for mute:', this.localAudioTrack);
-                    }
-                }
-            }
-            
             console.log('=== MICROPHONE READY ===');
         } catch (error) {
             console.error('ERROR publishing microphone:', error);
@@ -373,54 +342,23 @@ class LiveKitClient {
     
     /**
      * Set muted state (mute/unmute microphone)
+     * CORRECTO: Usar setMicrophoneEnabled para mute/unmute
      */
-    setMuted(muted) {
-        console.log('Setting mute state:', muted);
+    async setMuted(muted) {
+        console.log('=== SET MUTE:', muted, '===');
         
         try {
-            // Use the saved local audio track
-            if (this.localAudioTrack) {
-                console.log('Using saved localAudioTrack:', this.localAudioTrack);
-                
-                if (muted) {
-                    // Mute - use the track's mute method
-                    this.localAudioTrack.mute().then(() => {
-                        console.log('Muted local audio track');
-                    }).catch(e => {
-                        console.warn('Error muting track:', e);
-                    });
-                } else {
-                    // Unmute - use the track's unmute method
-                    this.localAudioTrack.unmute().then(() => {
-                        console.log('Unmuted local audio track');
-                    }).catch(e => {
-                        console.warn('Error unmuting track:', e);
-                    });
-                }
-            } else {
-                console.warn('No local audio track saved');
-            }
-            
-            // Also try to handle via localParticipant
+            // CORRECTO: Usar setMicrophoneEnabled para controlar el micrófono
+            // false = mute (deshabilitar), true = unmute (habilitar)
             if (this.localParticipant) {
-                const audioPubs = this.localParticipant.audioPublications;
-                if (audioPubs && audioPubs.forEach) {
-                    audioPubs.forEach((pub) => {
-                        console.log('Audio publication:', pub.trackSid, 'isMuted:', pub.isMuted);
-                        if (pub.track) {
-                            if (muted) {
-                                pub.track.mute().catch(e => console.warn('Error:', e));
-                            } else {
-                                pub.track.unmute().catch(e => console.warn('Error:', e));
-                            }
-                        }
-                    });
-                }
+                console.log('Using setMicrophoneEnabled:', !muted);
+                await this.localParticipant.setMicrophoneEnabled(!muted);
+                console.log('Mute state changed to:', muted ? 'MUTED' : 'UNMUTED');
+            } else {
+                console.warn('No localParticipant available');
             }
-            
-            console.log('Mute state set to:', muted);
         } catch (e) {
-            console.warn('Could not set mute:', e);
+            console.error('Error setting mute:', e);
         }
     }
     
