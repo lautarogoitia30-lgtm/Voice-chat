@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <!-- Background circle -->
+  <circle cx="100" cy="100" r="95" fill="#5865F2" stroke="#4752C4" stroke-width="4"/>
+  
+  <!-- Microphone head -->
+  <rect x="60" y="45" width="80" height="100" rx="40" ry="40" fill="#FFFFFF" stroke="#DBDEE1" stroke-width="3"/>
+  
+  <!-- Microphone grille lines -->
+  <line x1="80" y1="60" x2="80" y2="130" stroke="#DBDEE1" stroke-width="2"/>
+  <line x1="100" y1="55" x2="100" y2="135" stroke="#DBDEE1" stroke-width="2"/>
+  <line x1="120" y1="60" x2="120" y2="130" stroke="#DBDEE1" stroke-width="2"/>
+  
+  <!-- Microphone stand neck -->
+  <rect x="85" y="145" width="30" height="20" fill="#DBDEE1"/>
+  
+  <!-- Microphone base -->
+  <path d="M 60 165 Q 100 185 140 165 L 140 175 Q 100 195 60 175 Z" fill="#DBDEE1"/>
+  
+  <!-- Face - Eyes -->
+  <ellipse cx="82" cy="90" rx="8" ry="10" fill="#2C2F33"/>
+  <ellipse cx="118" cy="90" rx="8" ry="10" fill="#2C2F33"/>
+  
+  <!-- Eye highlights -->
+  <circle cx="85" cy="87" r="3" fill="#FFFFFF"/>
+  <circle cx="121" cy="87" r="3" fill="#FFFFFF"/>
+  
+  <!-- Smile -->
+  <path d="M 82 110 Q 100 125 118 110" stroke="#2C2F33" stroke-width="4" fill="none" stroke-linecap="round"/>
+  
+  <!-- Blush -->
+  <ellipse cx="70" cy="105" rx="8" ry="5" fill="#FF73FA" opacity="0.3"/>
+  <ellipse cx="130" cy="105" rx="8" ry="5" fill="#FF73FA" opacity="0.3"/>
+  
+  <!-- Sound waves -->
+  <path d="M 145 80 Q 160 100 145 120" stroke="#FFFFFF" stroke-width="4" fill="none" stroke-linecap="round" opacity="0.8"/>
+  <path d="M 155 70 Q 180 100 155 130" stroke="#FFFFFF" stroke-width="4" fill="none" stroke-linecap="round" opacity="0.5"/>
+  <path d="M 45 80 Q 30 100 45 120" stroke="#FFFFFF" stroke-width="4" fill="none" stroke-linecap="round" opacity="0.8"/>
+  <path d="M 35 70 Q 10 100 35 130" stroke="#FFFFFF" stroke-width="4" fill="none" stroke-linecap="round" opacity="0.5"/>
+</svg>
