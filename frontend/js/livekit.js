@@ -367,26 +367,44 @@ class LiveKitClient {
     setMuted(muted) {
         console.log('Setting mute state:', muted);
         
-        if (!this.localParticipant) return;
+        if (!this.localParticipant) {
+            console.warn('No local participant found');
+            return;
+        }
         
         try {
             // Get all audio publications
             const audioPubs = this.localParticipant.audioPublications;
             
-            if (muted) {
-                // Mute - disable all audio tracks
-                audioPubs.forEach(pub => {
-                    if (pub.track && pub.track.isMuted) {
-                        // Already muted
-                    } else {
-                        pub.track?.mute();
+            console.log('Audio publications:', audioPubs.size);
+            
+            audioPubs.forEach((pub) => {
+                console.log('Processing audio publication:', pub.trackSid, 'isMuted:', pub.isMuted);
+                
+                if (muted) {
+                    // Mute - disable the track
+                    if (pub.track && !pub.isMuted) {
+                        pub.mute();
+                        console.log('Muted track:', pub.trackSid);
                     }
-                });
-            } else {
-                // Unmute - enable all audio tracks
-                audioPubs.forEach(pub => {
-                    if (pub.track && pub.track.isMuted) {
-                        pub.track?.unmute();
+                } else {
+                    // Unmute - enable the track
+                    if (pub.track && pub.isMuted) {
+                        pub.unmute();
+                        console.log('Unmuted track:', pub.trackSid);
+                    }
+                }
+            });
+            
+            // Also handle the local audio tracks directly
+            if (this.localParticipant && this.localParticipant.tracks) {
+                this.localParticipant.tracks.forEach((publication) => {
+                    if (publication.track && publication.track.kind === 'audio') {
+                        if (muted) {
+                            publication.track.enabled = false;
+                        } else {
+                            publication.track.enabled = true;
+                        }
                     }
                 });
             }
@@ -397,26 +415,38 @@ class LiveKitClient {
     
     /**
      * Set deafened state (mute/unmute speakers)
-     * Note: In LiveKit, deafening is handled by not subscribing to audio
+     * Note: In LiveKit, deafening is handled by muting all audio elements in the DOM
      */
     setDeafened(deafened) {
         console.log('Setting deafen state:', deafened);
         
+        // Mute/unmute all audio elements in the page
+        const audioElements = document.querySelectorAll('audio');
+        audioElements.forEach(audio => {
+            audio.muted = deafened;
+            console.log('Audio element muted:', deafened);
+        });
+        
+        // Also handle via room if available
         if (!this.room) return;
         
         try {
             if (deafened) {
-                // Mute our own audio output - actually just unsubscribe from all remote audio
+                // Unsubscribe from all remote audio
                 this.room.participants.forEach(p => {
                     p.audioPublications.forEach(pub => {
-                        pub.setSubscribed(false);
+                        if (pub.track) {
+                            pub.setSubscribed(false);
+                        }
                     });
                 });
             } else {
-                // Enable audio output - subscribe to all remote audio
+                // Subscribe to all remote audio
                 this.room.participants.forEach(p => {
                     p.audioPublications.forEach(pub => {
-                        pub.setSubscribed(true);
+                        if (pub.track) {
+                            pub.setSubscribed(true);
+                        }
                     });
                 });
             }
