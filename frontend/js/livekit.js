@@ -373,55 +373,59 @@ class LiveKitClient {
         }
         
         try {
-            // Get local tracks from the room
-            const localTracks = this.localParticipant.tracks;
-            console.log('Local tracks:', localTracks);
+            // Get local audio tracks directly - we need to find the actual track objects
+            const audioTracks = [];
             
-            if (localTracks) {
-                localTracks.forEach((publication) => {
-                    console.log('Track publication:', publication.trackSid, 'kind:', publication.kind, 'isMuted:', publication.isMuted);
-                    
-                    // Check if this is an audio track
+            // Method 1: Get from localParticipant.tracks (Map)
+            if (this.localParticipant.tracks instanceof Map) {
+                this.localParticipant.tracks.forEach((publication) => {
                     if (publication.kind === 'audio' || (publication.track && publication.track.kind === 'audio')) {
-                        if (muted) {
-                            // Mute - disable/enable the track
-                            if (publication.track) {
-                                publication.track.enabled = false;
-                                console.log('Disabled audio track');
-                            }
-                            // Also call mute on the publication
-                            if (!publication.isMuted) {
-                                publication.mute();
-                                console.log('Muted publication');
-                            }
-                        } else {
-                            // Unmute - enable the track
-                            if (publication.track) {
-                                publication.track.enabled = true;
-                                console.log('Enabled audio track');
-                            }
-                            // Also call unmute on the publication
-                            if (publication.isMuted) {
-                                publication.unmute();
-                                console.log('Unmuted publication');
-                            }
-                        }
+                        audioTracks.push({ publication, track: publication.track });
                     }
                 });
             }
             
-            // Also try to handle via room's local participant
-            if (this.room && this.room.localParticipant) {
-                const roomLocalTracks = this.room.localParticipant.tracks;
-                if (roomLocalTracks) {
-                    roomLocalTracks.forEach((publication) => {
-                        if (publication.kind === 'audio' || (publication.track && publication.track.kind === 'audio')) {
-                            if (muted) {
-                                publication.track.enabled = false;
-                                if (!publication.isMuted) publication.mute();
-                            } else {
-                                publication.track.enabled = true;
-                                if (publication.isMuted) publication.unmute();
+            console.log('Found audio tracks:', audioTracks.length);
+            
+            // Mute/unmute each audio track
+            audioTracks.forEach(({ publication, track }) => {
+                console.log('Processing track:', publication.trackSid, 'isMuted:', publication.isMuted);
+                
+                if (muted) {
+                    // Mute the track
+                    if (track && !publication.isMuted) {
+                        track.mute().then(() => {
+                            console.log('Track muted successfully');
+                        }).catch(e => {
+                            console.warn('Error muting track:', e);
+                        });
+                    }
+                } else {
+                    // Unmute the track
+                    if (track && publication.isMuted) {
+                        track.unmute().then(() => {
+                            console.log('Track unmuted successfully');
+                        }).catch(e => {
+                            console.warn('Error unmuting track:', e);
+                        });
+                    }
+                }
+            });
+            
+            // Method 2: Also check room.localParticipant.audioTracks (if exists)
+            if (this.room && this.room.localParticipant && this.room.localParticipant.audioTracks) {
+                const audioTracksMap = this.room.localParticipant.audioTracks;
+                if (audioTracksMap instanceof Map) {
+                    audioTracksMap.forEach((publication) => {
+                        console.log('Audio track from room:', publication.trackSid, 'isMuted:', publication.isMuted);
+                        
+                        if (muted) {
+                            if (publication.track && !publication.isMuted) {
+                                publication.track.mute().catch(e => console.warn('Error:', e));
+                            }
+                        } else {
+                            if (publication.track && publication.isMuted) {
+                                publication.track.unmute().catch(e => console.warn('Error:', e));
                             }
                         }
                     });
