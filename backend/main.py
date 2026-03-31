@@ -2,6 +2,7 @@
 FastAPI application entry point.
 Configures CORS, routes, and database initialization.
 """
+import os
 from pathlib import Path
 from dotenv import load_dotenv
 
