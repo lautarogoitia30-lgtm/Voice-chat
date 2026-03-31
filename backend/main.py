@@ -5,8 +5,8 @@ Configures CORS, routes, and database initialization.
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv()
+# Load environment variables from .env file (but don't override Railway's variables)
+load_dotenv(override=False)
 
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket
