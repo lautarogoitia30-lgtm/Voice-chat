@@ -184,7 +184,7 @@ class LiveKitClient {
     
     /**
      * Publish local microphone to the room
-     * With proper audio settings and volume control using Web Audio API
+     * With noise gate and volume control using Web Audio API
      */
     async publishMicrophone() {
         console.log('=== PUBLISH MICROPHONE ===');
@@ -193,6 +193,104 @@ class LiveKitClient {
             console.warn('No room connected, cannot publish microphone');
             return;
         }
+        
+        try {
+            // Get saved settings from localStorage
+            const inputDevice = localStorage.getItem('voice_chat_input_device');
+            const inputVolume = parseInt(localStorage.getItem('voice_chat_input_volume') || '100');
+            const noiseSuppression = localStorage.getItem('voice_chat_noise_suppression') === 'true';
+            const echoCancellation = localStorage.getItem('voice_chat_echo_cancellation') !== 'false';
+            
+            console.log('[AUDIO] Settings - inputVolume:', inputVolume, 'noiseSuppression:', noiseSuppression, 'echoCancellation:', echoCancellation);
+            
+            // Get microphone with specific device and audio processing
+            const constraints = {
+                audio: {
+                    echoCancellation: echoCancellation,
+                    noiseSuppression: noiseSuppression,
+                    autoGainControl: true,
+                    sampleRate: 48000,
+                }
+            };
+            
+            if (inputDevice) {
+                constraints.audio.deviceId = { exact: inputDevice };
+            }
+            
+            console.log('[AUDIO] Getting microphone with constraints');
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            
+            // Store original track
+            const originalTrack = stream.getAudioTracks()[0];
+            this.localAudioTrack = originalTrack;
+            
+            // Create Web Audio API pipeline
+            this.audioContext = new AudioContext();
+            const source = this.audioContext.createMediaStreamSource(stream);
+            
+            // Create main gain node for volume control
+            this.inputGainNode = this.audioContext.createGain();
+            this.inputGainNode.gain.value = inputVolume / 100;
+            
+            // Create compressor to reduce sudden loud sounds (keyboard, mouse clicks)
+            const compressor = this.audioContext.createDynamicsCompressor();
+            compressor.threshold.value = -30;  // Start compressing at -30dB
+            compressor.knee.value = 20;        // Moderate knee
+            compressor.ratio.value = 8;        // Moderate compression
+            compressor.attack.value = 0.001;  // Very fast attack (catch sudden sounds)
+            compressor.release.value = 0.1;  // Quick release
+            
+            // Create high-pass filter to remove low frequency rumbles
+            const highPass = this.audioContext.createBiquadFilter();
+            highPass.type = 'highpass';
+            highPass.frequency.value = 80;  // Remove frequencies below 80Hz
+            highPass.Q.value = 0.7;
+            
+            // Create low-pass filter to smooth harsh highs
+            const lowPass = this.audioContext.createBiquadFilter();
+            lowPass.type = 'lowpass';
+            lowPass.frequency.value = 10000;
+            lowPass.Q.value = 0.5;
+            
+            // Create limiter to prevent clipping
+            const limiter = this.audioContext.createDynamicsCompressor();
+            limiter.threshold.value = -3;   // Very high threshold
+            limiter.knee.value = 0;          // Hard knee (sharp limiter)
+            limiter.ratio.value = 20;        // Extreme ratio
+            limiter.attack.value = 0.001;
+            limiter.release.value = 0.05;
+            
+            // Create destination to capture processed audio
+            const dest = this.audioContext.createMediaStreamDestination();
+            
+            // Connect: source -> highPass -> lowPass -> compressor -> limiter -> gain -> destination
+            source.connect(highPass);
+            highPass.connect(lowPass);
+            lowPass.connect(compressor);
+            compressor.connect(limiter);
+            limiter.connect(this.inputGainNode);
+            this.inputGainNode.connect(dest);
+            
+            // Store nodes for later access
+            this.highPass = highPass;
+            this.lowPass = lowPass;
+            this.compressor = compressor;
+            this.limiter = limiter;
+            
+            // Create new track from the processed stream
+            const processedTrack = dest.stream.getAudioTracks()[0];
+            
+            // Publish processed track to LiveKit
+            await this.localParticipant.publishTrack(processedTrack);
+            
+            console.log('[AUDIO] Microphone published with noise reduction!');
+            console.log('[AUDIO] Components: highPass, lowPass, compressor, limiter, gain');
+            console.log('=== MICROPHONE READY ===');
+        } catch (error) {
+            console.error('ERROR publishing microphone:', error);
+            alert('Error al acceder al micrófono: ' + error.message);
+        }
+    }
         
         try {
             // Get saved settings from localStorage
