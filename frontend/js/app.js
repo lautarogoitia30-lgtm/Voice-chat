@@ -1998,6 +1998,11 @@ function handleInputVolumeChange(value) {
     settingsState.inputVolume = value;
     document.getElementById('input-volume-value').textContent = value;
     localStorage.setItem('voice_chat_input_volume', value);
+    
+    // Update LiveKit volume in real-time if in voice
+    if (window.livekitClient && window.livekitClient.setInputVolume) {
+        window.livekitClient.setInputVolume(value);
+    }
 }
 
 // Handle output volume change

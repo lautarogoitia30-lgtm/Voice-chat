@@ -184,6 +184,7 @@ class LiveKitClient {
     
     /**
      * Publish local microphone to the room
+     * With proper audio settings and volume control using Web Audio API
      */
     async publishMicrophone() {
         console.log('=== PUBLISH MICROPHONE ===');
@@ -194,12 +195,71 @@ class LiveKitClient {
         }
         
         try {
-            console.log('Enabling microphone...');
-            await this.localParticipant.setMicrophoneEnabled(true);
+            // Get saved settings from localStorage
+            const inputDevice = localStorage.getItem('voice_chat_input_device');
+            const inputVolume = parseInt(localStorage.getItem('voice_chat_input_volume') || '100');
+            const noiseSuppression = localStorage.getItem('voice_chat_noise_suppression') === 'true';
+            const echoCancellation = localStorage.getItem('voice_chat_echo_cancellation') !== 'false';
+            
+            console.log('[AUDIO] Settings - inputVolume:', inputVolume, 'noiseSuppression:', noiseSuppression, 'echoCancellation:', echoCancellation);
+            
+            // Get microphone with specific device and audio processing
+            const constraints = {
+                audio: {
+                    echoCancellation: echoCancellation,
+                    noiseSuppression: noiseSuppression,
+                    autoGainControl: true,
+                    sampleRate: 48000,
+                }
+            };
+            
+            if (inputDevice) {
+                constraints.audio.deviceId = { exact: inputDevice };
+            }
+            
+            console.log('[AUDIO] Getting microphone with constraints');
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            
+            // Store original track
+            const originalTrack = stream.getAudioTracks()[0];
+            this.localAudioTrack = originalTrack;
+            
+            // Create Web Audio API pipeline for volume control
+            this.audioContext = new AudioContext();
+            const source = this.audioContext.createMediaStreamSource(stream);
+            
+            // Create gain node for volume
+            this.inputGainNode = this.audioContext.createGain();
+            this.inputGainNode.gain.value = inputVolume / 100;
+            
+            // Create destination to capture processed audio
+            const dest = this.audioContext.createMediaStreamDestination();
+            
+            // Connect: source -> gain -> destination
+            source.connect(this.inputGainNode);
+            this.inputGainNode.connect(dest);
+            
+            // Create new track from the processed stream
+            const processedTrack = dest.stream.getAudioTracks()[0];
+            
+            // Publish processed track to LiveKit
+            await this.localParticipant.publishTrack(processedTrack);
+            
+            console.log('[AUDIO] Microphone published with volume control!');
             console.log('=== MICROPHONE READY ===');
         } catch (error) {
             console.error('ERROR publishing microphone:', error);
             alert('Error al acceder al micrófono: ' + error.message);
+        }
+    }
+    
+    /**
+     * Update input volume dynamically
+     */
+    setInputVolume(volume) {
+        if (this.inputGainNode) {
+            this.inputGainNode.gain.value = volume / 100;
+            console.log('[AUDIO] Volume updated to:', volume);
         }
     }
     
