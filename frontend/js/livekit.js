@@ -184,7 +184,6 @@ class LiveKitClient {
     
     /**
      * Publish local microphone to the room
-     * With better audio quality settings from user preferences
      */
     async publishMicrophone() {
         console.log('=== PUBLISH MICROPHONE ===');
@@ -195,38 +194,8 @@ class LiveKitClient {
         }
         
         try {
-            // Get saved settings from localStorage
-            const noiseSuppression = localStorage.getItem('voice_chat_noise_suppression') === 'true';
-            const echoCancellation = localStorage.getItem('voice_chat_echo_cancellation') !== 'false'; // default true
-            const inputDevice = localStorage.getItem('voice_chat_input_device');
-            
-            const audioOptions = {
-                echoCancellation: echoCancellation,
-                noiseSuppression: noiseSuppression,
-                autoGainControl: true,
-                sampleRate: 48000,
-                channelCount: 1,
-            };
-            
-            // If user has a specific device, use it
-            const constraints = {};
-            if (inputDevice) {
-                constraints.deviceId = { exact: inputDevice };
-            }
-            
-            console.log('Enabling microphone with settings:', audioOptions);
-            
-            if (Object.keys(constraints).length > 0) {
-                // Use getUserMedia with specific device
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: constraints });
-                // Create track and publish manually
-                const audioTrack = stream.getAudioTracks()[0];
-                await this.localParticipant.publishTrack(audioTrack);
-            } else {
-                // Use setMicrophoneEnabled with options
-                await this.localParticipant.setMicrophoneEnabled(true, audioOptions);
-            }
-            
+            console.log('Enabling microphone...');
+            await this.localParticipant.setMicrophoneEnabled(true);
             console.log('=== MICROPHONE READY ===');
         } catch (error) {
             console.error('ERROR publishing microphone:', error);

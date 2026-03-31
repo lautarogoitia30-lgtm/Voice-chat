@@ -2014,6 +2014,8 @@ function handleOutputVolumeChange(value) {
 
 // Save audio settings
 function saveAudioSettings() {
+    console.log('[SETTINGS] Saving audio settings...');
+    
     // Get values from form
     settingsState.inputDevice = document.getElementById('settings-input-device').value;
     settingsState.outputDevice = document.getElementById('settings-output-device').value;
@@ -2022,16 +2024,19 @@ function saveAudioSettings() {
     settingsState.noiseSuppression = document.getElementById('settings-noise-suppression').checked;
     settingsState.echoCancellation = document.getElementById('settings-echo-cancellation').checked;
     
+    console.log('[SETTINGS] Values from form:', settingsState);
+    
     // Save to localStorage
     localStorage.setItem('voice_chat_input_device', settingsState.inputDevice);
     localStorage.setItem('voice_chat_output_device', settingsState.outputDevice);
     localStorage.setItem('voice_chat_input_volume', settingsState.inputVolume);
     localStorage.setItem('voice_chat_output_volume', settingsState.outputVolume);
-    localStorage.setItem('voice_chat_noise_suppression', settingsState.noiseSuppression);
-    localStorage.setItem('voice_chat_echo_cancellation', settingsState.echoCancellation);
+    localStorage.setItem('voice_chat_noise_suppression', String(settingsState.noiseSuppression));
+    localStorage.setItem('voice_chat_echo_cancellation', String(settingsState.echoCancellation));
     
-    // Apply settings to LiveKit
-    applyAudioSettingsToLiveKit();
+    console.log('[SETTINGS] Saved to localStorage');
+    console.log('[SETTINGS] Verify noiseSuppression:', localStorage.getItem('voice_chat_noise_suppression'));
+    console.log('[SETTINGS] Verify echoCancellation:', localStorage.getItem('voice_chat_echo_cancellation'));
     
     alert('Configuración de audio guardada');
 }
@@ -2055,6 +2060,8 @@ function applyAudioSettingsToLiveKit() {
 
 // Load audio settings when opening settings modal
 function loadAudioSettings() {
+    console.log('[SETTINGS] Loading audio settings from localStorage...');
+    
     // Load from localStorage
     const inputDevice = localStorage.getItem('voice_chat_input_device');
     const outputDevice = localStorage.getItem('voice_chat_output_device');
@@ -2062,6 +2069,9 @@ function loadAudioSettings() {
     const outputVolume = localStorage.getItem('voice_chat_output_volume');
     const noiseSuppression = localStorage.getItem('voice_chat_noise_suppression');
     const echoCancellation = localStorage.getItem('voice_chat_echo_cancellation');
+    
+    console.log('[SETTINGS] noiseSuppression from localStorage:', noiseSuppression, typeof noiseSuppression);
+    console.log('[SETTINGS] echoCancellation from localStorage:', echoCancellation, typeof echoCancellation);
     
     // Update form values
     if (inputDevice) {
@@ -2080,11 +2090,18 @@ function loadAudioSettings() {
         document.getElementById('settings-output-volume').value = outputVolume;
         document.getElementById('output-volume-value').textContent = outputVolume;
     }
-    if (noiseSuppression !== null) {
-        document.getElementById('settings-noise-suppression').checked = noiseSuppression === 'true';
+    
+    // Checkboxes - need proper default handling
+    const noiseCheckbox = document.getElementById('settings-noise-suppression');
+    const echoCheckbox = document.getElementById('settings-echo-cancellation');
+    
+    if (noiseCheckbox) {
+        // If not set, default to false (no noise suppression)
+        noiseCheckbox.checked = noiseSuppression === 'true';
     }
-    if (echoCancellation !== null) {
-        document.getElementById('settings-echo-cancellation').checked = echoCancellation === 'true';
+    if (echoCheckbox) {
+        // If not set, default to true (echo cancellation on)
+        echoCheckbox.checked = echoCancellation !== 'false';
     }
     
     // Update state
@@ -2094,6 +2111,8 @@ function loadAudioSettings() {
     settingsState.outputVolume = outputVolume || 100;
     settingsState.noiseSuppression = noiseSuppression === 'true';
     settingsState.echoCancellation = echoCancellation !== 'false';
+    
+    console.log('[SETTINGS] Loaded state:', settingsState);
 }
 
 // Start microphone test
