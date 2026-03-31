@@ -13,8 +13,10 @@ import os
 # Security scheme
 security = HTTPBearer()
 
-# JWT settings
-SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key-change-in-production")
+# JWT settings - REQUIRES env var in production!
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise ValueError("SECRET_KEY environment variable must be set in production!")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))
 

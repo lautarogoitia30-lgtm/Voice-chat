@@ -1,6 +1,9 @@
 """
 Authentication routes: /auth/register, /auth/login
 """
+import re
+import time
+from collections import defaultdict
 from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -13,6 +16,42 @@ from backend.auth import hash_password, verify_password, create_jwt_token, verif
 
 router = APIRouter()
 security = HTTPBearer()
+
+
+# Simple in-memory rate limiter (per IP)
+# For production, use Redis or similar
+rate_limit_store = defaultdict(list)
+RATE_LIMIT_WINDOW = 60  # seconds
+RATE_LIMIT_MAX_ATTEMPTS = 5  # max attempts per window
+
+
+def check_rate_limit(ip: str) -> bool:
+    """Check if IP has exceeded rate limit. Returns True if allowed."""
+    now = time.time()
+    # Clean old entries
+    rate_limit_store[ip] = [t for t in rate_limit_store[ip] if now - t < RATE_LIMIT_WINDOW]
+    
+    if len(rate_limit_store[ip]) >= RATE_LIMIT_MAX_ATTEMPTS:
+        return False
+    
+    rate_limit_store[ip].append(now)
+    return True
+
+
+def validate_password_strength(password: str) -> bool:
+    """
+    Validate password meets complexity requirements:
+    - At least 8 characters
+    - At least one uppercase letter
+    - At least one number
+    """
+    if len(password) < 8:
+        return False
+    if not re.search(r'[A-Z]', password):
+        return False
+    if not re.search(r'[0-9]', password):
+        return False
+    return True
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -31,8 +70,14 @@ async def register(
         Created user data
         
     Raises:
-        HTTPException: If username or email already exists
+        HTTPException: If username or email already exists or password is weak
     """
+    # Validate password strength
+    if not validate_password_strength(user_data.password):
+        raise HTTPException(
+            status_code=400,
+            detail="Password must be at least 8 characters with at least one uppercase letter and one number"
+        )
     # Check if username exists
     result = await db.execute(
         select(User).where(User.username == user_data.username)
@@ -92,14 +137,23 @@ async def login(
     )
     user = result.scalar_one_or_none()
     
-    if not user or not verify_password(credentials.password, user.password_hash):
+    # Check rate limit before processing (prevents brute force)
+    # Using username as identifier to limit per-account attempts
+    rate_key = f"login:{credentials.username}"
+    if not check_rate_limit(rate_key):
+        raise HTTPException(
+            status_code=429,
+            detail="Too many login attempts. Please try again later."
+        )
+    
+    if not user or not verify_password(credentials.password, str(user.password_hash)):
         raise HTTPException(
             status_code=401,
             detail="Invalid credentials"
         )
     
     # Create and return JWT token
-    token = create_jwt_token(user.id, user.username)
+    token = create_jwt_token(int(user.id), str(user.username))
     
     return TokenResponse(
         access_token=token,
