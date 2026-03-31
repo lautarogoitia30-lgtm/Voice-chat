@@ -203,13 +203,15 @@ class LiveKitClient {
             
             console.log('[AUDIO] Settings - inputVolume:', inputVolume, 'noiseSuppression:', noiseSuppression, 'echoCancellation:', echoCancellation);
             
-            // Get microphone with specific device and audio processing
+            // Get microphone with STRONG noise suppression settings
             const constraints = {
                 audio: {
                     echoCancellation: echoCancellation,
-                    noiseSuppression: noiseSuppression,
+                    noiseSuppression: true, // Always enable - this is the browser's NS
                     autoGainControl: true,
                     sampleRate: 48000,
+                    // Additional constraints for better noise handling
+                    latency: 0,
                 }
             };
             
@@ -232,81 +234,83 @@ class LiveKitClient {
             this.inputGainNode = this.audioContext.createGain();
             this.inputGainNode.gain.value = inputVolume / 100;
             
-            // Create compressor to reduce sudden loud sounds (keyboard, mouse clicks)
-            const compressor = this.audioContext.createDynamicsCompressor();
-            compressor.threshold.value = -50;  // Start compressing at -50dB (more aggressive)
-            compressor.knee.value = 10;        // Lower knee
-            compressor.ratio.value = 15;        // Higher compression ratio
-            compressor.attack.value = 0.001;  // Very fast attack
-            compressor.release.value = 0.05;  // Fast release
+            // === NOISE GATE - This is the key! ===
+            // A noise gate cuts audio when it's below a threshold (silences background noise)
+            const noiseGate = this.audioContext.createGain();
+            noiseGate.gain.value = 1;
             
-            // Create high-pass filter to remove low frequency rumbles (keyboard, mouse)
+            // Create analyzer to detect speech vs noise
+            const analyser = this.audioContext.createAnalyser();
+            analyser.fftSize = 256;
+            analyser.smoothingTimeConstant = 0.8;
+            
+            // Create compressor to reduce sudden loud sounds
+            const compressor = this.audioContext.createDynamicsCompressor();
+            compressor.threshold.value = -40;
+            compressor.knee.value = 10;
+            compressor.ratio.value = 12;
+            compressor.attack.value = 0.003;
+            compressor.release.value = 0.1;
+            
+            // High-pass to remove low rumble
             const highPass = this.audioContext.createBiquadFilter();
             highPass.type = 'highpass';
-            highPass.frequency.value = 120;  // Remove frequencies below 120Hz (was 80)
-            highPass.Q.value = 0.7;
+            highPass.frequency.value = 100;
+            highPass.Q.value = 0.5;
             
-            // Create low-pass filter to smooth harsh highs
+            // Low-pass to smooth
             const lowPass = this.audioContext.createBiquadFilter();
             lowPass.type = 'lowpass';
-            lowPass.frequency.value = 6000;  // Lower to 6kHz (was 10k)
-            lowPass.Q.value = 0.7;
+            lowPass.frequency.value = 5000;
+            lowPass.Q.value = 0.5;
             
-            // Create limiter to prevent clipping
-            const limiter = this.audioContext.createDynamicsCompressor();
-            limiter.threshold.value = -6;   // Very high threshold
-            limiter.knee.value = 0;          // Hard knee (sharp limiter)
-            limiter.ratio.value = 30;        // Extreme ratio
-            limiter.attack.value = 0.001;
-            limiter.release.value = 0.03;
-            
-            // Create destination to capture processed audio
+            // Create destination
             const dest = this.audioContext.createMediaStreamDestination();
             
-            // Connect: source -> highPass -> lowPass -> compressor -> limiter -> gain -> destination
-            source.connect(highPass);
+            // Connect: source -> analyser -> noiseGate -> highPass -> lowPass -> compressor -> gain -> dest
+            source.connect(analyser);
+            analyser.connect(noiseGate);
+            noiseGate.connect(highPass);
             highPass.connect(lowPass);
             lowPass.connect(compressor);
-            compressor.connect(limiter);
-            limiter.connect(this.inputGainNode);
+            compressor.connect(this.inputGainNode);
             this.inputGainNode.connect(dest);
             
-            // Store nodes for later access
-            this.highPass = highPass;
-            this.lowPass = lowPass;
-            this.compressor = compressor;
-            this.limiter = limiter;
+            // Store nodes
+            this.analyser = analyser;
+            this.noiseGate = noiseGate;
+            
+            // === NOISE GATE LOGIC ===
+            // Continuously monitor audio levels and gate accordingly
+            const dataArray = new Uint8Array(analyser.frequencyBinCount);
+            const noiseGateThreshold = 15; // Adjust this - lower = more aggressive gate
+            
+            const updateNoiseGate = () => {
+                if (!this.audioContext || this.audioContext.state !== 'running') return;
+                
+                analyser.getByteFrequencyData(dataArray);
+                const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
+                
+                if (average < noiseGateThreshold) {
+                    // Background noise - gate it
+                    this.noiseGate.gain.setTargetAtTime(0.05, this.audioContext.currentTime, 0.05);
+                } else {
+                    // Speech - let it through
+                    this.noiseGate.gain.setTargetAtTime(1, this.audioContext.currentTime, 0.01);
+                }
+                
+                requestAnimationFrame(updateNoiseGate);
+            };
+            updateNoiseGate();
+            console.log('[AUDIO] Noise gate started');
             
             // Create new track from the processed stream
             const processedTrack = dest.stream.getAudioTracks()[0];
             
-            // Create analyzer to monitor audio levels
-            this.analyser = this.audioContext.createAnalyser();
-            this.analyser.fftSize = 256;
-            this.inputGainNode.connect(this.analyser);
-            
-            // Start monitoring audio levels
-            const dataArray = new Uint8Array(this.analyser.frequencyBinCount);
-            const checkLevels = () => {
-                if (this.analyser) {
-                    this.analyser.getByteFrequencyData(dataArray);
-                    const avg = dataArray.reduce((a, b) => a + b) / dataArray.length;
-                    // Only log occasionally to avoid flooding
-                    if (Math.random() < 0.01) {
-                        console.log('[AUDIO] Level:', avg.toFixed(1));
-                    }
-                }
-                if (this.audioContext && this.audioContext.state === 'running') {
-                    requestAnimationFrame(checkLevels);
-                }
-            };
-            checkLevels();
-            
             // Publish processed track to LiveKit
             await this.localParticipant.publishTrack(processedTrack);
             
-            console.log('[AUDIO] Microphone published with noise reduction!');
-            console.log('[AUDIO] Components: highPass, lowPass, compressor, limiter, gain');
+            console.log('[AUDIO] Microphone published with noise gate!');
             console.log('=== MICROPHONE READY ===');
         } catch (error) {
             console.error('ERROR publishing microphone:', error);
