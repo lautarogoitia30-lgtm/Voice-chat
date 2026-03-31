@@ -184,7 +184,7 @@ class LiveKitClient {
     
     /**
      * Publish local microphone to the room
-     * Using browser's native echo cancellation + manual noise gate
+     * Using browser's native echo cancellation + Chrome's experimental noise suppression
      */
     async publishMicrophone() {
         console.log('=== PUBLISH MICROPHONE ===');
@@ -199,18 +199,23 @@ class LiveKitClient {
             const inputDevice = localStorage.getItem('voice_chat_input_device');
             const inputVolume = parseInt(localStorage.getItem('voice_chat_input_volume') || '30');
             const noiseSuppression = localStorage.getItem('voice_chat_noise_suppression') === 'true';
+            const echoCancellation = localStorage.getItem('voice_chat_echo_cancellation') !== 'false';
             
-            console.log('[AUDIO] Volume:', inputVolume, 'Noise suppression:', noiseSuppression);
+            console.log('[AUDIO] Volume:', inputVolume, 'NS:', noiseSuppression, 'EC:', echoCancellation);
             
-            // Use browser's NATIVE echo cancellation and noise suppression
-            // This is much better than our custom processing
+            // Use Chrome's EXPERIMENTAL noise suppression settings
             const constraints = {
                 audio: {
-                    // IMPORTANT: These enable browser's built-in audio processing
-                    echoCancellation: true,
+                    echoCancellation: echoCancellation,
                     noiseSuppression: noiseSuppression,
                     autoGainControl: true,
                     sampleRate: 48000,
+                    // Chrome experimental - more aggressive
+                    googEchoCancellation: true,
+                    googNoiseSuppression: true,
+                    googAutoGainControl: true,
+                    googHighpassFilter: true,
+                    googTypingNoiseDetectionThreshold: 0.5,
                 }
             };
             
@@ -218,15 +223,15 @@ class LiveKitClient {
                 constraints.audio.deviceId = { exact: inputDevice };
             }
             
-            console.log('[AUDIO] Getting microphone with browser native processing...');
+            console.log('[AUDIO] Getting mic with Chrome experimental NS...');
             const stream = await navigator.mediaDevices.getUserMedia(constraints);
             
-            // Simple volume control (but at lower gain to reduce sensitivity)
+            // Apply volume reduction
             this.audioContext = new AudioContext();
             const source = this.audioContext.createMediaStreamSource(stream);
             
             this.inputGainNode = this.audioContext.createGain();
-            this.inputGainNode.gain.value = (inputVolume / 100) * 0.15; // 85% reduction!
+            this.inputGainNode.gain.value = (inputVolume / 100) * 0.15;
             
             const dest = this.audioContext.createMediaStreamDestination();
             
@@ -237,7 +242,7 @@ class LiveKitClient {
             
             await this.localParticipant.publishTrack(processedTrack);
             
-            console.log('[AUDIO] Mic published with browser NS + 50% volume reduction');
+            console.log('[AUDIO] Mic published with Chrome experimental NS!');
             console.log('=== MICROPHONE READY ===');
         } catch (error) {
             console.error('ERROR publishing microphone:', error);
