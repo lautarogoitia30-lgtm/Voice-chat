@@ -234,31 +234,31 @@ class LiveKitClient {
             
             // Create compressor to reduce sudden loud sounds (keyboard, mouse clicks)
             const compressor = this.audioContext.createDynamicsCompressor();
-            compressor.threshold.value = -30;  // Start compressing at -30dB
-            compressor.knee.value = 20;        // Moderate knee
-            compressor.ratio.value = 8;        // Moderate compression
-            compressor.attack.value = 0.001;  // Very fast attack (catch sudden sounds)
-            compressor.release.value = 0.1;  // Quick release
+            compressor.threshold.value = -50;  // Start compressing at -50dB (more aggressive)
+            compressor.knee.value = 10;        // Lower knee
+            compressor.ratio.value = 15;        // Higher compression ratio
+            compressor.attack.value = 0.001;  // Very fast attack
+            compressor.release.value = 0.05;  // Fast release
             
-            // Create high-pass filter to remove low frequency rumbles
+            // Create high-pass filter to remove low frequency rumbles (keyboard, mouse)
             const highPass = this.audioContext.createBiquadFilter();
             highPass.type = 'highpass';
-            highPass.frequency.value = 80;  // Remove frequencies below 80Hz
+            highPass.frequency.value = 120;  // Remove frequencies below 120Hz (was 80)
             highPass.Q.value = 0.7;
             
             // Create low-pass filter to smooth harsh highs
             const lowPass = this.audioContext.createBiquadFilter();
             lowPass.type = 'lowpass';
-            lowPass.frequency.value = 10000;
-            lowPass.Q.value = 0.5;
+            lowPass.frequency.value = 6000;  // Lower to 6kHz (was 10k)
+            lowPass.Q.value = 0.7;
             
             // Create limiter to prevent clipping
             const limiter = this.audioContext.createDynamicsCompressor();
-            limiter.threshold.value = -3;   // Very high threshold
+            limiter.threshold.value = -6;   // Very high threshold
             limiter.knee.value = 0;          // Hard knee (sharp limiter)
-            limiter.ratio.value = 20;        // Extreme ratio
+            limiter.ratio.value = 30;        // Extreme ratio
             limiter.attack.value = 0.001;
-            limiter.release.value = 0.05;
+            limiter.release.value = 0.03;
             
             // Create destination to capture processed audio
             const dest = this.audioContext.createMediaStreamDestination();
@@ -279,6 +279,28 @@ class LiveKitClient {
             
             // Create new track from the processed stream
             const processedTrack = dest.stream.getAudioTracks()[0];
+            
+            // Create analyzer to monitor audio levels
+            this.analyser = this.audioContext.createAnalyser();
+            this.analyser.fftSize = 256;
+            this.inputGainNode.connect(this.analyser);
+            
+            // Start monitoring audio levels
+            const dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+            const checkLevels = () => {
+                if (this.analyser) {
+                    this.analyser.getByteFrequencyData(dataArray);
+                    const avg = dataArray.reduce((a, b) => a + b) / dataArray.length;
+                    // Only log occasionally to avoid flooding
+                    if (Math.random() < 0.01) {
+                        console.log('[AUDIO] Level:', avg.toFixed(1));
+                    }
+                }
+                if (this.audioContext && this.audioContext.state === 'running') {
+                    requestAnimationFrame(checkLevels);
+                }
+            };
+            checkLevels();
             
             // Publish processed track to LiveKit
             await this.localParticipant.publishTrack(processedTrack);
