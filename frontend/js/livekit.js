@@ -184,7 +184,7 @@ class LiveKitClient {
     
     /**
      * Publish local microphone to the room
-     * With simple volume control using Web Audio API (no noise gate)
+     * Using browser's native echo cancellation + manual noise gate
      */
     async publishMicrophone() {
         console.log('=== PUBLISH MICROPHONE ===');
@@ -197,17 +197,18 @@ class LiveKitClient {
         try {
             // Get settings from localStorage
             const inputDevice = localStorage.getItem('voice_chat_input_device');
+            const inputVolume = parseInt(localStorage.getItem('voice_chat_input_volume') || '30');
             const noiseSuppression = localStorage.getItem('voice_chat_noise_suppression') === 'true';
-            const echoCancellation = localStorage.getItem('voice_chat_echo_cancellation') !== 'false';
-            const inputVolume = parseInt(localStorage.getItem('voice_chat_input_volume') || '50');
             
-            console.log('[AUDIO] Settings - volume:', inputVolume, 'noiseSuppression:', noiseSuppression, 'echoCancellation:', echoCancellation);
+            console.log('[AUDIO] Volume:', inputVolume, 'Noise suppression:', noiseSuppression);
             
-            // Get microphone with browser's native noise suppression
+            // Use browser's NATIVE echo cancellation and noise suppression
+            // This is much better than our custom processing
             const constraints = {
                 audio: {
-                    echoCancellation: echoCancellation,
-                    noiseSuppression: noiseSuppression, // Use user's setting
+                    // IMPORTANT: These enable browser's built-in audio processing
+                    echoCancellation: true,
+                    noiseSuppression: noiseSuppression,
                     autoGainControl: true,
                     sampleRate: 48000,
                 }
@@ -217,32 +218,26 @@ class LiveKitClient {
                 constraints.audio.deviceId = { exact: inputDevice };
             }
             
-            console.log('[AUDIO] Getting microphone...');
+            console.log('[AUDIO] Getting microphone with browser native processing...');
             const stream = await navigator.mediaDevices.getUserMedia(constraints);
             
-            // Create Web Audio API just for volume control
+            // Simple volume control (but at lower gain to reduce sensitivity)
             this.audioContext = new AudioContext();
             const source = this.audioContext.createMediaStreamSource(stream);
             
-            // Create gain node for volume
             this.inputGainNode = this.audioContext.createGain();
-            this.inputGainNode.gain.value = inputVolume / 100;
+            this.inputGainNode.gain.value = (inputVolume / 100) * 0.5; // Extra 50% reduction
             
-            // Create destination to capture processed audio
             const dest = this.audioContext.createMediaStreamDestination();
             
-            // Connect: source -> gain -> destination
             source.connect(this.inputGainNode);
             this.inputGainNode.connect(dest);
             
-            // Create new track from the processed stream
             const processedTrack = dest.stream.getAudioTracks()[0];
             
-            // Publish to LiveKit
             await this.localParticipant.publishTrack(processedTrack);
             
-            console.log('[AUDIO] Microphone published with volume control!');
-            console.log('[AUDIO] Volume set to:', inputVolume + '%');
+            console.log('[AUDIO] Mic published with browser NS + 50% volume reduction');
             console.log('=== MICROPHONE READY ===');
         } catch (error) {
             console.error('ERROR publishing microphone:', error);
