@@ -283,7 +283,7 @@ class LiveKitClient {
             // === NOISE GATE LOGIC ===
             // Continuously monitor audio levels and gate accordingly
             const dataArray = new Uint8Array(analyser.frequencyBinCount);
-            const noiseGateThreshold = 8; // MORE AGGRESSIVE - lower = more sensitive to noise
+            const noiseGateThreshold = 5; // Even more aggressive!
             
             const updateNoiseGate = () => {
                 if (!this.audioContext || this.audioContext.state !== 'running') return;
@@ -291,12 +291,17 @@ class LiveKitClient {
                 analyser.getByteFrequencyData(dataArray);
                 const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
                 
+                // DEBUG: Log audio level
+                if (Math.random() < 0.02) {
+                    console.log('[GATE] Audio level:', average.toFixed(1), 'threshold:', noiseGateThreshold, 'gain:', this.noiseGate.gain.value.toFixed(2));
+                }
+                
                 if (average < noiseGateThreshold) {
-                    // Background noise - gate it COMPLETELY (was 0.05, now 0)
-                    this.noiseGate.gain.setTargetAtTime(0, this.audioContext.currentTime, 0.02);
+                    // Background noise - gate it COMPLETELY
+                    this.noiseGate.gain.setTargetAtTime(0, this.audioContext.currentTime, 0.01);
                 } else {
                     // Speech - let it through
-                    this.noiseGate.gain.setTargetAtTime(1, this.audioContext.currentTime, 0.005);
+                    this.noiseGate.gain.setTargetAtTime(1, this.audioContext.currentTime, 0.003);
                 }
                 
                 requestAnimationFrame(updateNoiseGate);
@@ -324,20 +329,22 @@ class LiveKitClient {
     setInputVolume(volume) {
         console.log('[AUDIO] setInputVolume called with:', volume);
         console.log('[AUDIO] inputGainNode exists:', !!this.inputGainNode);
-        console.log('[AUDIO] audioContext exists:', !!this.audioContext);
         
-        if (this.inputGainNode) {
-            // Check if audio context is suspended (can happen with autoplay policy)
-            if (this.audioContext && this.audioContext.state === 'suspended') {
-                console.log('[AUDIO] AudioContext is suspended, resuming...');
+        if (this.audioContext) {
+            console.log('[AUDIO] audioContext state:', this.audioContext.state);
+            
+            if (this.audioContext.state === 'suspended') {
+                console.log('[AUDIO] Resuming audio context...');
                 this.audioContext.resume();
             }
-            
+        }
+        
+        if (this.inputGainNode) {
             const gainValue = volume / 100;
-            this.inputGainNode.gain.setValueAtTime(gainValue, this.audioContext.currentTime);
-            console.log('[AUDIO] Volume updated to:', volume, 'gain:', this.inputGainNode.gain.value);
+            this.inputGainNode.gain.value = gainValue;
+            console.log('[AUDIO] Volume set to:', volume, 'gain:', this.inputGainNode.gain.value);
         } else {
-            console.log('[AUDIO] inputGainNode not available yet - volume will apply on next join');
+            console.log('[AUDIO] inputGainNode not available yet');
         }
     }
     
@@ -477,35 +484,23 @@ class LiveKitClient {
     
     /**
      * Set muted state (mute/unmute microphone)
-     * We use the gain node to actually mute - simpler than trying to use setMicrophoneEnabled with our custom pipeline
+     * We use the gain node to actually mute
      */
     async setMuted(muted) {
-        console.log('=== SET MUTE:', muted, '===');
+        console.log('[MUTE] Setting mute to:', muted);
         
         if (this.inputGainNode) {
             if (muted) {
-                // Save current volume before muting
                 this.previousVolume = this.inputGainNode.gain.value;
-                // Set gain to 0 (silence)
                 this.inputGainNode.gain.value = 0;
-                console.log('[MUTE] Muted - previous volume was:', this.previousVolume);
+                console.log('[MUTE] Muted - previous:', this.previousVolume);
             } else {
-                // Restore previous volume, default to 1 if not set
-                const restoreVolume = this.previousVolume !== undefined ? this.previousVolume : 1;
+                const restoreVolume = this.previousVolume !== undefined ? this.previousVolume : 0.7;
                 this.inputGainNode.gain.value = restoreVolume;
                 console.log('[MUTE] Unmuted - restored to:', restoreVolume);
             }
         } else {
-            // No gain node - fallback
-            console.log('[MUTE] No gain node, trying setMicrophoneEnabled');
-            if (this.localParticipant) {
-                try {
-                    await this.localParticipant.setMicrophoneEnabled(!muted);
-                    console.log('[MUTE] setMicrophoneEnabled result:', !muted ? 'enabled' : 'disabled');
-                } catch (e) {
-                    console.error('[MUTE] Error:', e);
-                }
-            }
+            console.log('[MUTE] No gain node');
         }
     }
     

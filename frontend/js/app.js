@@ -2002,7 +2002,7 @@ function handleInputVolumeChange(value) {
     localStorage.setItem('voice_chat_input_volume', value);
     
     // Update LiveKit volume in real-time if in voice
-    console.log('[VOLUME] Checking livekitClient:', window.livekitClient);
+    console.log('[VOLUME] Checking livekitClient:', !!window.livekitClient);
     if (window.livekitClient && window.livekitClient.setInputVolume) {
         console.log('[VOLUME] Calling setInputVolume');
         window.livekitClient.setInputVolume(value);
