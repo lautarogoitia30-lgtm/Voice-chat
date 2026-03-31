@@ -837,6 +837,15 @@ async function handleJoinVoice() {
         
         // Connect to LiveKit
         console.log('[JOIN] Connecting to LiveKit...');
+        console.log('[JOIN] livekitClient exists:', !!window.livekitClient);
+        console.log('[JOIN] livekitClient object:', window.livekitClient);
+        
+        if (!window.livekitClient || !window.livekitClient.connect) {
+            console.error('[JOIN] livekitClient not loaded!', window.livekitClient);
+            alert('Error: LiveKit client not loaded. Please refresh the page.');
+            return;
+        }
+        
         await window.livekitClient.connect(tokenData.url, tokenData.token);
         console.log('[JOIN] Connected to LiveKit!');
         
