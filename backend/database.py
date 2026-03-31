@@ -17,7 +17,13 @@ class Base(DeclarativeBase):
 
 
 # Get database URL from environment or use SQLite default
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./voice_chat.db")
+_database_url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./voice_chat.db")
+
+# For Railway PostgreSQL, need to add asyncpg driver
+if _database_url.startswith("postgresql://"):
+    DATABASE_URL = _database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+else:
+    DATABASE_URL = _database_url
 
 # Create async engine
 engine = create_async_engine(
