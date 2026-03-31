@@ -184,7 +184,7 @@ class LiveKitClient {
     
     /**
      * Publish local microphone to the room
-     * Using LiveKit's built-in audio processing (no custom Web Audio pipeline)
+     * With simple volume control using Web Audio API (no noise gate)
      */
     async publishMicrophone() {
         console.log('=== PUBLISH MICROPHONE ===');
@@ -201,13 +201,48 @@ class LiveKitClient {
             const echoCancellation = localStorage.getItem('voice_chat_echo_cancellation') !== 'false';
             const inputVolume = parseInt(localStorage.getItem('voice_chat_input_volume') || '50');
             
-            console.log('[AUDIO] Using browser native processing - noiseSuppression:', noiseSuppression, 'echoCancellation:', echoCancellation);
+            console.log('[AUDIO] Settings - volume:', inputVolume, 'noiseSuppression:', noiseSuppression, 'echoCancellation:', echoCancellation);
             
-            // Let LiveKit handle everything - it has built-in echo cancellation and noise suppression
-            // This is more reliable than custom Web Audio processing
-            await this.localParticipant.setMicrophoneEnabled(true);
+            // Get microphone with browser's native noise suppression
+            const constraints = {
+                audio: {
+                    echoCancellation: echoCancellation,
+                    noiseSuppression: noiseSuppression, // Use user's setting
+                    autoGainControl: true,
+                    sampleRate: 48000,
+                }
+            };
             
-            console.log('[AUDIO] Microphone enabled via LiveKit');
+            if (inputDevice) {
+                constraints.audio.deviceId = { exact: inputDevice };
+            }
+            
+            console.log('[AUDIO] Getting microphone...');
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            
+            // Create Web Audio API just for volume control
+            this.audioContext = new AudioContext();
+            const source = this.audioContext.createMediaStreamSource(stream);
+            
+            // Create gain node for volume
+            this.inputGainNode = this.audioContext.createGain();
+            this.inputGainNode.gain.value = inputVolume / 100;
+            
+            // Create destination to capture processed audio
+            const dest = this.audioContext.createMediaStreamDestination();
+            
+            // Connect: source -> gain -> destination
+            source.connect(this.inputGainNode);
+            this.inputGainNode.connect(dest);
+            
+            // Create new track from the processed stream
+            const processedTrack = dest.stream.getAudioTracks()[0];
+            
+            // Publish to LiveKit
+            await this.localParticipant.publishTrack(processedTrack);
+            
+            console.log('[AUDIO] Microphone published with volume control!');
+            console.log('[AUDIO] Volume set to:', inputVolume + '%');
             console.log('=== MICROPHONE READY ===');
         } catch (error) {
             console.error('ERROR publishing microphone:', error);
@@ -221,9 +256,33 @@ class LiveKitClient {
     setInputVolume(volume) {
         console.log('[AUDIO] setInputVolume called with:', volume);
         
-        // Since we're using LiveKit's native processing, we can't easily control volume
-        // Just log the attempt
-        console.log('[AUDIO] Volume control not available with native LiveKit processing');
+        if (this.inputGainNode && this.audioContext) {
+            if (this.audioContext.state === 'suspended') {
+                this.audioContext.resume();
+            }
+            this.inputGainNode.gain.value = volume / 100;
+            console.log('[AUDIO] Volume set to:', volume + '%');
+        } else {
+            console.log('[AUDIO] Volume will apply on next join');
+        }
+    }
+    
+    /**
+     * Set muted state (mute/unmute microphone)
+     * Using the gain node for instant mute
+     */
+    async setMuted(muted) {
+        console.log('[MUTE] Setting mute to:', muted);
+        
+        if (this.inputGainNode) {
+            this.inputGainNode.gain.value = muted ? 0 : 0.5;
+            console.log('[MUTE] Muted:', muted);
+        } else {
+            // Fallback to setMicrophoneEnabled
+            if (this.localParticipant) {
+                await this.localParticipant.setMicrophoneEnabled(!muted);
+            }
+        }
     }
     
     /**
