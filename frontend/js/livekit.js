@@ -184,7 +184,7 @@ class LiveKitClient {
     
     /**
      * Publish local microphone to the room
-     * With noise gate and volume control using Web Audio API
+     * Using LiveKit's built-in audio processing (no custom Web Audio pipeline)
      */
     async publishMicrophone() {
         console.log('=== PUBLISH MICROPHONE ===');
@@ -195,127 +195,19 @@ class LiveKitClient {
         }
         
         try {
-            // Get saved settings from localStorage
+            // Get settings from localStorage
             const inputDevice = localStorage.getItem('voice_chat_input_device');
-            const inputVolume = parseInt(localStorage.getItem('voice_chat_input_volume') || '100');
             const noiseSuppression = localStorage.getItem('voice_chat_noise_suppression') === 'true';
             const echoCancellation = localStorage.getItem('voice_chat_echo_cancellation') !== 'false';
+            const inputVolume = parseInt(localStorage.getItem('voice_chat_input_volume') || '50');
             
-            console.log('[AUDIO] Settings - inputVolume:', inputVolume, 'noiseSuppression:', noiseSuppression, 'echoCancellation:', echoCancellation);
+            console.log('[AUDIO] Using browser native processing - noiseSuppression:', noiseSuppression, 'echoCancellation:', echoCancellation);
             
-            // Get microphone with STRONG noise suppression settings
-            const constraints = {
-                audio: {
-                    echoCancellation: echoCancellation,
-                    noiseSuppression: true, // Always enable - this is the browser's NS
-                    autoGainControl: true,
-                    sampleRate: 48000,
-                    // Additional constraints for better noise handling
-                    latency: 0,
-                }
-            };
+            // Let LiveKit handle everything - it has built-in echo cancellation and noise suppression
+            // This is more reliable than custom Web Audio processing
+            await this.localParticipant.setMicrophoneEnabled(true);
             
-            if (inputDevice) {
-                constraints.audio.deviceId = { exact: inputDevice };
-            }
-            
-            console.log('[AUDIO] Getting microphone with constraints');
-            const stream = await navigator.mediaDevices.getUserMedia(constraints);
-            
-            // Store original track
-            const originalTrack = stream.getAudioTracks()[0];
-            this.localAudioTrack = originalTrack;
-            
-            // Create Web Audio API pipeline
-            this.audioContext = new AudioContext();
-            const source = this.audioContext.createMediaStreamSource(stream);
-            
-            // Create main gain node for volume control - default to 70% to reduce sensitivity
-            this.inputGainNode = this.audioContext.createGain();
-            this.inputGainNode.gain.value = (inputVolume || 70) / 100;
-            
-            // === NOISE GATE - This is the key! ===
-            // A noise gate cuts audio when it's below a threshold (silences background noise)
-            const noiseGate = this.audioContext.createGain();
-            noiseGate.gain.value = 1;
-            
-            // Create analyzer to detect speech vs noise
-            const analyser = this.audioContext.createAnalyser();
-            analyser.fftSize = 256;
-            analyser.smoothingTimeConstant = 0.8;
-            
-            // Create compressor to reduce sudden loud sounds
-            const compressor = this.audioContext.createDynamicsCompressor();
-            compressor.threshold.value = -40;
-            compressor.knee.value = 10;
-            compressor.ratio.value = 12;
-            compressor.attack.value = 0.003;
-            compressor.release.value = 0.1;
-            
-            // High-pass to remove low rumble
-            const highPass = this.audioContext.createBiquadFilter();
-            highPass.type = 'highpass';
-            highPass.frequency.value = 100;
-            highPass.Q.value = 0.5;
-            
-            // Low-pass to smooth
-            const lowPass = this.audioContext.createBiquadFilter();
-            lowPass.type = 'lowpass';
-            lowPass.frequency.value = 5000;
-            lowPass.Q.value = 0.5;
-            
-            // Create destination
-            const dest = this.audioContext.createMediaStreamDestination();
-            
-            // Connect: source -> analyser -> noiseGate -> highPass -> lowPass -> compressor -> gain -> dest
-            source.connect(analyser);
-            analyser.connect(noiseGate);
-            noiseGate.connect(highPass);
-            highPass.connect(lowPass);
-            lowPass.connect(compressor);
-            compressor.connect(this.inputGainNode);
-            this.inputGainNode.connect(dest);
-            
-            // Store nodes
-            this.analyser = analyser;
-            this.noiseGate = noiseGate;
-            
-            // === NOISE GATE LOGIC ===
-            // Continuously monitor audio levels and gate accordingly
-            const dataArray = new Uint8Array(analyser.frequencyBinCount);
-            const noiseGateThreshold = 3; // LOWER - only let LOUD sounds through
-            
-            const updateNoiseGate = () => {
-                if (!this.audioContext || this.audioContext.state !== 'running') return;
-                
-                analyser.getByteFrequencyData(dataArray);
-                const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
-                
-                // DEBUG: Log audio level
-                if (Math.random() < 0.02) {
-                    console.log('[GATE] Audio level:', average.toFixed(1), 'threshold:', noiseGateThreshold, 'gain:', this.noiseGate.gain.value.toFixed(2));
-                }
-                
-                if (average < noiseGateThreshold) {
-                    // Background noise - gate it COMPLETELY
-                    this.noiseGate.gain.setTargetAtTime(0, this.audioContext.currentTime, 0.01);
-                } else {
-                    // Speech - let it through (require MUCH louder than threshold to activate)
-                    this.noiseGate.gain.setTargetAtTime(1, this.audioContext.currentTime, 0.003);
-                }
-                
-                requestAnimationFrame(updateNoiseGate);
-            };
-            updateNoiseGate();
-            console.log('[AUDIO] Noise gate started with threshold:', noiseGateThreshold);
-            
-            // Create new track from the processed stream
-            const processedTrack = dest.stream.getAudioTracks()[0];
-            
-            // Publish processed track to LiveKit
-            await this.localParticipant.publishTrack(processedTrack);
-            
-            console.log('[AUDIO] Microphone published with noise gate!');
+            console.log('[AUDIO] Microphone enabled via LiveKit');
             console.log('=== MICROPHONE READY ===');
         } catch (error) {
             console.error('ERROR publishing microphone:', error);
@@ -328,24 +220,10 @@ class LiveKitClient {
      */
     setInputVolume(volume) {
         console.log('[AUDIO] setInputVolume called with:', volume);
-        console.log('[AUDIO] inputGainNode exists:', !!this.inputGainNode);
         
-        if (this.audioContext) {
-            console.log('[AUDIO] audioContext state:', this.audioContext.state);
-            
-            if (this.audioContext.state === 'suspended') {
-                console.log('[AUDIO] Resuming audio context...');
-                this.audioContext.resume();
-            }
-        }
-        
-        if (this.inputGainNode) {
-            const gainValue = volume / 100;
-            this.inputGainNode.gain.value = gainValue;
-            console.log('[AUDIO] Volume set to:', volume, 'gain:', this.inputGainNode.gain.value);
-        } else {
-            console.log('[AUDIO] inputGainNode not available yet');
-        }
+        // Since we're using LiveKit's native processing, we can't easily control volume
+        // Just log the attempt
+        console.log('[AUDIO] Volume control not available with native LiveKit processing');
     }
     
     /**
@@ -484,23 +362,18 @@ class LiveKitClient {
     
     /**
      * Set muted state (mute/unmute microphone)
-     * We use the gain node to actually mute
+     * Using LiveKit's setMicrophoneEnabled
      */
     async setMuted(muted) {
         console.log('[MUTE] Setting mute to:', muted);
         
-        if (this.inputGainNode) {
-            if (muted) {
-                this.previousVolume = this.inputGainNode.gain.value;
-                this.inputGainNode.gain.value = 0;
-                console.log('[MUTE] Muted - previous:', this.previousVolume);
-            } else {
-                const restoreVolume = this.previousVolume !== undefined ? this.previousVolume : 0.7;
-                this.inputGainNode.gain.value = restoreVolume;
-                console.log('[MUTE] Unmuted - restored to:', restoreVolume);
+        if (this.localParticipant) {
+            try {
+                await this.localParticipant.setMicrophoneEnabled(!muted);
+                console.log('[MUTE] Microphone', muted ? 'muted' : 'unmuted');
+            } catch (e) {
+                console.error('[MUTE] Error:', e);
             }
-        } else {
-            console.log('[MUTE] No gain node');
         }
     }
     
