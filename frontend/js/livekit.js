@@ -230,9 +230,9 @@ class LiveKitClient {
             this.audioContext = new AudioContext();
             const source = this.audioContext.createMediaStreamSource(stream);
             
-            // Create main gain node for volume control
+            // Create main gain node for volume control - default to 70% to reduce sensitivity
             this.inputGainNode = this.audioContext.createGain();
-            this.inputGainNode.gain.value = inputVolume / 100;
+            this.inputGainNode.gain.value = (inputVolume || 70) / 100;
             
             // === NOISE GATE - This is the key! ===
             // A noise gate cuts audio when it's below a threshold (silences background noise)
@@ -283,7 +283,7 @@ class LiveKitClient {
             // === NOISE GATE LOGIC ===
             // Continuously monitor audio levels and gate accordingly
             const dataArray = new Uint8Array(analyser.frequencyBinCount);
-            const noiseGateThreshold = 15; // Adjust this - lower = more aggressive gate
+            const noiseGateThreshold = 8; // MORE AGGRESSIVE - lower = more sensitive to noise
             
             const updateNoiseGate = () => {
                 if (!this.audioContext || this.audioContext.state !== 'running') return;
@@ -292,17 +292,17 @@ class LiveKitClient {
                 const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
                 
                 if (average < noiseGateThreshold) {
-                    // Background noise - gate it
-                    this.noiseGate.gain.setTargetAtTime(0.05, this.audioContext.currentTime, 0.05);
+                    // Background noise - gate it COMPLETELY (was 0.05, now 0)
+                    this.noiseGate.gain.setTargetAtTime(0, this.audioContext.currentTime, 0.02);
                 } else {
                     // Speech - let it through
-                    this.noiseGate.gain.setTargetAtTime(1, this.audioContext.currentTime, 0.01);
+                    this.noiseGate.gain.setTargetAtTime(1, this.audioContext.currentTime, 0.005);
                 }
                 
                 requestAnimationFrame(updateNoiseGate);
             };
             updateNoiseGate();
-            console.log('[AUDIO] Noise gate started');
+            console.log('[AUDIO] Noise gate started with threshold:', noiseGateThreshold);
             
             // Create new track from the processed stream
             const processedTrack = dest.stream.getAudioTracks()[0];
