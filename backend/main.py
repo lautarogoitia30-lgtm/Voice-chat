@@ -43,10 +43,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Configure CORS - allow all origins for development
+# Configure CORS - allow specific origins in production
+# Get allowed origins from env or default to common dev origins
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:8000").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -91,21 +93,25 @@ async def health():
     return {"status": "healthy"}
 
 
-# WebSocket endpoint for text chat (with JWT auth - OPTIONAL for now)
+# WebSocket endpoint for text chat (REQUIRED JWT auth)
 @app.websocket("/ws/chat/{channel_id}")
 async def chat_websocket(websocket: WebSocket, channel_id: int, token: str = ""):
-    """WebSocket endpoint for real-time text chat with JWT auth (optional for now)."""
-    # Try to validate token if provided
+    """WebSocket endpoint for real-time text chat with JWT auth required."""
+    # Validate JWT token - REQUIRED for WebSocket connections
+    if not token or token == "null" or token == "undefined":
+        await websocket.close(code=4001, reason="Authentication required")
+        return
+    
     user_data = None
-    if token and token != "null" and token != "undefined":
-        try:
-            # Verify JWT token
-            from backend.auth import verify_jwt_token
-            user_data = verify_jwt_token(token)
-            print(f"WebSocket auth: User {user_data['username']} (ID: {user_data['user_id']}) connecting to channel {channel_id}")
-        except Exception as e:
-            print(f"WebSocket auth failed (continuing anyway): {e}")
-            # Continue without auth for now
+    try:
+        # Verify JWT token
+        from backend.auth import verify_jwt_token
+        user_data = verify_jwt_token(token)
+        print(f"WebSocket auth: User {user_data['username']} (ID: {user_data['user_id']}) connecting to channel {channel_id}")
+    except Exception as e:
+        print(f"WebSocket auth failed: {e}")
+        await websocket.close(code=4001, reason="Invalid token")
+        return
     
     # Pass user_data to the endpoint
     await websocket_endpoint(websocket, channel_id, user_data)
