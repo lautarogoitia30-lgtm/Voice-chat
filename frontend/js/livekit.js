@@ -418,23 +418,30 @@ class LiveKitClient {
     
     /**
      * Set muted state (mute/unmute microphone)
-     * CORRECTO: Usar setMicrophoneEnabled para mute/unmute
+     * We use the gain node to actually mute - simpler than trying to use setMicrophoneEnabled with our custom pipeline
      */
     async setMuted(muted) {
         console.log('=== SET MUTE:', muted, '===');
         
-        try {
-            // CORRECTO: Usar setMicrophoneEnabled para controlar el micrófono
-            // false = mute (deshabilitar), true = unmute (habilitar)
-            if (this.localParticipant) {
-                console.log('Using setMicrophoneEnabled:', !muted);
-                await this.localParticipant.setMicrophoneEnabled(!muted);
-                console.log('Mute state changed to:', muted ? 'MUTED' : 'UNMUTED');
+        if (this.inputGainNode) {
+            if (muted) {
+                // Save current volume before muting
+                this.previousVolume = this.inputGainNode.gain.value;
+                // Set gain to 0 (silence)
+                this.inputGainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
+                console.log('[MUTE] Muted - saved volume:', this.previousVolume, 'now 0');
             } else {
-                console.warn('No localParticipant available');
+                // Restore previous volume
+                const restoreVolume = this.previousVolume !== undefined ? this.previousVolume : 1;
+                this.inputGainNode.gain.setValueAtTime(restoreVolume, this.audioContext.currentTime);
+                console.log('[MUTE] Unmuted - restored volume:', restoreVolume);
             }
-        } catch (e) {
-            console.error('Error setting mute:', e);
+        } else {
+            // Fallback to setMicrophoneEnabled if no gain node
+            console.log('[MUTE] No gain node, using setMicrophoneEnabled');
+            if (this.localParticipant) {
+                await this.localParticipant.setMicrophoneEnabled(!muted);
+            }
         }
     }
     
