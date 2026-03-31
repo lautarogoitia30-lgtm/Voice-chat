@@ -201,7 +201,11 @@ class LiveKitClient {
             const noiseSuppression = localStorage.getItem('voice_chat_noise_suppression') === 'true';
             const echoCancellation = localStorage.getItem('voice_chat_echo_cancellation') !== 'false';
             
-            console.log('[AUDIO] Settings - inputVolume:', inputVolume, 'noiseSuppression:', noiseSuppression, 'echoCancellation:', echoCancellation);
+            console.log('[AUDIO] === SETTINGS LOADED ===');
+            console.log('[AUDIO] inputVolume:', inputVolume, 'type:', typeof inputVolume);
+            console.log('[AUDIO] noiseSuppression:', noiseSuppression);
+            console.log('[AUDIO] echoCancellation:', echoCancellation);
+            console.log('[AUDIO] ========================');
             
             // Get microphone with specific device and audio processing
             const constraints = {
@@ -246,6 +250,8 @@ class LiveKitClient {
             await this.localParticipant.publishTrack(processedTrack);
             
             console.log('[AUDIO] Microphone published with volume control!');
+            console.log('[AUDIO] inputGainNode:', this.inputGainNode);
+            console.log('[AUDIO] gain value:', this.inputGainNode.gain.value);
             console.log('=== MICROPHONE READY ===');
         } catch (error) {
             console.error('ERROR publishing microphone:', error);
@@ -257,9 +263,19 @@ class LiveKitClient {
      * Update input volume dynamically
      */
     setInputVolume(volume) {
+        console.log('[AUDIO] setInputVolume called with:', volume);
+        
         if (this.inputGainNode) {
+            // Check if audio context is suspended (can happen with autoplay policy)
+            if (this.audioContext && this.audioContext.state === 'suspended') {
+                console.log('[AUDIO] AudioContext is suspended, resuming...');
+                this.audioContext.resume();
+            }
+            
             this.inputGainNode.gain.value = volume / 100;
-            console.log('[AUDIO] Volume updated to:', volume);
+            console.log('[AUDIO] Volume updated to:', volume, 'gain:', this.inputGainNode.gain.value);
+        } else {
+            console.log('[AUDIO] inputGainNode not available yet');
         }
     }
     
