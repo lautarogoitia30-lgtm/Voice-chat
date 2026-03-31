@@ -283,7 +283,7 @@ class LiveKitClient {
             // === NOISE GATE LOGIC ===
             // Continuously monitor audio levels and gate accordingly
             const dataArray = new Uint8Array(analyser.frequencyBinCount);
-            const noiseGateThreshold = 5; // Even more aggressive!
+            const noiseGateThreshold = 3; // LOWER - only let LOUD sounds through
             
             const updateNoiseGate = () => {
                 if (!this.audioContext || this.audioContext.state !== 'running') return;
@@ -300,7 +300,7 @@ class LiveKitClient {
                     // Background noise - gate it COMPLETELY
                     this.noiseGate.gain.setTargetAtTime(0, this.audioContext.currentTime, 0.01);
                 } else {
-                    // Speech - let it through
+                    // Speech - let it through (require MUCH louder than threshold to activate)
                     this.noiseGate.gain.setTargetAtTime(1, this.audioContext.currentTime, 0.003);
                 }
                 
