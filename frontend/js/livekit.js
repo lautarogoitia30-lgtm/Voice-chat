@@ -37,7 +37,7 @@ class LiveKitClient {
             this.room = new Room({
                 adaptiveStream: true,
                 dynacast: true,
-                autoSubscribe: true, // Important: automatically subscribe to remote tracks
+                autoSubscribe: true,
             });
             
             console.log('Room created:', this.room);
@@ -184,7 +184,7 @@ class LiveKitClient {
     
     /**
      * Publish local microphone to the room
-     * SIMPLE: Use setMicrophoneEnabled - LiveKit maneja todo automáticamente
+     * With better audio quality settings
      */
     async publishMicrophone() {
         console.log('=== PUBLISH MICROPHONE ===');
@@ -195,10 +195,18 @@ class LiveKitClient {
         }
         
         try {
-            // Use LiveKit's built-in method to enable mic
-            // Esto crea el track, lo publica, y maneja mute/unmute automáticamente
-            console.log('Enabling microphone via setMicrophoneEnabled...');
-            await this.localParticipant.setMicrophoneEnabled(true);
+            // Better audio quality settings
+            const audioOptions = {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+                sampleRate: 48000,
+                channelCount: 1,
+                bitrateMode: 'high'
+            };
+            
+            console.log('Enabling microphone with quality settings:', audioOptions);
+            await this.localParticipant.setMicrophoneEnabled(true, audioOptions);
             console.log('=== MICROPHONE READY ===');
         } catch (error) {
             console.error('ERROR publishing microphone:', error);
