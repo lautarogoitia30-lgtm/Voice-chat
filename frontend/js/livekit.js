@@ -428,19 +428,24 @@ class LiveKitClient {
                 // Save current volume before muting
                 this.previousVolume = this.inputGainNode.gain.value;
                 // Set gain to 0 (silence)
-                this.inputGainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
-                console.log('[MUTE] Muted - saved volume:', this.previousVolume, 'now 0');
+                this.inputGainNode.gain.value = 0;
+                console.log('[MUTE] Muted - previous volume was:', this.previousVolume);
             } else {
-                // Restore previous volume
+                // Restore previous volume, default to 1 if not set
                 const restoreVolume = this.previousVolume !== undefined ? this.previousVolume : 1;
-                this.inputGainNode.gain.setValueAtTime(restoreVolume, this.audioContext.currentTime);
-                console.log('[MUTE] Unmuted - restored volume:', restoreVolume);
+                this.inputGainNode.gain.value = restoreVolume;
+                console.log('[MUTE] Unmuted - restored to:', restoreVolume);
             }
         } else {
-            // Fallback to setMicrophoneEnabled if no gain node
-            console.log('[MUTE] No gain node, using setMicrophoneEnabled');
+            // No gain node - fallback
+            console.log('[MUTE] No gain node, trying setMicrophoneEnabled');
             if (this.localParticipant) {
-                await this.localParticipant.setMicrophoneEnabled(!muted);
+                try {
+                    await this.localParticipant.setMicrophoneEnabled(!muted);
+                    console.log('[MUTE] setMicrophoneEnabled result:', !muted ? 'enabled' : 'disabled');
+                } catch (e) {
+                    console.error('[MUTE] Error:', e);
+                }
             }
         }
     }
