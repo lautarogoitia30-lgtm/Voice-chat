@@ -226,7 +226,7 @@ class LiveKitClient {
             const source = this.audioContext.createMediaStreamSource(stream);
             
             this.inputGainNode = this.audioContext.createGain();
-            this.inputGainNode.gain.value = (inputVolume / 100) * 0.5; // Extra 50% reduction
+            this.inputGainNode.gain.value = (inputVolume / 100) * 0.3; // Extra 70% reduction!
             
             const dest = this.audioContext.createMediaStreamDestination();
             
