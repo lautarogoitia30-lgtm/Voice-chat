@@ -1718,6 +1718,9 @@ function showSettingsModal() {
     // Load audio devices
     loadAudioDevices();
     
+    // Load audio settings from localStorage
+    loadAudioSettings();
+    
     // Load appearance settings
     loadAppearanceSettings();
     
@@ -2007,6 +2010,90 @@ function handleOutputVolumeChange(value) {
     if (testAudioElement) {
         testAudioElement.volume = value / 100;
     }
+}
+
+// Save audio settings
+function saveAudioSettings() {
+    // Get values from form
+    settingsState.inputDevice = document.getElementById('settings-input-device').value;
+    settingsState.outputDevice = document.getElementById('settings-output-device').value;
+    settingsState.inputVolume = document.getElementById('settings-input-volume').value;
+    settingsState.outputVolume = document.getElementById('settings-output-volume').value;
+    settingsState.noiseSuppression = document.getElementById('settings-noise-suppression').checked;
+    settingsState.echoCancellation = document.getElementById('settings-echo-cancellation').checked;
+    
+    // Save to localStorage
+    localStorage.setItem('voice_chat_input_device', settingsState.inputDevice);
+    localStorage.setItem('voice_chat_output_device', settingsState.outputDevice);
+    localStorage.setItem('voice_chat_input_volume', settingsState.inputVolume);
+    localStorage.setItem('voice_chat_output_volume', settingsState.outputVolume);
+    localStorage.setItem('voice_chat_noise_suppression', settingsState.noiseSuppression);
+    localStorage.setItem('voice_chat_echo_cancellation', settingsState.echoCancellation);
+    
+    // Apply settings to LiveKit
+    applyAudioSettingsToLiveKit();
+    
+    alert('Configuración de audio guardada');
+}
+
+// Apply audio settings to LiveKit
+function applyAudioSettingsToLiveKit() {
+    if (!window.livekitClient || !window.livekitClient.room) {
+        console.log('No LiveKit room connected, settings will apply on next join');
+        return;
+    }
+    
+    const audioSettings = {
+        noiseSuppression: settingsState.noiseSuppression,
+        echoCancellation: settingsState.echoCancellation
+    };
+    
+    console.log('Applying audio settings to LiveKit:', audioSettings);
+    // LiveKit applies these settings automatically when the track is created
+    // For now, just log - the actual settings are applied when publishing the mic
+}
+
+// Load audio settings when opening settings modal
+function loadAudioSettings() {
+    // Load from localStorage
+    const inputDevice = localStorage.getItem('voice_chat_input_device');
+    const outputDevice = localStorage.getItem('voice_chat_output_device');
+    const inputVolume = localStorage.getItem('voice_chat_input_volume');
+    const outputVolume = localStorage.getItem('voice_chat_output_volume');
+    const noiseSuppression = localStorage.getItem('voice_chat_noise_suppression');
+    const echoCancellation = localStorage.getItem('voice_chat_echo_cancellation');
+    
+    // Update form values
+    if (inputDevice) {
+        const inputSelect = document.getElementById('settings-input-device');
+        if (inputSelect) inputSelect.value = inputDevice;
+    }
+    if (outputDevice) {
+        const outputSelect = document.getElementById('settings-output-device');
+        if (outputSelect) outputSelect.value = outputDevice;
+    }
+    if (inputVolume) {
+        document.getElementById('settings-input-volume').value = inputVolume;
+        document.getElementById('input-volume-value').textContent = inputVolume;
+    }
+    if (outputVolume) {
+        document.getElementById('settings-output-volume').value = outputVolume;
+        document.getElementById('output-volume-value').textContent = outputVolume;
+    }
+    if (noiseSuppression !== null) {
+        document.getElementById('settings-noise-suppression').checked = noiseSuppression === 'true';
+    }
+    if (echoCancellation !== null) {
+        document.getElementById('settings-echo-cancellation').checked = echoCancellation === 'true';
+    }
+    
+    // Update state
+    settingsState.inputDevice = inputDevice;
+    settingsState.outputDevice = outputDevice;
+    settingsState.inputVolume = inputVolume || 100;
+    settingsState.outputVolume = outputVolume || 100;
+    settingsState.noiseSuppression = noiseSuppression === 'true';
+    settingsState.echoCancellation = echoCancellation !== 'false';
 }
 
 // Start microphone test
