@@ -264,6 +264,8 @@ class LiveKitClient {
      */
     setInputVolume(volume) {
         console.log('[AUDIO] setInputVolume called with:', volume);
+        console.log('[AUDIO] inputGainNode exists:', !!this.inputGainNode);
+        console.log('[AUDIO] audioContext exists:', !!this.audioContext);
         
         if (this.inputGainNode) {
             // Check if audio context is suspended (can happen with autoplay policy)
@@ -272,10 +274,11 @@ class LiveKitClient {
                 this.audioContext.resume();
             }
             
-            this.inputGainNode.gain.value = volume / 100;
+            const gainValue = volume / 100;
+            this.inputGainNode.gain.setValueAtTime(gainValue, this.audioContext.currentTime);
             console.log('[AUDIO] Volume updated to:', volume, 'gain:', this.inputGainNode.gain.value);
         } else {
-            console.log('[AUDIO] inputGainNode not available yet');
+            console.log('[AUDIO] inputGainNode not available yet - volume will apply on next join');
         }
     }
     

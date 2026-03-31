@@ -1995,13 +1995,19 @@ function handleOutputDeviceChange(deviceId) {
 
 // Handle input volume change
 function handleInputVolumeChange(value) {
+    console.log('[VOLUME] handleInputVolumeChange called with value:', value);
+    
     settingsState.inputVolume = value;
     document.getElementById('input-volume-value').textContent = value;
     localStorage.setItem('voice_chat_input_volume', value);
     
     // Update LiveKit volume in real-time if in voice
+    console.log('[VOLUME] Checking livekitClient:', window.livekitClient);
     if (window.livekitClient && window.livekitClient.setInputVolume) {
+        console.log('[VOLUME] Calling setInputVolume');
         window.livekitClient.setInputVolume(value);
+    } else {
+        console.log('[VOLUME] livekitClient not available or setInputVolume missing');
     }
 }
 
