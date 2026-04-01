@@ -66,9 +66,11 @@
         
         <!-- Channels Sidebar -->
         <div class="channels-sidebar">
-            <div class="sidebar-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <div class="channels-header">
                 <h2 id="selected-group-name">Selecciona un grupo</h2>
-                <button id="edit-group-btn" class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px;" onclick="showEditGroupModal()">✏️</button>
+                <div class="header-actions">
+                    <button id="edit-group-btn" onclick="showEditGroupModal()" title="Editar">✏️</button>
+                </div>
             </div>
             <!-- Groups List -->
             <div id="groups-list" class="channels-list" style="max-height: 150px; overflow-y: auto; border-bottom: 1px solid var(--border);">
@@ -105,18 +107,20 @@
             </div>
             
             <!-- Chat Area -->
-            <div id="text-chat" class="flex-1 flex flex-col hidden">
-                <div class="chat-area flex-1 overflow-y-auto" id="messages-list">
+            <div id="text-chat" class="text-chat hidden">
+                <div class="messages-container" id="messages-list">
                     <!-- Messages will be inserted here -->
                 </div>
-                <div class="message-input-area">
-                    <form id="message-form" class="flex gap-2 flex-1">
-                        <input type="text" id="message-input" class="message-input" placeholder="Escribe un mensaje...">
-                        <button type="submit" class="btn btn-primary">Enviar</button>
-                        <label class="btn btn-secondary file-upload-btn" title="Subir archivo">
-                            📎
-                            <input type="file" id="file-upload-input" style="display: none;" onchange="handleFileUpload(this)">
-                        </label>
+                <div class="message-input-container">
+                    <form id="message-form">
+                        <div class="message-input-wrapper">
+                            <input type="text" id="message-input" class="message-input" placeholder="Escribe un mensaje...">
+                            <button type="submit" class="btn btn-primary">Enviar</button>
+                            <label class="btn btn-secondary file-upload-btn" title="Subir archivo">
+                                📎
+                                <input type="file" id="file-upload-input" style="display: none;" onchange="handleFileUpload(this)">
+                            </label>
+                        </div>
                     </form>
                 </div>
             </div>
