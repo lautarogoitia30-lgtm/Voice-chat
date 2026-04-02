@@ -972,10 +972,13 @@ async function handleJoinVoice() {
         // Update the channel list to show voice participants
         updateVoiceParticipantsDisplay();
         
-    } catch (error) {
-        console.error('[JOIN] Voice connection error:', error);
-        alert('No se pudo unir a voz: ' + error.message);
-    }
+     } catch (error) {
+         console.error('[JOIN] Voice connection error:', error);
+         console.error('[JOIN] Full error:', error);
+         console.error('[JOIN] Error message:', error.message);
+         console.error('[JOIN] Error stack:', error.stack);
+         alert('No se pudo unir a voz: ' + error.message + '\n\nRevisa la consola (F12) para más detalles.');
+     }
 }
 
 // Handle when active speakers change

@@ -153,6 +153,8 @@ class LiveKitClient {
             // Connect to the room
             console.log('[LIVEKIT] About to connect to:', url);
             console.log('[LIVEKIT] Token (first 50 chars):', token.substring(0, 50) + '...');
+            console.log('[LIVEKIT] Token length:', token.length);
+            console.log('[LIVEKIT] Token is string:', typeof token === 'string');
             
             await this.room.connect(url, token);
             
