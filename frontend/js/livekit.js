@@ -477,7 +477,7 @@ class LiveKitClient {
     
     /**
      * Set muted state (mute/unmute microphone)
-     * Uses localParticipant.setMicrophoneEnabled() - the correct LiveKit API
+     * Uses publication.setMuted() - the proper LiveKit API
      */
     async setMuted(muted) {
         console.log('[MUTE] ===== SETMUTED CALLED =====', muted);
@@ -491,15 +491,48 @@ class LiveKitClient {
         }
         
         try {
-            // Use setMicrophoneEnabled - the correct LiveKit API for muting
-            console.log('[MUTE] Calling lp.setMicrophoneEnabled(', muted, ')');
-            await lp.setMicrophoneEnabled(!muted); // false = mute, true = unmute
-            console.log('[MUTE] setMicrophoneEnabled called successfully');
+            // Get the publication directly from localParticipant
+            // Try to get microphone publication
+            let publication = null;
+            
+            // Try different methods to get the audio publication
+            if (lp.getTrackPublication) {
+                // Method 1: getTrackPublication with Track.Source
+                const LK = window.LiveKit;
+                if (LK && LK.Track && LK.Track.Source) {
+                    publication = lp.getTrackPublication(LK.Track.Source.Microphone);
+                    console.log('[MUTE] Got publication via getTrackPublication(Microphone):', !!publication);
+                }
+            }
+            
+            // Method 2: Try to get from getPublishedTracks if available
+            if (!publication && lp.getPublishedTracks) {
+                const tracks = lp.getPublishedTracks();
+                for (const pub of tracks) {
+                    if (pub.kind === 'audio') {
+                        publication = pub;
+                        console.log('[MUTE] Got audio publication from getPublishedTracks');
+                        break;
+                    }
+                }
+            }
+            
+            // Method 3: Try localAudioPublication that was stored during publish
+            if (!publication && this.localAudioPublication) {
+                publication = this.localAudioPublication;
+                console.log('[MUTE] Using stored this.localAudioPublication');
+            }
+            
+            if (publication && typeof publication.setMuted === 'function') {
+                console.log('[MUTE] Calling publication.setMuted(', muted, ')');
+                publication.setMuted(muted);
+                console.log('[MUTE] setMuted called successfully');
+            } else {
+                console.warn('[MUTE] No valid publication found or setMuted not available');
+                // Fallback: just update the internal state
+            }
         } catch (e) {
-            console.error('[MUTE] Error calling setMicrophoneEnabled:', e);
-            // Fallback: if setMicrophoneEnabled fails, try republishing
-            console.log('[MUTE] Falling back to republish...');
-            await this.publishMicrophone();
+            console.error('[MUTE] Error calling setMuted:', e);
         }
         
         this._isMuted = muted;
