@@ -471,7 +471,7 @@ class LiveKitClient {
     async setMuted(muted) {
         console.log('[MUTE] ===== SETMUTED CALLED =====', muted, new Date().toISOString());
         console.log('[MUTE] Current _isMuted state:', this._isMuted);
-        console.log('[MUTE] localAudioTrack stored:', !!this.localAudioTrack);
+        console.log('[MUTE] localAudioTrack:', this.localAudioTrack);
         
         // Get the localParticipant (always from room for latest state)
         const lp = this.localParticipant || (this.room ? this.room.localParticipant : null);
@@ -483,83 +483,71 @@ class LiveKitClient {
         }
         
         console.log('[MUTE] localParticipant exists:', !!lp);
+        console.log('[MUTE] lp.audioPublications:', lp.audioPublications);
         
-        // First, check if we have a stored localAudioTrack reference
-        if (this.localAudioTrack) {
-            console.log('[MUTE] Using stored localAudioTrack reference');
-            
-            if (muted) {
-                // MUTE: unpublish the track if not already unpublished
-                console.log('[MUTE] Unpublishing stored track...');
-                try {
-                    await lp.unpublishTrack(this.localAudioTrack);
-                    console.log('[MUTE] Track unpublished successfully');
-                    // Clear the reference - track is now invalid, must re-acquire on unmute
-                    this.localAudioTrack = null;
-                    console.log('[MUTE] Track reference cleared - will re-acquire on unmute');
-                } catch (e) {
-                    console.warn('[MUTE] Unpublish failed:', e?.message || e);
-                    console.warn('[MUTE] Full error:', e);
-                }
-            } else {
-                // UNMUTE: republish the stored track
-                console.log('[MUTE] Republishing stored track...');
-                try {
-                    await lp.publishTrack(this.localAudioTrack, { simulcast: false });
-                    console.log('[MUTE] Track republished successfully');
-                } catch (e) {
-                    console.warn('[MUTE] Republish failed:', e?.message || e);
-                    console.warn('[MUTE] Full error:', e);
-                    // Republish failed - need to re-acquire microphone with NEW track
-                    console.log('[MUTE] Clearing stale track reference and re-acquiring...');
-                    this.localAudioTrack = null;
-                    await this.publishMicrophone();
-                }
-            }
-        } else {
-            // Fallback: try to get from audioPublications (may fail due to timing)
-            console.log('[MUTE] No stored track, trying audioPublications...');
-            const publications = lp ? lp.audioPublications : null;
-            console.log('[MUTE] publications from lp:', !!publications);
-            
-            if (publications && publications.length > 0) {
-                console.log('[MUTE] Found publications:', publications.length);
-                for (const pub of publications) {
-                    console.log('[MUTE]   Pub:', pub.sid, 'track:', !!pub.track, 'kind:', pub.track?.kind);
+        // Try to get track from audioPublications first (might work sometimes)
+        if (lp.audioPublications && lp.audioPublications.length > 0) {
+            console.log('[MUTE] Found audioPublications:', lp.audioPublications.length);
+            for (const pub of lp.audioPublications) {
+                console.log('[MUTE]   Pub:', pub.sid, 'track:', !!pub.track, 'kind:', pub.track?.kind);
+                if (pub.track && (pub.track.kind === 'audio' || pub.kind === 'audio')) {
+                    // Store reference
+                    this.localAudioTrack = pub.track;
+                    console.log('[MUTE] Stored track from publication');
                     
-                    const trackKind = pub.track?.kind || pub.kind;
-                    if (pub.track && trackKind === 'audio') {
-                        console.log('[MUTE] Handling audio publication:', pub.sid);
-                        
-                        // Store reference for future use
-                        this.localAudioTrack = pub.track;
-                        console.log('[MUTE] Stored track reference from publication');
-                        
+                    // Use setMuted() - this is the CORRECT way to mute in LiveKit
+                    // Don't unpublish/republish - that causes reconnection issues
+                    console.log('[MUTE] Calling pub.setMuted(' + muted + ')...');
+                    try {
+                        pub.setMuted(muted);
+                        console.log('[MUTE] setMuted called successfully');
+                    } catch (e) {
+                        console.warn('[MUTE] setMuted error:', e);
+                        // Fallback: try unpublish/republish if setMuted fails
+                        console.log('[MUTE] Fallback: trying unpublish/republish...');
                         if (muted) {
-                            try {
-                                await lp.unpublishTrack(pub.track);
-                                console.log('[MUTE] Track unpublished successfully');
-                            } catch (e) {
-                                console.warn('[MUTE] Unpublish failed:', e);
-                            }
+                            await lp.unpublishTrack(pub.track);
                         } else {
-                            try {
-                                await lp.publishTrack(pub.track, { simulcast: false });
-                                console.log('[MUTE] Track republished successfully');
-                            } catch (e) {
-                                console.warn('[MUTE] Republish failed:', e);
-                            }
+                            await lp.publishTrack(pub.track, { simulcast: false });
                         }
-                        break;
                     }
+                    
+                    this._isMuted = muted;
+                    console.log('[MUTE] COMPLETE');
+                    return;
                 }
-            } else {
-                console.warn('[MUTE] No audio publications found and no stored track!');
             }
         }
         
+        // If we still don't have a track reference but need to mute/unmute,
+        // re-acquire the microphone entirely (this is the fallback)
+        console.log('[MUTE] No track found, re-acquiring microphone...');
+        
+        if (muted) {
+            // For mute: we need to stop publishing. Try unpublishing any audio track
+            // Get all tracks from localParticipant
+            console.log('[MUTE] Trying to find and unpublish existing tracks...');
+            if (lp.audioTracks) {
+                for (const [sid, pub] of lp.audioTracks) {
+                    if (pub.track) {
+                        console.log('[MUTE] Found audio track to unpublish:', sid);
+                        try {
+                            await lp.unpublishTrack(pub.track);
+                            console.log('[MUTE] Unpublished:', sid);
+                        } catch(e) {
+                            console.warn('[MUTE] Error unpublishing:', e);
+                        }
+                    }
+                }
+            }
+        } else {
+            // For unmute: re-publish the microphone
+            console.log('[MUTE] Re-acquiring microphone...');
+            await this.publishMicrophone();
+        }
+        
         this._isMuted = muted;
-        console.log('[MUTE] Microphone', muted ? 'muted' : 'unmuted', '- COMPLETE');
+        console.log('[MUTE] COMPLETE (fallback mode)');
     }
     
     /**
