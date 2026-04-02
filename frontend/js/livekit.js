@@ -5,7 +5,7 @@
  */
 
 // DEBUG: Make sure this is the latest version
-console.log('=== LIVEKIT CLIENT v4 LOADED ===');
+console.log('=== LIVEKIT CLIENT v5 LOADED ===');
 
 class LiveKitClient {
     constructor() {
@@ -477,47 +477,52 @@ class LiveKitClient {
     
     /**
      * Set muted state (mute/unmute microphone)
-     * Unpublish and republish track - most reliable method!
+     * Uses stored track/publication references
      */
     async setMuted(muted) {
-        console.log('[MUTE] ===== SETMUTED CALLED =====', muted, new Date().toISOString());
+        console.log('[MUTE] ===== SETMUTED CALLED =====', muted);
+        console.log('[MUTE] Stored references - track:', !!this.localAudioTrack, 'publication:', !!this.localAudioPublication);
         
         const lp = this.localParticipant || (this.room ? this.room.localParticipant : null);
         
         if (!lp) {
-            console.error('[MUTE] No localParticipant available!');
+            console.error('[MUTE] No localParticipant!');
             this._isMuted = muted;
             return;
         }
         
-        console.log('[MUTE] Using unpublish/republish method...');
-        
         if (muted) {
-            // MUTE: unpublish the track
-            console.log('[MUTE] Unpublishing audio track...');
-            try {
-                // Find and unpublish all audio tracks
-                if (lp.audioTracks) {
-                    for (const [sid, pub] of lp.audioTracks) {
-                        if (pub.kind === 'audio') {
-                            console.log('[MUTE] Unpublishing track:', sid);
+            // MUTE: Use stored references to unpublish
+            console.log('[MUTE] Using stored track reference to unpublish...');
+            
+            if (this.localAudioTrack && this.localAudioPublication) {
+                try {
+                    console.log('[MUTE] Unpublishing track via localParticipant.unpublishTrack');
+                    await lp.unpublishTrack(this.localAudioTrack);
+                    console.log('[MUTE] Successfully unpublished track');
+                } catch (e) {
+                    console.error('[MUTE] Error unpublishing:', e);
+                }
+            } else {
+                // Fallback: try to find via getPublishedTracks
+                console.log('[MUTE] No stored reference, trying getPublishedTracks...');
+                try {
+                    const published = lp.getPublishedTracks ? lp.getPublishedTracks() : [];
+                    console.log('[MUTE] getPublishedTracks returned:', published.length);
+                    for (const pub of published) {
+                        if (pub.kind === 'audio' && pub.track) {
+                            console.log('[MUTE] Unpublishing via getPublishedTracks');
                             await lp.unpublishTrack(pub.track);
                         }
                     }
+                } catch (e2) {
+                    console.error('[MUTE] Fallback also failed:', e2);
                 }
-                console.log('[MUTE] Track unpublished successfully');
-            } catch (e) {
-                console.warn('[MUTE] Unpublish error:', e);
             }
         } else {
-            // UNMUTE: republish the microphone
+            // UNMUTE: Re-publish microphone
             console.log('[MUTE] Re-publishing microphone...');
-            try {
-                await this.publishMicrophone();
-                console.log('[MUTE] Microphone re-published successfully');
-            } catch (e) {
-                console.warn('[MUTE] Republish error:', e);
-            }
+            await this.publishMicrophone();
         }
         
         this._isMuted = muted;
