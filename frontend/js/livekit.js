@@ -468,34 +468,21 @@ class LiveKitClient {
             console.log('[MUTE] No original track stored yet');
         }
         
-        // Remove the early return check - we need to always process
-        // if (this._isMuted === muted) {
-        //     console.log('[MUTE] Already in requested state, skipping');
-        //     return;
-        // }
+        // Get the actual localParticipant from the room (sometimes it's more up to date)
+        const lp = this.localParticipant || (this.room ? this.room.localParticipant : null);
         
-        // Debug: Log the audio publications
-        if (this.localParticipant) {
-            console.log('[MUTE] localParticipant:', !!this.localParticipant);
-            console.log('[MUTE] audioPublications:', !!this.localParticipant.audioPublications);
-            if (this.localParticipant.audioPublications) {
-                console.log('[MUTE] Publications count:', this.localParticipant.audioPublications.length);
-                for (const pub of this.localParticipant.audioPublications) {
-                    console.log('[MUTE]   Pub:', pub.sid, 'track:', !!pub.track, 'kind:', pub.track?.kind);
-                }
-            }
-        }
+        // Debug: Log the audio publications from BOTH sources
+        console.log('[MUTE] this.localParticipant:', !!this.localParticipant);
+        console.log('[MUTE] this.room.localParticipant:', !!(this.room && this.room.localParticipant));
         
-        this._isMuted = muted;
+        const publications = lp ? lp.audioPublications : null;
+        console.log('[MUTE] publications from lp:', !!publications);
         
-        // Método definitivo: unpublish y republish del track
-        // Esto corta completamente el audio hacia el servidor
-        if (this.localParticipant && this.localParticipant.audioPublications && this.localParticipant.audioPublications.length > 0) {
-            const publications = [...this.localParticipant.audioPublications];
+        if (publications && publications.length > 0) {
             console.log('[MUTE] Found publications:', publications.length);
-            
             for (const pub of publications) {
-                // Check track.kind instead of pub.kind
+                console.log('[MUTE]   Pub:', pub.sid, 'track:', !!pub.track, 'kind:', pub.track?.kind);
+                
                 const trackKind = pub.track?.kind || pub.kind;
                 if (pub.track && trackKind === 'audio') {
                     console.log('[MUTE] Handling audio publication:', pub.sid);
@@ -507,7 +494,7 @@ class LiveKitClient {
                         this._originalAudioTrackSid = pub.sid;
                         
                         try {
-                            await this.localParticipant.unpublishTrack(pub.track);
+                            await lp.unpublishTrack(pub.track);
                             console.log('[MUTE] Track unpublished successfully');
                         } catch (e) {
                             console.warn('[MUTE] Unpublish failed:', e);
@@ -517,7 +504,7 @@ class LiveKitClient {
                         console.log('[MUTE] Republishing original track...');
                         if (this._originalAudioTrack) {
                             try {
-                                await this.localParticipant.publishTrack(this._originalAudioTrack, { simulcast: false });
+                                await lp.publishTrack(this._originalAudioTrack, { simulcast: false });
                                 console.log('[MUTE] Track republished successfully');
                             } catch (e) {
                                 console.warn('[MUTE] Republish failed:', e);
@@ -528,8 +515,19 @@ class LiveKitClient {
             }
         } else {
             console.warn('[MUTE] No audio publications found or localParticipant not ready!');
+            console.log('[MUTE] Trying alternate approach: use getTrackPublicationBySource');
+            
+            // Try alternate approach - get track by source
+            if (lp && lp.getTrackPublicationBySource) {
+                const audioPub = lp.getTrackPublicationBySource('microphone');
+                console.log('[MUTE] Audio publication by source:', !!audioPub);
+                if (audioPub) {
+                    console.log('[MUTE] Found audio pub, track:', !!audioPub.track);
+                }
+            }
         }
         
+        this._isMuted = muted;
         console.log('[MUTE] Microphone', muted ? 'muted' : 'unmuted', '- COMPLETE');
     }
     
