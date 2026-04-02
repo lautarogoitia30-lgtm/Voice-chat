@@ -400,10 +400,15 @@ class LiveKitClient {
                     // Prefer publishTrack if available
                     if (this.localParticipant.publishTrack) {
                         await this.localParticipant.publishTrack(processedTrack, { simulcast: false });
+                        // Store reference for mute/unmute
+                        this.localAudioTrack = processedTrack;
+                        console.log('[AUDIO] Track reference stored in this.localAudioTrack');
                     } else if (this.localParticipant.publishLocalTrack) {
                         await this.localParticipant.publishLocalTrack(processedTrack, { simulcast: false });
+                        this.localAudioTrack = processedTrack;
                     } else if (this.localParticipant.publishTracks) {
                         await this.localParticipant.publishTracks([processedTrack], { simulcast: false });
+                        this.localAudioTrack = processedTrack;
                     }
 
                     console.log('[AUDIO] Step 11: SUCCESS - Track published!');
@@ -457,73 +462,88 @@ class LiveKitClient {
     
     /**
      * Set muted state (mute/unmute microphone)
-     * Directly controls the audio track
+     * Uses stored localAudioTrack reference to avoid timing issues with audioPublications
      */
     async setMuted(muted) {
         console.log('[MUTE] Setting mute to:', muted, new Date().toISOString());
         console.log('[MUTE] Current _isMuted state:', this._isMuted);
         
-        // Guardamos referencia al track original para poder restaurarlo
-        if (!this._originalAudioTrack && !muted) {
-            console.log('[MUTE] No original track stored yet');
-        }
-        
-        // Get the actual localParticipant from the room (sometimes it's more up to date)
+        // Get the localParticipant (always from room for latest state)
         const lp = this.localParticipant || (this.room ? this.room.localParticipant : null);
         
-        // Debug: Log the audio publications from BOTH sources
-        console.log('[MUTE] this.localParticipant:', !!this.localParticipant);
-        console.log('[MUTE] this.room.localParticipant:', !!(this.room && this.room.localParticipant));
+        if (!lp) {
+            console.error('[MUTE] No localParticipant available!');
+            this._isMuted = muted;
+            return;
+        }
         
-        const publications = lp ? lp.audioPublications : null;
-        console.log('[MUTE] publications from lp:', !!publications);
+        console.log('[MUTE] localParticipant exists:', !!lp);
         
-        if (publications && publications.length > 0) {
-            console.log('[MUTE] Found publications:', publications.length);
-            for (const pub of publications) {
-                console.log('[MUTE]   Pub:', pub.sid, 'track:', !!pub.track, 'kind:', pub.track?.kind);
-                
-                const trackKind = pub.track?.kind || pub.kind;
-                if (pub.track && trackKind === 'audio') {
-                    console.log('[MUTE] Handling audio publication:', pub.sid);
+        // First, check if we have a stored localAudioTrack reference
+        if (this.localAudioTrack) {
+            console.log('[MUTE] Using stored localAudioTrack reference');
+            
+            if (muted) {
+                // MUTE: unpublish the track if not already unpublished
+                console.log('[MUTE] Unpublishing stored track...');
+                try {
+                    await lp.unpublishTrack(this.localAudioTrack);
+                    console.log('[MUTE] Track unpublished successfully');
+                } catch (e) {
+                    console.warn('[MUTE] Unpublish failed:', e);
+                }
+            } else {
+                // UNMUTE: republish the stored track
+                console.log('[MUTE] Republishing stored track...');
+                try {
+                    await lp.publishTrack(this.localAudioTrack, { simulcast: false });
+                    console.log('[MUTE] Track republished successfully');
+                } catch (e) {
+                    console.warn('[MUTE] Republish failed, re-acquiring microphone:', e);
+                    // Re-acquire microphone
+                    console.log('[MUTE] Calling publishMicrophone to re-acquire...');
+                    await this.publishMicrophone();
+                }
+            }
+        } else {
+            // Fallback: try to get from audioPublications (may fail due to timing)
+            console.log('[MUTE] No stored track, trying audioPublications...');
+            const publications = lp ? lp.audioPublications : null;
+            console.log('[MUTE] publications from lp:', !!publications);
+            
+            if (publications && publications.length > 0) {
+                console.log('[MUTE] Found publications:', publications.length);
+                for (const pub of publications) {
+                    console.log('[MUTE]   Pub:', pub.sid, 'track:', !!pub.track, 'kind:', pub.track?.kind);
                     
-                    if (muted) {
-                        // MUTE: guardar referencia y unpublish
-                        console.log('[MUTE] Storing track and unpublishing...');
-                        this._originalAudioTrack = pub.track;
-                        this._originalAudioTrackSid = pub.sid;
+                    const trackKind = pub.track?.kind || pub.kind;
+                    if (pub.track && trackKind === 'audio') {
+                        console.log('[MUTE] Handling audio publication:', pub.sid);
                         
-                        try {
-                            await lp.unpublishTrack(pub.track);
-                            console.log('[MUTE] Track unpublished successfully');
-                        } catch (e) {
-                            console.warn('[MUTE] Unpublish failed:', e);
-                        }
-                    } else {
-                        // UNMUTE: volver a publicar el track original
-                        console.log('[MUTE] Republishing original track...');
-                        if (this._originalAudioTrack) {
+                        // Store reference for future use
+                        this.localAudioTrack = pub.track;
+                        console.log('[MUTE] Stored track reference from publication');
+                        
+                        if (muted) {
                             try {
-                                await lp.publishTrack(this._originalAudioTrack, { simulcast: false });
+                                await lp.unpublishTrack(pub.track);
+                                console.log('[MUTE] Track unpublished successfully');
+                            } catch (e) {
+                                console.warn('[MUTE] Unpublish failed:', e);
+                            }
+                        } else {
+                            try {
+                                await lp.publishTrack(pub.track, { simulcast: false });
                                 console.log('[MUTE] Track republished successfully');
                             } catch (e) {
                                 console.warn('[MUTE] Republish failed:', e);
                             }
                         }
+                        break;
                     }
                 }
-            }
-        } else {
-            console.warn('[MUTE] No audio publications found or localParticipant not ready!');
-            console.log('[MUTE] Trying alternate approach: use getTrackPublicationBySource');
-            
-            // Try alternate approach - get track by source
-            if (lp && lp.getTrackPublicationBySource) {
-                const audioPub = lp.getTrackPublicationBySource('microphone');
-                console.log('[MUTE] Audio publication by source:', !!audioPub);
-                if (audioPub) {
-                    console.log('[MUTE] Found audio pub, track:', !!audioPub.track);
-                }
+            } else {
+                console.warn('[MUTE] No audio publications found and no stored track!');
             }
         }
         
