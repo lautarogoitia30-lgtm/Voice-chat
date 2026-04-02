@@ -48,6 +48,11 @@
         
         <!-- Servers Sidebar (Left) -->
         <div class="servers-sidebar">
+            <!-- Discord-style: DM button at top -->
+            <div class="server-icon dm-icon" title="Mensajes directos">
+                💬
+            </div>
+            <div class="separator"></div>
             <div class="server-icon" title="VoiceSpace">
                 <img src="https://raw.githubusercontent.com/lautarogoitia30-lgtm/Voice-chat/main/frontend/images/logo.svg" alt="VS" style="width: 100%; height: 100%; border-radius: 50%;" onerror="this.style.display='none'; this.parentElement.innerHTML='🎤'">
             </div>
@@ -66,6 +71,9 @@
         <!-- Channels Sidebar -->
         <div class="channels-sidebar">
             <div class="channels-header">
+                <div class="group-icon" id="group-icon">
+                    <img src="https://raw.githubusercontent.com/lautarogoitia30-lgtm/Voice-chat/main/frontend/images/logo.svg" alt="" onerror="this.style.display='none'; this.parentElement.innerHTML='🎤'">
+                </div>
                 <h2 id="selected-group-name">Selecciona un grupo</h2>
                 <div class="header-actions">
                     <button id="edit-group-btn" onclick="showEditGroupModal()" title="Editar">✏️</button>
