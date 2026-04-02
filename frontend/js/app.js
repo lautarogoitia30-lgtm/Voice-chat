@@ -443,7 +443,6 @@ async function selectGroup(group) {
     elements.textChat.classList.add('hidden');
     elements.voiceChat.classList.add('hidden');
     elements.voiceControls.classList.add('hidden');
-    renderGroups();
 }
 
 // Render channels
