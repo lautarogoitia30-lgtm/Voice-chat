@@ -1983,17 +1983,22 @@ async function loadProfileSettings() {
         
         const user = await response.json();
         
-        // Update UI
-        document.getElementById('settings-username').value = user.username || '';
-        document.getElementById('settings-avatar-url').value = user.avatar_url || '';
-        document.getElementById('settings-bio').value = user.bio || '';
-        document.getElementById('settings-username-display').textContent = user.username || 'Usuario';
+        // Update UI (with null checks for elements that may not exist)
+        const usernameEl = document.getElementById('settings-username');
+        const avatarUrlEl = document.getElementById('settings-avatar-url');
+        const bioEl = document.getElementById('settings-bio');
+        const usernameDisplayEl = document.getElementById('settings-username-display');
+        
+        if (usernameEl) usernameEl.value = user.username || '';
+        if (avatarUrlEl) avatarUrlEl.value = user.avatar_url || '';
+        if (bioEl) bioEl.value = user.bio || '';
+        if (usernameDisplayEl) usernameDisplayEl.textContent = user.username || 'Usuario';
         
         // Update avatar
         const avatarImg = document.getElementById('settings-avatar');
-        if (user.avatar_url) {
+        if (avatarImg && user.avatar_url) {
             avatarImg.src = user.avatar_url.startsWith('http') ? user.avatar_url : 'https://voice-chat-production-a794.up.railway.app' + user.avatar_url;
-        } else {
+        } else if (avatarImg) {
             // Default avatar with first letter
             avatarImg.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" fill="%234080d0"/><text x="50" y="65" text-anchor="middle" fill="white" font-size="40">' + (user.username?.charAt(0).toUpperCase() || 'U') + '</text></svg>';
         }
@@ -2006,9 +2011,9 @@ async function loadProfileSettings() {
 // Save profile settings
 async function saveProfileSettings() {
     try {
-        const username = document.getElementById('settings-username').value;
-        const avatar_url = document.getElementById('settings-avatar-url').value;
-        const bio = document.getElementById('settings-bio').value;
+        const username = document.getElementById('settings-username')?.value || '';
+        const avatar_url = document.getElementById('settings-avatar-url')?.value || '';
+        const bio = document.getElementById('settings-bio')?.value || '';
         
         const response = await fetch('https://voice-chat-production-a794.up.railway.app/users/me', {
             method: 'PUT',
@@ -2042,7 +2047,8 @@ async function saveProfileSettings() {
         }
         
         // Update UI
-        document.getElementById('settings-username-display').textContent = user.username;
+        const displayEl = document.getElementById('settings-username-display');
+        if (displayEl) displayEl.textContent = user.username;
         
         alert('Perfil guardado correctamente!');
         hideSettingsModal();
@@ -2057,7 +2063,7 @@ async function saveProfileSettings() {
 function handleAvatarUrlChange(url) {
     if (url) {
         const avatarImg = document.getElementById('settings-avatar');
-        avatarImg.src = url;
+        if (avatarImg) avatarImg.src = url;
     }
 }
 
@@ -2069,7 +2075,8 @@ async function handleAvatarUpload(input) {
     // Preview
     const reader = new FileReader();
     reader.onload = function(e) {
-        document.getElementById('settings-avatar').src = e.target.result;
+        const avatarImg = document.getElementById('settings-avatar');
+        if (avatarImg) avatarImg.src = e.target.result;
     };
     reader.readAsDataURL(file);
     
@@ -2097,7 +2104,8 @@ async function handleAvatarUpload(input) {
         
         // Update the input with the full URL
         const fullUrl = 'https://voice-chat-production-a794.up.railway.app' + data.avatar_url;
-        document.getElementById('settings-avatar-url').value = fullUrl;
+        const avatarUrlInput = document.getElementById('settings-avatar-url');
+        if (avatarUrlInput) avatarUrlInput.value = fullUrl;
         
         // Auto-save the profile
         await saveProfileSettings();
@@ -2200,13 +2208,13 @@ function handleOutputVolumeChange(value) {
 function saveAudioSettings() {
     console.log('[SETTINGS] Saving audio settings...');
     
-    // Get values from form
-    settingsState.inputDevice = document.getElementById('settings-input-device').value;
-    settingsState.outputDevice = document.getElementById('settings-output-device').value;
-    settingsState.inputVolume = document.getElementById('settings-input-volume').value;
-    settingsState.outputVolume = document.getElementById('settings-output-volume').value;
-    settingsState.noiseSuppression = document.getElementById('settings-noise-suppression').checked;
-    settingsState.echoCancellation = document.getElementById('settings-echo-cancellation').checked;
+    // Get values from form (with null safety)
+    settingsState.inputDevice = document.getElementById('settings-input-device')?.value || settingsState.inputDevice;
+    settingsState.outputDevice = document.getElementById('settings-output-device')?.value || settingsState.outputDevice;
+    settingsState.inputVolume = document.getElementById('settings-input-volume')?.value || settingsState.inputVolume;
+    settingsState.outputVolume = document.getElementById('settings-output-volume')?.value || settingsState.outputVolume;
+    settingsState.noiseSuppression = document.getElementById('settings-noise-suppression')?.checked ?? settingsState.noiseSuppression;
+    settingsState.echoCancellation = document.getElementById('settings-echo-cancellation')?.checked ?? settingsState.echoCancellation;
     
     console.log('[SETTINGS] Values from form:', settingsState);
     
@@ -2219,8 +2227,6 @@ function saveAudioSettings() {
     localStorage.setItem('voice_chat_echo_cancellation', String(settingsState.echoCancellation));
     
     console.log('[SETTINGS] Saved to localStorage');
-    console.log('[SETTINGS] Verify noiseSuppression:', localStorage.getItem('voice_chat_noise_suppression'));
-    console.log('[SETTINGS] Verify echoCancellation:', localStorage.getItem('voice_chat_echo_cancellation'));
     
     alert('Configuración de audio guardada');
 }
@@ -2267,12 +2273,16 @@ function loadAudioSettings() {
         if (outputSelect) outputSelect.value = outputDevice;
     }
     if (inputVolume) {
-        document.getElementById('settings-input-volume').value = inputVolume;
-        document.getElementById('input-volume-value').textContent = inputVolume;
+        const inputVolumeEl = document.getElementById('settings-input-volume');
+        const inputVolumeLabel = document.getElementById('input-volume-value');
+        if (inputVolumeEl) inputVolumeEl.value = inputVolume;
+        if (inputVolumeLabel) inputVolumeLabel.textContent = inputVolume;
     }
     if (outputVolume) {
-        document.getElementById('settings-output-volume').value = outputVolume;
-        document.getElementById('output-volume-value').textContent = outputVolume;
+        const outputVolumeEl = document.getElementById('settings-output-volume');
+        const outputVolumeLabel = document.getElementById('output-volume-value');
+        if (outputVolumeEl) outputVolumeEl.value = outputVolume;
+        if (outputVolumeLabel) outputVolumeLabel.textContent = outputVolume;
     }
     
     // Checkboxes - need proper default handling
@@ -2335,28 +2345,36 @@ async function startMicTest() {
             // Set volume
             testAudioElement.volume = settingsState.outputVolume / 100;
             
-            document.getElementById('mic-test-status').textContent = 'Reproduciendo...';
-            document.getElementById('mic-test-status').className = 'mic-test-status playing';
+            const statusEl = document.getElementById('mic-test-status');
+            if (statusEl) {
+                statusEl.textContent = 'Reproduciendo...';
+                statusEl.className = 'mic-test-status playing';
+            }
             
             testAudioElement.play();
             
             testAudioElement.onended = () => {
-                document.getElementById('mic-test-status').textContent = 'Test completado';
-                document.getElementById('mic-test-status').className = 'mic-test-status';
+                const statusEl2 = document.getElementById('mic-test-status');
+                if (statusEl2) {
+                    statusEl2.textContent = 'Test completado';
+                    statusEl2.className = 'mic-test-status';
+                }
                 stream.getTracks().forEach(track => track.stop());
             };
         };
         
         mediaRecorder.start();
         
-        document.getElementById('test-mic-btn').classList.add('hidden');
-        document.getElementById('stop-mic-btn').classList.remove('hidden');
-        document.getElementById('mic-test-status').textContent = 'Grabando... Haz clic en Detener cuandoTermines';
-        document.getElementById('mic-test-status').className = 'mic-test-status recording';
+        document.getElementById('test-mic-btn')?.classList.add('hidden');
+        document.getElementById('stop-mic-btn')?.classList.remove('hidden');
+        document.getElementById('mic-test-status')?.setAttribute('class', 'mic-test-status recording');
+        const micStatusEl = document.getElementById('mic-test-status');
+        if (micStatusEl) micStatusEl.textContent = 'Grabando... Haz clic en Detener cuando termines';
         
     } catch (error) {
         console.error('Error testing microphone:', error);
-        document.getElementById('mic-test-status').textContent = 'Error: ' + error.message;
+        const statusEl = document.getElementById('mic-test-status');
+        if (statusEl) statusEl.textContent = 'Error: ' + error.message;
     }
 }
 
@@ -2366,8 +2384,8 @@ function stopMicTest() {
         mediaRecorder.stop();
     }
     
-    document.getElementById('test-mic-btn').classList.remove('hidden');
-    document.getElementById('stop-mic-btn').classList.add('hidden');
+    document.getElementById('test-mic-btn')?.classList.remove('hidden');
+    document.getElementById('stop-mic-btn')?.classList.add('hidden');
 }
 
 // ==================== APPEARANCE SETTINGS ====================
@@ -2377,8 +2395,11 @@ function loadAppearanceSettings() {
     const theme = localStorage.getItem('voice_chat_theme') || 'dark';
     const fontSize = localStorage.getItem('voice_chat_font_size') || 'medium';
     
-    document.getElementById('settings-theme').value = theme;
-    document.getElementById('settings-font-size').value = fontSize;
+    const themeEl = document.getElementById('settings-theme');
+    const fontSizeEl = document.getElementById('settings-font-size');
+    
+    if (themeEl) themeEl.value = theme;
+    if (fontSizeEl) fontSizeEl.value = fontSize;
 }
 
 // Handle theme change
@@ -2411,22 +2432,26 @@ function loadPrivacySettings() {
     const msgRequests = localStorage.getItem('voice_chat_privacy_msg_requests');
     const fileSize = localStorage.getItem('voice_chat_privacy_file_size') || '10';
     
-    document.getElementById('settings-privacy-status').value = status;
-    document.getElementById('settings-privacy-voice-activity').checked = voiceActivity !== 'false';
-    document.getElementById('settings-privacy-read-receipts').checked = readReceipts !== 'false';
-    document.getElementById('settings-privacy-typing').checked = typing !== 'false';
-    document.getElementById('settings-privacy-msg-requests').checked = msgRequests !== 'false';
-    document.getElementById('settings-privacy-file-size').value = fileSize;
+    const el = (id) => document.getElementById(id);
+    
+    if (el('settings-privacy-status')) el('settings-privacy-status').value = status;
+    if (el('settings-privacy-voice-activity')) el('settings-privacy-voice-activity').checked = voiceActivity !== 'false';
+    if (el('settings-privacy-read-receipts')) el('settings-privacy-read-receipts').checked = readReceipts !== 'false';
+    if (el('settings-privacy-typing')) el('settings-privacy-typing').checked = typing !== 'false';
+    if (el('settings-privacy-msg-requests')) el('settings-privacy-msg-requests').checked = msgRequests !== 'false';
+    if (el('settings-privacy-file-size')) el('settings-privacy-file-size').value = fileSize;
 }
 
 // Save privacy settings
 function savePrivacySettings() {
-    const status = document.getElementById('settings-privacy-status').value;
-    const voiceActivity = document.getElementById('settings-privacy-voice-activity').checked;
-    const readReceipts = document.getElementById('settings-privacy-read-receipts').checked;
-    const typing = document.getElementById('settings-privacy-typing').checked;
-    const msgRequests = document.getElementById('settings-privacy-msg-requests').checked;
-    const fileSize = document.getElementById('settings-privacy-file-size').value;
+    const el = (id) => document.getElementById(id);
+    
+    const status = el('settings-privacy-status')?.value ?? localStorage.getItem('voice_chat_privacy_status') ?? 'everyone';
+    const voiceActivity = el('settings-privacy-voice-activity')?.checked ?? (localStorage.getItem('voice_chat_privacy_voice_activity') !== 'false');
+    const readReceipts = el('settings-privacy-read-receipts')?.checked ?? (localStorage.getItem('voice_chat_privacy_read_receipts') !== 'false');
+    const typing = el('settings-privacy-typing')?.checked ?? (localStorage.getItem('voice_chat_privacy_typing') !== 'false');
+    const msgRequests = el('settings-privacy-msg-requests')?.checked ?? (localStorage.getItem('voice_chat_privacy_msg_requests') !== 'false');
+    const fileSize = el('settings-privacy-file-size')?.value ?? localStorage.getItem('voice_chat_privacy_file_size') ?? '10';
     
     localStorage.setItem('voice_chat_privacy_status', status);
     localStorage.setItem('voice_chat_privacy_voice_activity', voiceActivity);
@@ -2462,8 +2487,8 @@ function shouldShowReadReceipts() {
 
 // Save appearance settings
 function saveAppearanceSettings() {
-    const theme = document.getElementById('settings-theme').value;
-    const fontSize = document.getElementById('settings-font-size').value;
+    const theme = document.getElementById('settings-theme')?.value || 'dark';
+    const fontSize = document.getElementById('settings-font-size')?.value || 'medium';
     
     handleThemeChange(theme);
     handleFontSizeChange(fontSize);
@@ -2480,10 +2505,11 @@ function loadNotificationSettings() {
     const mentions = localStorage.getItem('voice_chat_notification_mentions');
     const messages = localStorage.getItem('voice_chat_notification_messages');
     
-    document.getElementById('settings-notifications-enabled').checked = enabled !== 'false';
-    document.getElementById('settings-notification-sound').checked = sound !== 'false';
-    document.getElementById('settings-notification-mentions').checked = mentions !== 'false';
-    document.getElementById('settings-notification-messages').checked = messages === 'true';
+    const el = (id) => document.getElementById(id);
+    if (el('settings-notifications-enabled')) el('settings-notifications-enabled').checked = enabled !== 'false';
+    if (el('settings-notification-sound')) el('settings-notification-sound').checked = sound !== 'false';
+    if (el('settings-notification-mentions')) el('settings-notification-mentions').checked = mentions !== 'false';
+    if (el('settings-notification-messages')) el('settings-notification-messages').checked = messages === 'true';
     
     // Request notification permission if enabled
     if (enabled === 'true' && 'Notification' in window && Notification.permission === 'default') {
@@ -2493,10 +2519,11 @@ function loadNotificationSettings() {
 
 // Save notification settings
 function saveNotificationSettings() {
-    const enabled = document.getElementById('settings-notifications-enabled').checked;
-    const sound = document.getElementById('settings-notification-sound').checked;
-    const mentions = document.getElementById('settings-notification-mentions').checked;
-    const messages = document.getElementById('settings-notification-messages').checked;
+    const el = (id) => document.getElementById(id);
+    const enabled = el('settings-notifications-enabled')?.checked ?? (localStorage.getItem('voice_chat_notifications_enabled') !== 'false');
+    const sound = el('settings-notification-sound')?.checked ?? (localStorage.getItem('voice_chat_notification_sound') !== 'false');
+    const mentions = el('settings-notification-mentions')?.checked ?? (localStorage.getItem('voice_chat_notification_mentions') !== 'false');
+    const messages = el('settings-notification-messages')?.checked ?? (localStorage.getItem('voice_chat_notification_messages') === 'true');
     
     localStorage.setItem('voice_chat_notifications_enabled', enabled);
     localStorage.setItem('voice_chat_notification_sound', sound);
