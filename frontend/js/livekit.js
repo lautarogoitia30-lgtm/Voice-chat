@@ -221,6 +221,12 @@ class LiveKitClient {
         }
         
         try {
+            // CRITICAL: Wait for room to be FULLY ready before publishing
+            // LiveKit needs time for the engine to initialize after connection
+            console.log('[AUDIO] Waiting for room engine to be ready...');
+            await new Promise(resolve => setTimeout(resolve, 500));
+            console.log('[AUDIO] Room engine ready, room.state:', this.room.state);
+            
             // Get settings from localStorage
             const inputDevice = localStorage.getItem('voice_chat_input_device');
             const inputVolume = parseInt(localStorage.getItem('voice_chat_input_volume') || '30');
@@ -251,6 +257,7 @@ class LiveKitClient {
             
             console.log('[AUDIO] Getting mic with Chrome experimental NS...');
             const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            console.log('[AUDIO] Got microphone stream');
             
             // Apply volume reduction
             this.audioContext = new AudioContext();
@@ -265,8 +272,21 @@ class LiveKitClient {
             this.inputGainNode.connect(dest);
             
             const processedTrack = dest.stream.getAudioTracks()[0];
+            console.log('[AUDIO] About to publish track, localParticipant:', !!this.localParticipant);
             
-            await this.localParticipant.publishTrack(processedTrack);
+            // Try to publish with timeout handling
+            try {
+                await this.localParticipant.publishTrack(processedTrack, {
+                    simulcast: false,
+                });
+            } catch (publishError) {
+                // If first attempt fails, wait a bit and retry
+                console.warn('[AUDIO] First publish attempt failed, retrying...', publishError.message);
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                await this.localParticipant.publishTrack(processedTrack, {
+                    simulcast: false,
+                });
+            }
             
             console.log('[AUDIO] Mic published with Chrome experimental NS!');
             console.log('=== MICROPHONE READY ===');
