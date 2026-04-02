@@ -214,18 +214,20 @@ class LiveKitClient {
      */
     async publishMicrophone() {
         console.log('=== PUBLISH MICROPHONE ===');
+        console.log('[AUDIO] Step 1: Check room and localParticipant');
         
         if (!this.room || !this.localParticipant) {
             console.warn('No room connected, cannot publish microphone');
+            console.warn('[AUDIO] this.room:', !!this.room, 'this.localParticipant:', !!this.localParticipant);
             return;
         }
         
         try {
             // CRITICAL: Wait for room to be FULLY ready before publishing
             // LiveKit needs time for the engine to initialize after connection
-            console.log('[AUDIO] Waiting for room engine to be ready...');
+            console.log('[AUDIO] Step 2: Waiting for room engine to be ready...');
             await new Promise(resolve => setTimeout(resolve, 500));
-            console.log('[AUDIO] Room engine ready, room.state:', this.room.state);
+            console.log('[AUDIO] Step 3: Room engine ready, room.state:', this.room.state);
             
             // Get settings from localStorage
             const inputDevice = localStorage.getItem('voice_chat_input_device');
@@ -233,7 +235,7 @@ class LiveKitClient {
             const noiseSuppression = localStorage.getItem('voice_chat_noise_suppression') === 'true';
             const echoCancellation = localStorage.getItem('voice_chat_echo_cancellation') !== 'false';
             
-            console.log('[AUDIO] Volume:', inputVolume, 'NS:', noiseSuppression, 'EC:', echoCancellation);
+            console.log('[AUDIO] Step 4: Settings loaded - Volume:', inputVolume, 'NS:', noiseSuppression, 'EC:', echoCancellation);
             
             // Use Chrome's EXPERIMENTAL noise suppression settings
             const constraints = {
@@ -255,10 +257,20 @@ class LiveKitClient {
                 constraints.audio.deviceId = { exact: inputDevice };
             }
             
-            console.log('[AUDIO] Getting mic with Chrome experimental NS...');
-            const stream = await navigator.mediaDevices.getUserMedia(constraints);
-            console.log('[AUDIO] Got microphone stream');
+            console.log('[AUDIO] Step 5: About to call getUserMedia with constraints:', JSON.stringify(constraints));
+            console.log('[AUDIO] navigator.mediaDevices:', !!navigator.mediaDevices);
+            console.log('[AUDIO] navigator.mediaDevices.getUserMedia:', !!navigator.mediaDevices?.getUserMedia);
             
+            let stream;
+            try {
+                stream = await navigator.mediaDevices.getUserMedia(constraints);
+                console.log('[AUDIO] Step 6: SUCCESS! Got microphone stream:', stream);
+            } catch (gumError) {
+                console.error('[AUDIO] Step 6: ERROR - getUserMedia failed:', gumError.name, gumError.message);
+                throw gumError;
+            }
+            
+            console.log('[AUDIO] Step 7: Creating AudioContext');
             // Apply volume reduction
             this.audioContext = new AudioContext();
             const source = this.audioContext.createMediaStreamSource(stream);
@@ -272,26 +284,35 @@ class LiveKitClient {
             this.inputGainNode.connect(dest);
             
             const processedTrack = dest.stream.getAudioTracks()[0];
-            console.log('[AUDIO] About to publish track, localParticipant:', !!this.localParticipant);
+            console.log('[AUDIO] Step 8: Processed track ready:', !!processedTrack);
+            console.log('[AUDIO] Step 9: About to publish track, localParticipant:', !!this.localParticipant);
             
             // Try to publish with timeout handling
             try {
+                console.log('[AUDIO] Step 10: First publish attempt...');
                 await this.localParticipant.publishTrack(processedTrack, {
                     simulcast: false,
                 });
+                console.log('[AUDIO] Step 11: SUCCESS - Track published!');
             } catch (publishError) {
                 // If first attempt fails, wait a bit and retry
-                console.warn('[AUDIO] First publish attempt failed, retrying...', publishError.message);
+                console.warn('[AUDIO] Step 11: First publish attempt failed, retrying...', publishError.message);
+                console.warn('[AUDIO] Error details:', publishError);
                 await new Promise(resolve => setTimeout(resolve, 1000));
+                console.log('[AUDIO] Step 12: Retry publish attempt...');
                 await this.localParticipant.publishTrack(processedTrack, {
                     simulcast: false,
                 });
+                console.log('[AUDIO] Step 13: SUCCESS - Track published on retry!');
             }
             
             console.log('[AUDIO] Mic published with Chrome experimental NS!');
             console.log('=== MICROPHONE READY ===');
         } catch (error) {
             console.error('ERROR publishing microphone:', error);
+            console.error('[AUDIO] Error name:', error.name);
+            console.error('[AUDIO] Error message:', error.message);
+            console.error('[AUDIO] Error stack:', error.stack);
             alert('Error al acceder al micrófono: ' + error.message);
         }
     }
