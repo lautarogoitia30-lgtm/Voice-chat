@@ -21,14 +21,33 @@ class LiveKitClient {
      */
     async connect(url, token) {
         try {
-            // Disconnect from previous room if any
-            if (this.room && this.isConnected()) {
-                console.log('[LIVEKIT] Disconnecting from previous room...');
-                await this.disconnect();
-                // Wait a bit for disconnect to complete
-                await new Promise(resolve => setTimeout(resolve, 500));
+            // FIRST: Always ensure clean disconnect from ANY previous room
+            // This prevents the "Client initiated disconnect" error on reconnect
+            console.log('[LIVEKIT] PRE-CONNECT CLEANUP: room exists?', !!this.room);
+            if (this.room) {
+                console.log('[LIVEKIT] PRE-CONNECT: Previous room state:', this.room.state);
+                try {
+                    // Try to disconnect gracefully but don't wait too long
+                    const disconnectPromise = this.room.disconnect();
+                    await Promise.race([
+                        disconnectPromise,
+                        new Promise(resolve => setTimeout(resolve, 1000))
+                    ]);
+                    console.log('[LIVEKIT] PRE-CONNECT: Graceful disconnect completed');
+                } catch (e) {
+                    console.log('[LIVEKIT] PRE-CONNECT: Graceful disconnect failed, force cleaning:', e.message);
+                }
+                // Force null out the room object
+                this.room = null;
+                this.localParticipant = null;
+                this.knownParticipants = [];
+                this.audioElements = [];
             }
             
+            // Small delay to let resources clear
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+            console.log('[LIVEKIT] PRE-CONNECT CLEANUP COMPLETE - room is:', this.room);
             console.log('Connecting to LiveKit room at:', url);
             
             // Import LiveKit client library
