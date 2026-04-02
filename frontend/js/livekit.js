@@ -267,9 +267,35 @@ class LiveKitClient {
         console.log('=== PUBLISH MICROPHONE ===');
         console.log('[AUDIO] Step 1: Check room and localParticipant');
         
-        if (!this.room || !this.localParticipant) {
-            console.warn('No room connected, cannot publish microphone');
-            console.warn('[AUDIO] this.room:', !!this.room, 'this.localParticipant:', !!this.localParticipant);
+        // Ensure room is connected and localParticipant exists. Wait a short time for the client to populate
+        if (!this.room) {
+            console.warn('No room object, cannot publish microphone yet');
+            return;
+        }
+
+        if (this.room.state !== 'connected') {
+            console.warn('[AUDIO] Room state is not connected yet:', this.room.state);
+            // don't try to publish until connected
+            return;
+        }
+
+        // Attempt to ensure localParticipant is populated (race from connect)
+        if (!this.localParticipant) {
+            console.log('[AUDIO] localParticipant null - attempting to read from room.localParticipant and waiting up to 2s');
+            // try immediate assignment
+            this.localParticipant = this.room.localParticipant || null;
+            const start = Date.now();
+            while (!this.localParticipant && Date.now() - start < 2000) {
+                // wait 100ms
+                // eslint-disable-next-line no-await-in-loop
+                await new Promise(r => setTimeout(r, 100));
+                this.localParticipant = this.room.localParticipant || null;
+            }
+        }
+
+        if (!this.localParticipant) {
+            console.error('[AUDIO] localParticipant still null after wait - aborting publish');
+            alert('Error al acceder al micrófono: localParticipant no está disponible. Reintentá unir de nuevo.');
             return;
         }
         
@@ -339,23 +365,42 @@ class LiveKitClient {
             console.log('[AUDIO] Step 9: About to publish track, localParticipant:', !!this.localParticipant);
             
             // Try to publish with timeout handling
-            try {
-                console.log('[AUDIO] Step 10: First publish attempt...');
-                await this.localParticipant.publishTrack(processedTrack, {
-                    simulcast: false,
-                });
-                console.log('[AUDIO] Step 11: SUCCESS - Track published!');
-            } catch (publishError) {
-                // If first attempt fails, wait a bit and retry
-                console.warn('[AUDIO] Step 11: First publish attempt failed, retrying...', publishError.message);
-                console.warn('[AUDIO] Error details:', publishError);
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                console.log('[AUDIO] Step 12: Retry publish attempt...');
-                await this.localParticipant.publishTrack(processedTrack, {
-                    simulcast: false,
-                });
-                console.log('[AUDIO] Step 13: SUCCESS - Track published on retry!');
-            }
+                try {
+                    console.log('[AUDIO] Step 10: First publish attempt...');
+                    // publishTrack can be undefined if participant is not ready; guard again
+                    if (!this.localParticipant.publishTrack && !this.localParticipant.publishLocalTrack && !this.localParticipant.publishTracks) {
+                        throw new Error('localParticipant.publishTrack unavailable');
+                    }
+
+                    // Prefer publishTrack if available
+                    if (this.localParticipant.publishTrack) {
+                        await this.localParticipant.publishTrack(processedTrack, { simulcast: false });
+                    } else if (this.localParticipant.publishLocalTrack) {
+                        await this.localParticipant.publishLocalTrack(processedTrack, { simulcast: false });
+                    } else if (this.localParticipant.publishTracks) {
+                        await this.localParticipant.publishTracks([processedTrack], { simulcast: false });
+                    }
+
+                    console.log('[AUDIO] Step 11: SUCCESS - Track published!');
+                } catch (publishError) {
+                    // If first attempt fails, wait a bit and retry once
+                    console.warn('[AUDIO] Step 11: First publish attempt failed, retrying...', publishError?.message || publishError);
+                    console.warn('[AUDIO] Error details:', publishError);
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+
+                    // Try again but verify methods exist
+                    if (this.localParticipant.publishTrack) {
+                        await this.localParticipant.publishTrack(processedTrack, { simulcast: false });
+                    } else if (this.localParticipant.publishLocalTrack) {
+                        await this.localParticipant.publishLocalTrack(processedTrack, { simulcast: false });
+                    } else if (this.localParticipant.publishTracks) {
+                        await this.localParticipant.publishTracks([processedTrack], { simulcast: false });
+                    } else {
+                        throw new Error('No publish method available on localParticipant');
+                    }
+
+                    console.log('[AUDIO] Step 13: SUCCESS - Track published on retry!');
+                }
             
             console.log('[AUDIO] Mic published with Chrome experimental NS!');
             console.log('=== MICROPHONE READY ===');
