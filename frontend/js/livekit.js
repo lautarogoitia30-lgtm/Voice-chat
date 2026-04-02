@@ -158,18 +158,40 @@ class LiveKitClient {
                         console.log('[LIVEKIT] Attaching audio track from:', participant.name || participant.identity);
                         try {
                             const audioElement = track.attach();
+                            // Prefer placing audio elements inside a dedicated container so the DOM is tidy
+                            let container = document.getElementById('voice-container');
+                            if (!container) {
+                                // Create a hidden, non-interactive container as a fallback
+                                container = document.createElement('div');
+                                container.id = 'voice-container';
+                                // Keep it out of layout and user interaction; developers can style as needed
+                                container.style.position = 'fixed';
+                                container.style.width = '1px';
+                                container.style.height = '1px';
+                                container.style.overflow = 'hidden';
+                                container.style.pointerEvents = 'none';
+                                container.style.bottom = '0';
+                                container.style.right = '0';
+                                document.body.appendChild(container);
+                                console.log('[LIVEKIT] Created fallback #voice-container');
+                            }
+
+                            // Ensure sensible playback attributes
                             audioElement.autoplay = true;
+                            audioElement.playsInline = true;
+                            audioElement.muted = false;
                             audioElement.volume = 1.0;
-                            document.body.appendChild(audioElement);
-                            
+
+                            container.appendChild(audioElement);
+
                             // Store reference to control later
                             this.audioElements.push({
                                 element: audioElement,
                                 participantId: participant.identity,
                                 track: track
                             });
-                            
-                            console.log('[LIVEKIT] Audio attached and playing, total:', this.audioElements.length);
+
+                            console.log('[LIVEKIT] Audio attached into #voice-container, total:', this.audioElements.length);
                         } catch(e) {
                             console.log('[LIVEKIT] Error attaching audio:', e);
                         }
