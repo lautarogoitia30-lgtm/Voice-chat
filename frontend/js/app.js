@@ -1876,6 +1876,9 @@ function showSettingsModal() {
     const modal = document.getElementById('settings-modal');
     modal.classList.remove('hidden');
     
+    // Always start on profile tab
+    switchSettingsTab('profile');
+    
     // Load user profile data
     loadProfileSettings();
     
@@ -1944,19 +1947,25 @@ function handleLogout() {
 
 // Switch Settings Tabs
 function switchSettingsTab(tabName) {
-    // Update nav items
-    document.querySelectorAll('.settings-nav-item').forEach(item => {
-        item.classList.remove('active');
-        if (item.dataset.tab === tabName) {
-            item.classList.add('active');
+    // Update tab buttons (highlight active)
+    document.querySelectorAll('.settings-tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    // Find the clicked button by matching tab name in onclick
+    document.querySelectorAll('.settings-tab-btn').forEach(btn => {
+        if (btn.getAttribute('onclick')?.includes("'" + tabName + "'")) {
+            btn.classList.add('active');
         }
     });
     
-    // Update tab content
+    // Hide all tabs, show selected
     document.querySelectorAll('.settings-tab').forEach(tab => {
-        tab.classList.remove('active');
+        tab.classList.add('hidden');
     });
-    document.getElementById('settings-tab-' + tabName).classList.add('active');
+    const activeTab = document.getElementById('settings-tab-' + tabName);
+    if (activeTab) {
+        activeTab.classList.remove('hidden');
+    }
 }
 
 // ==================== PROFILE SETTINGS ====================
