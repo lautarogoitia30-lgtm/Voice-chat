@@ -40,6 +40,7 @@ console.log('Initial state:', state);
 // DOM Elements - use function to get them when DOM is ready
 function getElements() {
     return {
+        // Auth view
         authView: document.getElementById('auth-view'),
         appView: document.getElementById('app-view'),
         loginTab: document.getElementById('login-tab'),
@@ -53,30 +54,61 @@ function getElements() {
         registerUsername: document.getElementById('register-username'),
         registerEmail: document.getElementById('register-email'),
         registerPassword: document.getElementById('register-password'),
-        groupsList: document.getElementById('groups-list'),
-        createGroupBtn: document.getElementById('create-group-btn'),
-        selectedGroupName: document.getElementById('selected-group-name'),
+        
+        // Sidebars
+        serversList: document.getElementById('servers-list'),
+        currentServerName: document.getElementById('current-server-name'),
         channelsList: document.getElementById('channels-list'),
+        
+        // Buttons
+        createGroupBtn: document.getElementById('create-group-btn'),
         createChannelBtn: document.getElementById('create-channel-btn'),
+        inviteUserBtn: document.getElementById('invite-user-btn'),
+        editServerBtn: document.getElementById('edit-server-btn'),
+        
+        // Main content
         selectedChannelName: document.getElementById('selected-channel-name'),
         textChat: document.getElementById('text-chat'),
         voiceChat: document.getElementById('voice-chat'),
         messagesList: document.getElementById('messages-list'),
-        messageForm: document.getElementById('message-form'),
         messageInput: document.getElementById('message-input'),
-        voiceControls: document.getElementById('voice-controls'),
+        voiceContainer: document.getElementById('voice-container'),
+        emptyState: document.getElementById('empty-state'),
+        
+        // Bottom controls
+        userDisplayName: document.getElementById('user-display-name'),
+        userAvatar: document.getElementById('user-avatar'),
+        userInitial: document.getElementById('user-initial'),
+        muteMicBtn: document.getElementById('mute-mic-btn'),
+        muteAudioBtn: document.getElementById('mute-audio-btn'),
         joinVoiceBtn: document.getElementById('join-voice-btn'),
         leaveVoiceBtn: document.getElementById('leave-voice-btn'),
-        participantsList: document.getElementById('participants-list'),
+        
+        // Members section
+        membersSection: document.getElementById('members-section'),
+        membersList: document.getElementById('members-list'),
+        
+        // Modals
         createGroupModal: document.getElementById('create-group-modal'),
         createGroupForm: document.getElementById('create-group-form'),
         groupNameInput: document.getElementById('group-name-input'),
-        cancelCreateGroup: document.getElementById('cancel-create-group'),
+        editGroupModal: document.getElementById('edit-group-modal'),
+        editGroupForm: document.getElementById('edit-group-form'),
+        editGroupId: document.getElementById('edit-group-id'),
+        editGroupName: document.getElementById('edit-group-name'),
         createChannelModal: document.getElementById('create-channel-modal'),
         createChannelForm: document.getElementById('create-channel-form'),
+        channelGroupId: document.getElementById('channel-group-id'),
         channelNameInput: document.getElementById('channel-name-input'),
         channelTypeInput: document.getElementById('channel-type-input'),
-        cancelCreateChannel: document.getElementById('cancel-create-channel'),
+        editChannelModal: document.getElementById('edit-channel-modal'),
+        editChannelForm: document.getElementById('edit-channel-form'),
+        editChannelId: document.getElementById('edit-channel-id'),
+        editChannelName: document.getElementById('edit-channel-name'),
+        inviteUserModal: document.getElementById('invite-user-modal'),
+        inviteUserForm: document.getElementById('invite-user-form'),
+        inviteUsernameInput: document.getElementById('invite-username-input'),
+        settingsModal: document.getElementById('settings-modal'),
     };
 }
 
@@ -174,6 +206,7 @@ function showAppView() {
     const elements = getElements();
     elements.authView.classList.add('hidden');
     elements.appView.classList.remove('hidden');
+    updateUserDisplay();
     loadGroups();
     
     // Auto-refresh groups every 30 seconds to detect new invites
@@ -182,6 +215,22 @@ function showAppView() {
             loadGroups();
         }
     }, 30000);
+}
+
+// Update user display in bottom control bar
+function updateUserDisplay() {
+    if (!state.currentUser) return;
+    
+    const elements = getElements();
+    const username = state.currentUser.username || 'Usuario';
+    const initial = username.charAt(0).toUpperCase();
+    
+    if (elements.userDisplayName) {
+        elements.userDisplayName.textContent = username;
+    }
+    if (elements.userInitial) {
+        elements.userInitial.textContent = initial;
+    }
 }
 
 // GLOBAL FUNCTIONS FOR ONCLICK
@@ -315,40 +364,34 @@ async function loadGroups() {
 }
 
 // Render groups - update server icon
+// Render groups as server buttons in left sidebar
 function renderGroups() {
-    const serverIcon = document.querySelector('.server-icon');
-    const groupsList = document.getElementById('groups-list');
+    const serversList = document.getElementById('servers-list');
     
-    // Render groups list
-    if (groupsList) {
-        groupsList.innerHTML = '';
-        state.groups.forEach(group => {
-            const div = document.createElement('div');
-            div.className = 'channel-item' + (state.selectedGroup?.id === group.id ? ' active' : '');
-            div.innerHTML = '<span class="channel-icon">📁</span><span class="channel-name">' + group.name + '</span>';
-            div.onclick = () => selectGroup(group);
-            groupsList.appendChild(div);
-        });
-    }
+    if (!serversList) return;
     
+    serversList.innerHTML = '';
+    
+    // Render each group as a button in the servers sidebar
+    state.groups.forEach(group => {
+        const btn = document.createElement('button');
+        btn.className = 'server-btn' + (state.selectedGroup?.id === group.id ? ' active' : '');
+        btn.type = 'button';
+        btn.title = group.name;
+        
+        // Get initial of group name
+        const initial = group.name.charAt(0).toUpperCase();
+        btn.textContent = initial;
+        
+        btn.onclick = () => selectGroup(group);
+        serversList.appendChild(btn);
+    });
+    
+    // Auto-select first group if none selected
     if (state.groups.length > 0) {
-        // Always select the first group when loading
         if (!state.selectedGroup || !state.groups.find(g => g.id === state.selectedGroup.id)) {
             console.log('Selecting first group:', state.groups[0]);
             selectGroup(state.groups[0]);
-        }
-        
-        // Update server icon if exists
-        if (serverIcon) {
-            // Get initial of first group
-            const initial = state.selectedGroup?.name?.charAt(0).toUpperCase() || 'V';
-            serverIcon.innerHTML = initial;
-            serverIcon.title = state.selectedGroup?.name || 'Voice-Chat';
-        }
-    } else {
-        if (serverIcon) {
-            serverIcon.innerHTML = '💬';
-            serverIcon.title = 'Sin grupos';
         }
     }
 }
@@ -404,23 +447,28 @@ function renderMembers(members) {
 
 // Select group
 async function selectGroup(group) {
+    console.log('selectGroup called with:', group);
     state.selectedGroup = group;
     state.selectedChannel = null;
     const elements = getElements();
-    elements.selectedGroupName.textContent = group.name;
+    console.log('currentServerName element:', elements.currentServerName);
+    console.log('Setting currentServerName to:', group.name);
+    if (elements.currentServerName) {
+        elements.currentServerName.textContent = group.name;
+        console.log('After setting, textContent is:', elements.currentServerName.textContent);
+    } else {
+        console.error('currentServerName element not found!');
+    }
     elements.createChannelBtn.classList.remove('hidden');
+    elements.editServerBtn.classList.remove('hidden');
     
-    // Show invite button if user is owner (we'll check via API later)
-    const inviteBtn = document.getElementById('invite-user-btn');
-    if (inviteBtn) {
-        inviteBtn.classList.remove('hidden');
+    // Show invite button
+    if (elements.inviteUserBtn) {
+        elements.inviteUserBtn.classList.remove('hidden');
     }
     
     // Load members for this group
     console.log('Loading members for group:', group.id);
-    console.log('API:', API);
-    console.log('API.groups:', API?.groups);
-    console.log('getMembers:', API?.groups?.getMembers);
     try {
         if (API?.groups?.getMembers) {
             const members = await API.groups.getMembers(group.id);
@@ -442,8 +490,7 @@ async function selectGroup(group) {
     elements.selectedChannelName.textContent = 'Selecciona un canal';
     elements.textChat.classList.add('hidden');
     elements.voiceChat.classList.add('hidden');
-    elements.voiceControls.classList.add('hidden');
-    renderGroups();
+    elements.emptyState.classList.remove('hidden');
 }
 
 // Render channels
@@ -513,12 +560,12 @@ async function selectChannel(channel) {
     if (channel.type === 'text') {
         elements.textChat.classList.remove('hidden');
         elements.voiceChat.classList.add('hidden');
-        elements.voiceControls.classList.add('hidden');
+        elements.emptyState.classList.add('hidden');
         window.wsClient.connect(channel.id);
     } else {
         elements.textChat.classList.add('hidden');
         elements.voiceChat.classList.remove('hidden');
-        elements.voiceControls.classList.remove('hidden');
+        elements.emptyState.classList.add('hidden');
         elements.joinVoiceBtn.classList.remove('hidden');
         elements.leaveVoiceBtn.classList.add('hidden');
         
@@ -552,14 +599,39 @@ async function handleCreateGroup(e) {
 }
 
 // Invite user to group
-async function handleInviteUser() {
+// Show invite user modal
+function showInviteUserModal() {
     if (!state.selectedGroup) {
         alert('Selecciona un grupo primero');
         return;
     }
     
-    const username = prompt('Ingresa el nombre de usuario a invitar:');
-    if (!username) return;
+    const modal = document.getElementById('invite-user-modal');
+    document.getElementById('invite-username-input').value = '';
+    modal.classList.remove('hidden');
+    document.getElementById('invite-username-input').focus();
+}
+
+// Hide invite user modal
+function hideInviteUserModal() {
+    const modal = document.getElementById('invite-user-modal');
+    modal.classList.add('hidden');
+}
+
+// Handle invite user form submission
+async function handleInviteUserSubmit(e) {
+    e.preventDefault();
+    
+    if (!state.selectedGroup) {
+        alert('Selecciona un grupo primero');
+        return;
+    }
+    
+    const username = document.getElementById('invite-username-input').value.trim();
+    if (!username) {
+        alert('Por favor ingresa un nombre de usuario');
+        return;
+    }
     
     try {
         // DEBUG: Log what's being sent
@@ -587,9 +659,21 @@ async function handleInviteUser() {
         const result = await response.json();
         console.log('[INVITE] Success:', result);
         alert('Usuario convidado! La otra cuenta debe hacer click en 🔄 para ver los canales.');
+        hideInviteUserModal();
     } catch (error) {
         alert('Error al convidar: ' + error.message);
     }
+}
+
+// OLD FUNCTION (deprecated, keeping for reference)
+async function handleInviteUser() {
+    if (!state.selectedGroup) {
+        alert('Selecciona un grupo primero');
+        return;
+    }
+    
+    // Now use the modal instead of prompt
+    showInviteUserModal();
 }
 
 // Channel operations
@@ -1156,6 +1240,15 @@ function handleToggleMute() {
     
     updateVoiceControlsUI();
 }
+
+// Alias for button onclick handlers
+window.toggleMuteMic = handleToggleMute;
+window.toggleMuteAudio = function() {
+    console.log('toggleMuteAudio called');
+    // TODO: Implement deafen/unmute speakers
+};
+window.joinVoiceChannel = handleJoinVoice;
+window.leaveVoiceChannel = handleLeaveVoice;
 
 // Toggle deafen (mute speakers)
 function handleToggleDeaf() {
@@ -2476,3 +2569,10 @@ function initAppearance() {
 
 // Call init appearance on load
 initAppearance();
+
+// Initialize the app when DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+} else {
+    init();
+}

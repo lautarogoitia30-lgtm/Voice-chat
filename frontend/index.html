@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VoiceSpace</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link rel="stylesheet" href="css/styles.css?v=5">
+    <link rel="stylesheet" href="css/styles.css?v=11">
 </head>
 <body class="h-screen overflow-hidden">
     
@@ -13,9 +13,9 @@
     <div id="auth-view" class="auth-view">
         <div class="auth-card">
             <h1 style="text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px;">
-        <img src="https://raw.githubusercontent.com/lautarogoitia30-lgtm/Voice-chat/main/frontend/images/logo.svg" alt="VoiceSpace" style="height: 70px;" onerror="this.style.display='none'">
-        <span>VoiceSpace</span>
-    </h1>
+                <img src="https://raw.githubusercontent.com/lautarogoitia30-lgtm/Voice-chat/main/frontend/images/logo.svg" alt="VoiceSpace" style="height: 70px;" onerror="this.style.display='none'">
+                <span>VoiceSpace</span>
+            </h1>
             
             <div class="auth-tabs">
                 <button id="login-tab" class="auth-tab active" onclick="showLoginForm()">
@@ -44,68 +44,74 @@
     </div>
     
     <!-- Main App View -->
-    <div id="app-view" class="h-full flex hidden">
+    <div id="app-view" class="app-container hidden">
+        <div class="app-content">
         
-        <!-- Servers Sidebar (Left) -->
+        <!-- LEFT SIDEBAR: Servers/Groups -->
         <div class="servers-sidebar">
-            <!-- Discord-style: DM button at top -->
-            <button class="server-icon dm-icon" title="Mensajes directos" type="button">
+            <!-- DM Button at top -->
+            <button class="server-btn dm-btn" title="Mensajes directos" type="button">
                 💬
             </button>
             <div class="separator"></div>
-            <button class="server-icon" title="VoiceSpace" type="button">
-                <img src="https://raw.githubusercontent.com/lautarogoitia30-lgtm/Voice-chat/main/frontend/images/logo.svg" alt="VS" style="width: 100%; height: 100%; border-radius: 50%;" onerror="this.style.display='none'; this.parentElement.innerHTML='🎤'">
-            </button>
+            
+            <!-- Groups list (will be populated by JS) -->
+            <div id="servers-list" class="servers-list">
+                <!-- Server buttons will be inserted here -->
+            </div>
+            
+            <!-- Spacer to push bottom buttons down -->
             <div style="flex: 1;"></div>
-            <button class="server-icon" onclick="loadGroups()" title="Actualizar" type="button">
+            
+            <!-- Bottom action buttons -->
+            <button class="server-btn" onclick="loadGroups()" title="Actualizar" type="button">
                 🔄
             </button>
-            <button id="create-group-btn" class="server-icon" onclick="showCreateGroupModal()" title="Crear Grupo" type="button">
+            <button class="server-btn" onclick="showCreateGroupModal()" title="Crear Grupo" type="button">
                 ➕
             </button>
-            <button class="server-icon" onclick="showSettingsModal()" title="Configuración" type="button">
+            <button class="server-btn" onclick="showSettingsModal()" title="Configuración" type="button">
                 ⚙️
             </button>
         </div>
         
-        <!-- Channels Sidebar -->
+        <!-- MIDDLE SIDEBAR: Channels -->
         <div class="channels-sidebar">
+            <!-- Server header -->
             <div class="channels-header">
-                <div class="group-icon" id="group-icon">
-                    <img src="https://raw.githubusercontent.com/lautarogoitia30-lgtm/Voice-chat/main/frontend/images/logo.svg" alt="" onerror="this.style.display='none'; this.parentElement.innerHTML='🎤'">
+                <div class="server-name-display">
+                    <span id="current-server-name">Selecciona un servidor</span>
                 </div>
-                <h2 id="selected-group-name">Selecciona un grupo</h2>
-                <div class="header-actions">
-                    <button id="edit-group-btn" onclick="showEditGroupModal()" title="Editar">✏️</button>
-                </div>
+                <button id="edit-server-btn" class="header-btn hidden" onclick="showEditGroupModal()" title="Editar">✏️</button>
             </div>
-            <!-- Groups List -->
-            <div id="groups-list" class="channels-list" style="max-height: 150px; overflow-y: auto; border-bottom: 1px solid var(--border);">
-                <!-- Groups will be inserted here -->
-            </div>
-            <div class="channels-list" id="channels-list">
+            
+            <!-- Channels list -->
+            <div id="channels-list" class="channels-list">
                 <!-- Channels will be inserted here -->
             </div>
-            <div style="padding: 12px; border-top: 1px solid var(--border);">
+            
+            <!-- Create channel button -->
+            <div class="channels-actions">
                 <button id="create-channel-btn" class="btn btn-secondary w-full hidden" onclick="showCreateChannelModal()">
                     ➕ Nuevo Canal
                 </button>
-                <button id="invite-user-btn" class="btn btn-primary w-full hidden" style="margin-top: 8px;" onclick="handleInviteUser()">
+                <button id="invite-user-btn" class="btn btn-primary w-full hidden" onclick="showInviteUserModal()">
                     👥 Invitar Usuario
                 </button>
             </div>
-            <!-- Members section at bottom of channels -->
-            <div id="members-section" class="hidden" style="border-top: 1px solid var(--border); padding: 12px;">
+            
+            <!-- Voice participants section -->
+            <div id="members-section" class="hidden members-section">
                 <div class="members-header">
-                    <h3>👥 Miembros</h3>
+                    <h3>👥 Miembros en Voz</h3>
                 </div>
-                <div id="members-list" class="members-list" style="max-height: 200px; overflow-y: auto;">
+                <div id="members-list" class="members-list">
                     <!-- Members will be inserted here -->
                 </div>
             </div>
         </div>
         
-        <!-- Main Content Area -->
+        <!-- MAIN AREA: Chat or Voice Participants -->
         <div class="main-content">
             <!-- Channel Header -->
             <div class="content-header">
@@ -118,61 +124,57 @@
                 <div class="messages-container" id="messages-list">
                     <!-- Messages will be inserted here -->
                 </div>
-                <div class="message-input-container">
-                    <form id="message-form">
-                        <div class="message-input-wrapper">
-                            <input type="text" id="message-input" class="message-input" placeholder="Escribe un mensaje...">
-                            <button type="submit" class="btn btn-primary">Enviar</button>
-                            <label class="btn btn-secondary file-upload-btn" title="Subir archivo">
-                                📎
-                                <input type="file" id="file-upload-input" style="display: none;" onchange="handleFileUpload(this)">
-                            </label>
-                        </div>
-                    </form>
+                <div class="message-input-area">
+                    <input type="text" id="message-input" placeholder="Escribe un mensaje..." class="message-input">
+                    <button type="button" class="btn-send" onclick="sendMessage()">📤</button>
                 </div>
             </div>
             
             <!-- Voice Chat Area -->
-            <div id="voice-chat" class="flex-1 flex flex-col hidden">
-                <div class="chat-area flex-1 overflow-y-auto" id="participants-list">
-                    <div class="text-gray-400 text-center p-4">Conectado al canal de voz</div>
+            <div id="voice-chat" class="voice-chat hidden">
+                <div id="voice-container" class="voice-participants">
+                    <!-- Voice participants will be inserted here -->
                 </div>
             </div>
             
-            <!-- Voice Notifications -->
-            <div id="voice-notifications" class="voice-notifications"></div>
-            
-            <!-- Voice Controls Bar (Bottom) -->
-            <div id="voice-controls" class="voice-controls-bar hidden">
-                <div class="voice-controls-left">
-                    <div class="voice-channel-info">
-                        <span class="voice-channel-icon">🎤</span>
-                        <span class="voice-channel-name" id="voice-channel-name">Canal de Voz</span>
-                    </div>
-                    <div class="voice-participants-preview" id="voice-participants-preview">
-                        <!-- Participant avatars will be inserted here -->
-                    </div>
-                </div>
-                <div class="voice-controls-buttons">
-                    <button id="mute-mic-btn" class="voice-btn" title="Silenciar micrófono">
-                        🎤
-                    </button>
-                    <button id="deaf-btn" class="voice-btn" title="Silenciar sonido">
-                        🔊
-                    </button>
-                    <button id="join-voice-btn" class="voice-btn" title="Unirse al canal">
-                        📞
-                    </button>
-                    <button id="leave-voice-btn" class="voice-btn leave hidden">
-                        📵 Salir
-                    </button>
+            <!-- Empty state -->
+            <div id="empty-state" class="empty-state">
+                <div class="empty-state-content">
+                    <p>👈 Selecciona un servidor para comenzar</p>
                 </div>
             </div>
         </div>
+        </div>
         
-        <!-- Members Sidebar (Right) - Optional for future -->
-        <!-- <div class="members-sidebar"> ... </div> -->
+        <!-- BOTTOM BAR: Voice Controls -->
+        <div class="voice-controls-bar">
+            <!-- User info -->
+            <div class="user-info">
+                <div class="user-avatar" id="user-avatar">
+                    <span id="user-initial">?</span>
+                </div>
+                <span id="user-display-name" class="user-name">Usuario</span>
+            </div>
+            
+            <!-- Voice control buttons -->
+            <div class="voice-buttons">
+                <button class="control-btn" id="mute-mic-btn" title="Silenciar micrófono" onclick="toggleMuteMic()">
+                    🎤
+                </button>
+                <button class="control-btn" id="mute-audio-btn" title="Silenciar audio" onclick="toggleMuteAudio()">
+                    🔊
+                </button>
+                <button class="control-btn hidden" id="join-voice-btn" title="Unirse a voz" onclick="joinVoiceChannel()">
+                    📞
+                </button>
+                <button class="control-btn leave-btn hidden" id="leave-voice-btn" title="Abandonar voz" onclick="leaveVoiceChannel()">
+                    ✕
+                </button>
+            </div>
+        </div>
     </div>
+    
+    <!-- MODALS -->
     
     <!-- Create Group Modal -->
     <div id="create-group-modal" class="modal-backdrop hidden">
@@ -196,7 +198,6 @@
                 <input type="hidden" id="edit-group-id">
                 <input type="text" id="edit-group-name" placeholder="Nombre del grupo" required>
                 <div class="modal-buttons">
-                    <button type="button" class="btn btn-danger" onclick="deleteGroup()">Eliminar Grupo</button>
                     <button type="button" class="btn btn-secondary" onclick="hideEditGroupModal()">Cancelar</button>
                     <button type="submit" class="btn btn-primary">Guardar</button>
                 </div>
@@ -209,10 +210,11 @@
         <div class="modal">
             <h3>Crear Nuevo Canal</h3>
             <form id="create-channel-form">
+                <input type="hidden" id="channel-group-id">
                 <input type="text" id="channel-name-input" placeholder="Nombre del canal" required>
-                <select id="channel-type-input">
-                    <option value="voice">🔊 Canal de Voz</option>
-                    <option value="text">💬 Canal de Texto</option>
+                <select id="channel-type-input" required>
+                    <option value="text">💬 Texto</option>
+                    <option value="voice">🎤 Voz</option>
                 </select>
                 <div class="modal-buttons">
                     <button type="button" class="btn btn-secondary" onclick="hideCreateChannelModal()">Cancelar</button>
@@ -229,14 +231,23 @@
             <form id="edit-channel-form">
                 <input type="hidden" id="edit-channel-id">
                 <input type="text" id="edit-channel-name" placeholder="Nombre del canal" required>
-                <select id="edit-channel-type">
-                    <option value="voice">🔊 Canal de Voz</option>
-                    <option value="text">💬 Canal de Texto</option>
-                </select>
                 <div class="modal-buttons">
-                    <button type="button" class="btn btn-danger" onclick="deleteChannel()">Eliminar Canal</button>
                     <button type="button" class="btn btn-secondary" onclick="hideEditChannelModal()">Cancelar</button>
                     <button type="submit" class="btn btn-primary">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Invite User Modal -->
+    <div id="invite-user-modal" class="modal-backdrop hidden">
+        <div class="modal">
+            <h3>Invitar Usuario a Grupo</h3>
+            <form id="invite-user-form" onsubmit="handleInviteUserSubmit(event)">
+                <input type="text" id="invite-username-input" placeholder="Nombre de usuario" required>
+                <div class="modal-buttons">
+                    <button type="button" class="btn btn-secondary" onclick="hideInviteUserModal()">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Invitar</button>
                 </div>
             </form>
         </div>
@@ -246,60 +257,31 @@
     <div id="settings-modal" class="modal-backdrop hidden" onclick="if(event.target === this) hideSettingsModal()">
         <div class="settings-modal">
             <button class="settings-close-btn" onclick="hideSettingsModal()">✕</button>
-            <!-- Settings Sidebar -->
-            <div class="settings-sidebar">
-                <div class="settings-sidebar-top">
-                    <div class="settings-user-info">
-                        <div class="settings-avatar-container">
-                            <img id="settings-avatar" src="" alt="Avatar" class="settings-avatar">
-                            <button class="settings-avatar-edit" onclick="document.getElementById('avatar-upload').click()">📷</button>
-                        </div>
-                        <input type="file" id="avatar-upload" accept="image/*" style="display: none;" onchange="handleAvatarUpload(this)">
-                        <div class="settings-user-name" id="settings-username-display">Usuario</div>
-                    </div>
-                    <div class="settings-nav">
-                        <button class="settings-nav-item active" data-tab="profile" onclick="switchSettingsTab('profile')">
-                            👤 Perfil
-                        </button>
-                    <button class="settings-nav-item" data-tab="audio" onclick="switchSettingsTab('audio')">
-                        🎛️ Audio
-                    </button>
-                    <button class="settings-nav-item" data-tab="notifications" onclick="switchSettingsTab('notifications')">
-                        🔔 Notificaciones
-                    </button>
-                    <button class="settings-nav-item" data-tab="privacy" onclick="switchSettingsTab('privacy')">
-                        🔒 Privacidad
-                    </button>
-                    <button class="settings-nav-item" data-tab="appearance" onclick="switchSettingsTab('appearance')">
-                        🎨 Apariencia
-                    </button>
-                    </div>
-                </div>
-                <div class="settings-logout">
-                    <button class="settings-logout-btn" onclick="handleLogout()">
-                        🚪 Cerrar Sesión
-                    </button>
-                </div>
+            
+            <div class="settings-tabs">
+                <button class="settings-tab-btn active" onclick="switchSettingsTab('profile')">👤 Perfil</button>
+                <button class="settings-tab-btn" onclick="switchSettingsTab('audio')">🎙️ Audio</button>
+                <button class="settings-tab-btn" onclick="switchSettingsTab('privacy')">🔒 Privacidad</button>
+                <button class="settings-tab-btn" onclick="switchSettingsTab('appearance')">🎨 Apariencia</button>
             </div>
             
-            <!-- Settings Content -->
             <div class="settings-content">
                 <!-- Profile Tab -->
-                <div id="settings-tab-profile" class="settings-tab active">
+                <div id="settings-tab-profile" class="settings-tab">
                     <h2>Configuración de Perfil</h2>
                     
                     <div class="settings-section">
-                        <label>Nombre de usuario</label>
-                        <input type="text" id="settings-username" placeholder="Tu nombre de usuario">
+                        <label>Nombre de Usuario</label>
+                        <input type="text" id="settings-username" placeholder="Tu nombre de usuario" disabled>
                     </div>
                     
                     <div class="settings-section">
-                        <label>Avatar (URL)</label>
-                        <input type="text" id="settings-avatar-url" placeholder="https://ejemplo.com/avatar.jpg" onchange="handleAvatarUrlChange(this.value)">
+                        <label>Email</label>
+                        <input type="email" id="settings-email" placeholder="Tu email" disabled>
                     </div>
                     
                     <div class="settings-section">
-                        <label>Sobre mí</label>
+                        <label>Acerca de mí</label>
                         <textarea id="settings-bio" placeholder="Cuéntanos sobre ti..." rows="3"></textarea>
                     </div>
                     
@@ -310,7 +292,7 @@
                 </div>
                 
                 <!-- Audio Tab -->
-                <div id="settings-tab-audio" class="settings-tab">
+                <div id="settings-tab-audio" class="settings-tab hidden">
                     <h2>Configuración de Audio</h2>
                     
                     <div class="settings-section">
@@ -321,159 +303,26 @@
                     </div>
                     
                     <div class="settings-section">
-                        <label>Dispositivo de salida (Altavoz/Auriculares)</label>
+                        <label>Dispositivo de salida</label>
                         <select id="settings-output-device" onchange="handleOutputDeviceChange(this.value)">
                             <option value="">Cargando dispositivos...</option>
                         </select>
                     </div>
                     
-                    <div class="settings-section">
-                        <label>Volumen de entrada: <span id="input-volume-value">100</span>%</label>
-                        <input type="range" id="settings-input-volume" min="0" max="100" value="100" oninput="handleInputVolumeChange(this.value)">
-                    </div>
-                    
-                    <div class="settings-section">
-                        <label>Volumen de salida: <span id="output-volume-value">100</span>%</label>
-                        <input type="range" id="settings-output-volume" min="0" max="100" value="100" oninput="handleOutputVolumeChange(this.value)">
-                    </div>
-                    
-                    <div class="settings-section">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="settings-noise-suppression">
-                            <span>🔇 Supresión de ruido</span>
-                        </label>
-                    </div>
-                    
-                    <div class="settings-section">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="settings-echo-cancellation">
-                            <span>🔊 Cancelación de eco</span>
-                        </label>
-                    </div>
-                    
-                    <div class="settings-section">
-                        <label>🎤 Test de micrófono</label>
-                        <div class="mic-test-controls">
-                            <button type="button" class="btn btn-secondary" id="test-mic-btn" onclick="startMicTest()">
-                                ▶️ Iniciar test
-                            </button>
-                            <button type="button" class="btn btn-secondary hidden" id="stop-mic-btn" onclick="stopMicTest()">
-                                ⏹️ Detener
-                            </button>
-                        </div>
-                        <div id="mic-test-status" class="mic-test-status"></div>
-                    </div>
-                    
                     <div class="settings-buttons">
-                        <button type="button" class="btn btn-primary" onclick="saveAudioSettings()">Guardar configuración de audio</button>
-                    </div>
-                </div>
-                
-                <!-- Notifications Tab -->
-                <div id="settings-tab-notifications" class="settings-tab">
-                    <h2>Configuración de Notificaciones</h2>
-                    
-                    <div class="settings-section">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="settings-notifications-enabled" checked>
-                            <span>🔔 Activar notificaciones</span>
-                        </label>
-                        <p class="settings-description">Recibir notificaciones cuando te mencionen o haya nuevos mensajes</p>
-                    </div>
-                    
-                    <div class="settings-section">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="settings-notification-sound" checked>
-                            <span>🔊 Sonido de notificaciones</span>
-                        </label>
-                        <p class="settings-description">Reproducir un sonido cuando arrives un mensaje</p>
-                    </div>
-                    
-                    <div class="settings-section">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="settings-notification-mentions" checked>
-                            <span>📢 Notificaciones de menciones</span>
-                        </label>
-                        <p class="settings-description">Notificaciones cuando alguien te menciona (@tu_usuario)</p>
-                    </div>
-                    
-                    <div class="settings-section">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="settings-notification-messages">
-                            <span>💬 Notificaciones de mensajes</span>
-                        </label>
-                        <p class="settings-description">Notificaciones para todos los mensajes (requiere más permisos)</p>
-                    </div>
-                    
-                    <div class="settings-section">
-                        <label>🔔 Probar notificaciones</label>
-                        <div class="mic-test-controls">
-                            <button type="button" class="btn btn-secondary" onclick="testNotification()">
-                                📢 Enviar notificación de prueba
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <div class="settings-buttons">
-                        <button type="button" class="btn btn-primary" onclick="saveNotificationSettings()">Guardar cambios</button>
+                        <button type="button" class="btn btn-primary" onclick="hideSettingsModal()">Cerrar</button>
                     </div>
                 </div>
                 
                 <!-- Privacy Tab -->
-                <div id="settings-tab-privacy" class="settings-tab">
-                    <h2>Privacidad y Seguridad</h2>
-                    
-                    <div class="settings-section">
-                        <label>👁️ Visibilidad del estado</label>
-                        <select id="settings-privacy-status">
-                            <option value="everyone">Todos pueden ver</option>
-                            <option value="friends">Solo amigos</option>
-                            <option value="nobody">Nadie</option>
-                        </select>
-                        <p class="settings-description">Controla quién puede ver tu estado en línea</p>
-                    </div>
+                <div id="settings-tab-privacy" class="settings-tab hidden">
+                    <h2>Privacidad</h2>
                     
                     <div class="settings-section">
                         <label class="checkbox-label">
-                            <input type="checkbox" id="settings-privacy-voice-activity">
-                            <span>🎤 Mostrar actividad de voz</span>
+                            <input type="checkbox" id="settings-privacy-online" checked>
+                            <span>🟢 Mostrar estado en línea</span>
                         </label>
-                        <p class="settings-description">Permitir que otros vean cuándo estás en un canal de voz</p>
-                    </div>
-                    
-                    <div class="settings-section">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="settings-privacy-read-receipts" checked>
-                            <span>✅ Confirmaciones de lectura</span>
-                        </label>
-                        <p class="settings-description">Mostrar cuando has leído los mensajes</p>
-                    </div>
-                    
-                    <div class="settings-section">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="settings-privacy-typing" checked>
-                            <span>✍️ Mostrar cuando estás escribiendo</span>
-                        </label>
-                        <p class="settings-description">Permitir que otros vean cuándo estás escribiendo</p>
-                    </div>
-                    
-                    <div class="settings-section">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="settings-privacy-msg-requests" checked>
-                            <span>📨 Solicitudes de mensaje</span>
-                        </label>
-                        <p class="settings-description">Permitir que otros te envíen solicitudes de mensaje</p>
-                    </div>
-                    
-                    <div class="settings-section">
-                        <label>📁 Transferencia de archivos</label>
-                        <select id="settings-privacy-file-size">
-                            <option value="10">Máximo 10 MB</option>
-                            <option value="25">Máximo 25 MB</option>
-                            <option value="50">Máximo 50 MB</option>
-                            <option value="100">Máximo 100 MB</option>
-                        </select>
-                        <p class="settings-description">Tamaño máximo de archivos que podés recibir</p>
                     </div>
                     
                     <div class="settings-buttons">
@@ -482,23 +331,14 @@
                 </div>
                 
                 <!-- Appearance Tab -->
-                <div id="settings-tab-appearance" class="settings-tab">
-                    <h2>Configuración de Apariencia</h2>
+                <div id="settings-tab-appearance" class="settings-tab hidden">
+                    <h2>Apariencia</h2>
                     
                     <div class="settings-section">
                         <label>Tema</label>
                         <select id="settings-theme" onchange="handleThemeChange(this.value)">
                             <option value="dark">🌙 Oscuro</option>
                             <option value="light">☀️ Claro</option>
-                        </select>
-                    </div>
-                    
-                    <div class="settings-section">
-                        <label>Tamaño de texto</label>
-                        <select id="settings-font-size" onchange="handleFontSizeChange(this.value)">
-                            <option value="small">Pequeño</option>
-                            <option value="medium" selected>Mediano</option>
-                            <option value="large">Grande</option>
                         </select>
                     </div>
                     
@@ -509,11 +349,11 @@
             </div>
         </div>
     </div>
-
+    
     <!-- Scripts -->
     <script src="js/api.js?v=10"></script>
     <script src="js/websocket.js?v=10"></script>
     <script src="js/livekit.js?v=14"></script>
-    <script src="js/app.js?v=13"></script>
+    <script src="js/app.js?v=24"></script>
 </body>
 </html>
