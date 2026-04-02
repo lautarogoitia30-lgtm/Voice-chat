@@ -471,18 +471,17 @@ class LiveKitClient {
         
         // Also manually handle the audio track
         // Find the local audio publication and mute/unmute at track level
+        // Use setMuted() method (not setEnabled()) to properly stop audio
         if (this.localParticipant && this.localParticipant.audioPublications) {
             const publications = this.localParticipant.audioPublications;
             console.log('[MUTE] Audio publications:', publications.length);
             
             for (const pub of publications) {
-                if (pub.track) {
-                    console.log('[MUTE] Found audio track, calling setEnabled:', !muted);
-                    try {
-                        await pub.setEnabled(!muted);
-                    } catch (trackErr) {
-                        console.warn('[MUTE] Could not set track enabled:', trackErr);
-                    }
+                console.log('[MUTE] Calling setMuted on publication:', muted);
+                try {
+                    await pub.setMuted(muted);
+                } catch (trackErr) {
+                    console.warn('[MUTE] Could not set track muted:', trackErr);
                 }
             }
         }
