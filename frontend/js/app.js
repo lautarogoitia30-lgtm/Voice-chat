@@ -84,9 +84,11 @@ function getElements() {
         joinVoiceBtn: document.getElementById('join-voice-btn'),
         leaveVoiceBtn: document.getElementById('leave-voice-btn'),
         
-        // Members section
+        // Members / participants section
         membersSection: document.getElementById('members-section'),
         membersList: document.getElementById('members-list'),
+        // Backwards-compatible: some code references 'participants-list'
+        participantsList: document.getElementById('participants-list') || document.getElementById('members-list'),
         
         // Modals
         createGroupModal: document.getElementById('create-group-modal'),
