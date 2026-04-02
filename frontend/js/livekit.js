@@ -14,6 +14,9 @@ class LiveKitClient {
         this.knownParticipants = []; // Track known participants manually
         this.audioElements = []; // Store all audio elements for control
         this.localAudioTrack = null; // Store local audio track for mute/unmute
+        this._originalAudioTrack = null; // For mute/unmute cycle
+        this._originalAudioTrackSid = null;
+        this._isMuted = false;
         // State flags to prevent race conditions between connect/disconnect
         this._connecting = false;
         this._disconnecting = false;
@@ -457,54 +460,61 @@ class LiveKitClient {
      * Directly controls the audio track
      */
     async setMuted(muted) {
-        console.log('[MUTE] Setting mute to:', muted);
+        console.log('[MUTE] Setting mute to:', muted, new Date().toISOString());
         
-        // First try setMicrophoneEnabled
-        if (this.localParticipant) {
-            try {
-                await this.localParticipant.setMicrophoneEnabled(!muted);
-                console.log('[MUTE] setMicrophoneEnabled called, muted:', muted);
-            } catch (e) {
-                console.warn('[MUTE] setMicrophoneEnabled error, trying manual mute:', e);
-            }
+        // Guardamos referencia al track original para poder restaurarlo
+        if (!this._originalAudioTrack && !muted) {
+            console.log('[MUTE] No original track stored yet');
         }
         
-        // Also manually handle the audio track
-        // Find the local audio publication and mute/unmute at track level
-        // Try multiple methods: setMuted(), then pauseUpstream() for server-side mute
+        // Si ya estamos en el estado correcto, no hacer nada
+        if (this._isMuted === muted) {
+            console.log('[MUTE] Already in requested state, skipping');
+            return;
+        }
+        this._isMuted = muted;
+        
+        // Método definitivo: unpublish y republish del track
+        // Esto corta completamente el audio hacia el servidor
         if (this.localParticipant && this.localParticipant.audioPublications) {
-            const publications = this.localParticipant.audioPublications;
-            console.log('[MUTE] Audio publications:', publications.length);
+            const publications = [...this.localParticipant.audioPublications];
+            console.log('[MUTE] Found publications:', publications.length);
             
             for (const pub of publications) {
-                console.log('[MUTE] Processing publication:', pub.sid, 'track:', !!pub.track);
-                
-                // Method 1: Try setMuted on the publication
-                try {
-                    await pub.setMuted(muted);
-                    console.log('[MUTE] setMuted called:', muted);
-                } catch (e) {
-                    console.warn('[MUTE] setMuted failed:', e);
-                }
-                
-                // Method 2: Try pauseUpstream on the actual track (stops audio to server)
-                if (pub.track && pub.track.pauseUpstream) {
-                    try {
-                        if (muted) {
-                            await pub.track.pauseUpstream();
-                            console.log('[MUTE] pauseUpstream called - should stop audio to server');
-                        } else if (pub.track.resumeUpstream) {
-                            await pub.track.resumeUpstream();
-                            console.log('[MUTE] resumeUpstream called');
+                // Check track.kind instead of pub.kind
+                const trackKind = pub.track?.kind || pub.kind;
+                if (pub.track && trackKind === 'audio') {
+                    console.log('[MUTE] Handling audio publication:', pub.sid);
+                    
+                    if (muted) {
+                        // MUTE: guardar referencia y unpublish
+                        console.log('[MUTE] Storing track and unpublishing...');
+                        this._originalAudioTrack = pub.track;
+                        this._originalAudioTrackSid = pub.sid;
+                        
+                        try {
+                            await this.localParticipant.unpublishTrack(pub.track);
+                            console.log('[MUTE] Track unpublished successfully');
+                        } catch (e) {
+                            console.warn('[MUTE] Unpublish failed:', e);
                         }
-                    } catch (e) {
-                        console.warn('[MUTE] pauseUpstream/resumeUpstream failed:', e);
+                    } else {
+                        // UNMUTE: volver a publicar el track original
+                        console.log('[MUTE] Republishing original track...');
+                        if (this._originalAudioTrack) {
+                            try {
+                                await this.localParticipant.publishTrack(this._originalAudioTrack, { simulcast: false });
+                                console.log('[MUTE] Track republished successfully');
+                            } catch (e) {
+                                console.warn('[MUTE] Republish failed:', e);
+                            }
+                        }
                     }
                 }
             }
         }
         
-        console.log('[MUTE] Microphone', muted ? 'muted' : 'unmuted');
+        console.log('[MUTE] Microphone', muted ? 'muted' : 'unmuted', '- COMPLETE');
     }
     
     /**
