@@ -454,19 +454,40 @@ class LiveKitClient {
     
     /**
      * Set muted state (mute/unmute microphone)
+     * Directly controls the audio track
      */
     async setMuted(muted) {
         console.log('[MUTE] Setting mute to:', muted);
         
-        // Always use LiveKit's setMicrophoneEnabled - it's more reliable
+        // First try setMicrophoneEnabled
         if (this.localParticipant) {
             try {
                 await this.localParticipant.setMicrophoneEnabled(!muted);
-                console.log('[MUTE] Microphone', muted ? 'muted' : 'unmuted');
+                console.log('[MUTE] setMicrophoneEnabled called, muted:', muted);
             } catch (e) {
-                console.error('[MUTE] Error:', e);
+                console.warn('[MUTE] setMicrophoneEnabled error, trying manual mute:', e);
             }
         }
+        
+        // Also manually handle the audio track
+        // Find the local audio publication and mute/unmute at track level
+        if (this.localParticipant && this.localParticipant.audioPublications) {
+            const publications = this.localParticipant.audioPublications;
+            console.log('[MUTE] Audio publications:', publications.length);
+            
+            for (const pub of publications) {
+                if (pub.track) {
+                    console.log('[MUTE] Found audio track, calling setEnabled:', !muted);
+                    try {
+                        await pub.setEnabled(!muted);
+                    } catch (trackErr) {
+                        console.warn('[MUTE] Could not set track enabled:', trackErr);
+                    }
+                }
+            }
+        }
+        
+        console.log('[MUTE] Microphone', muted ? 'muted' : 'unmuted');
     }
     
     /**
@@ -621,23 +642,6 @@ class LiveKitClient {
             audioTracks: this.localParticipant.audioPublications
         };
 }
-    
-    /**
-     * Set muted state (mute/unmute microphone)
-     * Using LiveKit's setMicrophoneEnabled
-     */
-    async setMuted(muted) {
-        console.log('[MUTE] Setting mute to:', muted);
-        
-        if (this.localParticipant) {
-            try {
-                await this.localParticipant.setMicrophoneEnabled(!muted);
-                console.log('[MUTE] Microphone', muted ? 'muted' : 'unmuted');
-            } catch (e) {
-                console.error('[MUTE] Error:', e);
-            }
-        }
-    }
     
     /**
      * Set deafened state (mute/unmute speakers)
