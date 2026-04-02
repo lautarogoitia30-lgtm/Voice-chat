@@ -49,23 +49,23 @@
         <!-- Servers Sidebar (Left) -->
         <div class="servers-sidebar">
             <!-- Discord-style: DM button at top -->
-            <div class="server-icon dm-icon" title="Mensajes directos">
+            <button class="server-icon dm-icon" title="Mensajes directos" type="button">
                 💬
-            </div>
+            </button>
             <div class="separator"></div>
-            <div class="server-icon" title="VoiceSpace">
+            <button class="server-icon" title="VoiceSpace" type="button">
                 <img src="https://raw.githubusercontent.com/lautarogoitia30-lgtm/Voice-chat/main/frontend/images/logo.svg" alt="VS" style="width: 100%; height: 100%; border-radius: 50%;" onerror="this.style.display='none'; this.parentElement.innerHTML='🎤'">
-            </div>
+            </button>
             <div style="flex: 1;"></div>
-            <div class="server-icon" onclick="loadGroups()" title="Actualizar">
+            <button class="server-icon" onclick="loadGroups()" title="Actualizar" type="button">
                 🔄
-            </div>
-            <div id="create-group-btn" class="server-icon" onclick="showCreateGroupModal()" title="Crear Grupo">
+            </button>
+            <button id="create-group-btn" class="server-icon" onclick="showCreateGroupModal()" title="Crear Grupo" type="button">
                 ➕
-            </div>
-            <div class="server-icon" onclick="showSettingsModal()" title="Configuración">
+            </button>
+            <button class="server-icon" onclick="showSettingsModal()" title="Configuración" type="button">
                 ⚙️
-            </div>
+            </button>
         </div>
         
         <!-- Channels Sidebar -->
