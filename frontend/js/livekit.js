@@ -494,6 +494,9 @@ class LiveKitClient {
                 try {
                     await lp.unpublishTrack(this.localAudioTrack);
                     console.log('[MUTE] Track unpublished successfully');
+                    // Clear the reference - track is now invalid, must re-acquire on unmute
+                    this.localAudioTrack = null;
+                    console.log('[MUTE] Track reference cleared - will re-acquire on unmute');
                 } catch (e) {
                     console.warn('[MUTE] Unpublish failed:', e?.message || e);
                     console.warn('[MUTE] Full error:', e);
