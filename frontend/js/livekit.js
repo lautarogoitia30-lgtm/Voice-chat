@@ -1,11 +1,11 @@
 /**
  * LiveKit client for voice chat.
  * Handles room connections, microphone publishing, and participant tracking.
- * VERSION 9 - NUCLEAR MUTE (track.stop + unpublish + setMicrophoneEnabled)
+ * VERSION 10 - FIX DOUBLE-CLICK BUG (was calling handler twice: onclick + addEventListener)
  */
 
 // DEBUG: Make sure this is the latest version
-console.log('=== LIVEKIT CLIENT v9 LOADED ===');
+console.log('=== LIVEKIT CLIENT v10 LOADED ===');
 
 class LiveKitClient {
     constructor() {
@@ -374,13 +374,11 @@ class LiveKitClient {
     
     /**
      * Set muted state (mute/unmute microphone)
-     * VERSION 9 — NUCLEAR MUTE: tries EVERY possible approach and logs everything
-     * so we can diagnose EXACTLY what's happening
+     * VERSION 10 — Clean mute using setMicrophoneEnabled
+     * The double-fire bug was caused by onclick + addEventListener on the same button
      */
     async setMuted(muted) {
-        console.log('[MUTE] ==========================================');
-        console.log('[MUTE] ===== SETMUTED v9 CALLED =====', muted);
-        console.log('[MUTE] ==========================================');
+        console.log('[MUTE] ===== SETMUTED v10 CALLED =====', muted);
         this._isMuted = muted;
         
         if (!this.localParticipant) {
@@ -388,86 +386,21 @@ class LiveKitClient {
             return;
         }
         
-        // DIAGNOSTIC: Show ALL current audio publications BEFORE mute action
-        console.log('[MUTE] --- BEFORE STATE ---');
+        // DIAGNOSTIC: Show state BEFORE
         console.log('[MUTE] audioTrackPublications size:', this.localParticipant.audioTrackPublications?.size);
         if (this.localParticipant.audioTrackPublications) {
             this.localParticipant.audioTrackPublications.forEach((pub, sid) => {
-                console.log('[MUTE]   pub sid:', sid);
-                console.log('[MUTE]   pub.source:', pub.source);
-                console.log('[MUTE]   pub.isMuted:', pub.isMuted);
-                console.log('[MUTE]   pub.track:', pub.track);
-                console.log('[MUTE]   pub.track?.isMuted:', pub.track?.isMuted);
-                console.log('[MUTE]   pub.track?.mediaStreamTrack:', pub.track?.mediaStreamTrack);
-                console.log('[MUTE]   pub.track?.mediaStreamTrack?.enabled:', pub.track?.mediaStreamTrack?.enabled);
-                console.log('[MUTE]   pub.track?.mediaStreamTrack?.readyState:', pub.track?.mediaStreamTrack?.readyState);
+                console.log('[MUTE]   BEFORE pub:', sid, 'isMuted:', pub.isMuted, 'track.enabled:', pub.track?.mediaStreamTrack?.enabled, 'readyState:', pub.track?.mediaStreamTrack?.readyState);
             });
         }
         
-        if (muted) {
-            // ============================================
-            // MUTING — try EVERYTHING
-            // ============================================
-            console.log('[MUTE] === MUTING (disabling audio) ===');
-            
-            // STRATEGY 1: setMicrophoneEnabled(false) — tells LiveKit to unpublish mic
-            try {
-                console.log('[MUTE] Strategy 1: setMicrophoneEnabled(false)...');
+        try {
+            if (muted) {
+                console.log('[MUTE] Calling setMicrophoneEnabled(false)...');
                 await this.localParticipant.setMicrophoneEnabled(false);
-                console.log('[MUTE] Strategy 1: SUCCESS');
-            } catch (e) {
-                console.error('[MUTE] Strategy 1 FAILED:', e);
-            }
-            
-            // STRATEGY 2: For each audio publication, call pub.mute() or pub.track.stop()
-            try {
-                console.log('[MUTE] Strategy 2: Direct track manipulation...');
-                if (this.localParticipant.audioTrackPublications) {
-                    this.localParticipant.audioTrackPublications.forEach((pub, sid) => {
-                        console.log('[MUTE]   Processing pub:', sid);
-                        
-                        // 2a: Try publication.setMuted(true)
-                        if (typeof pub.setMuted === 'function') {
-                            console.log('[MUTE]   2a: pub.setMuted(true)...');
-                            pub.setMuted(true);
-                            console.log('[MUTE]   2a: done, pub.isMuted now:', pub.isMuted);
-                        }
-                        
-                        // 2b: Disable the underlying MediaStreamTrack
-                        if (pub.track && pub.track.mediaStreamTrack) {
-                            console.log('[MUTE]   2b: mediaStreamTrack.enabled = false...');
-                            pub.track.mediaStreamTrack.enabled = false;
-                            console.log('[MUTE]   2b: done, enabled now:', pub.track.mediaStreamTrack.enabled);
-                        }
-                        
-                        // 2c: Try track.mute() if available (LocalTrack method)
-                        if (pub.track && typeof pub.track.mute === 'function') {
-                            console.log('[MUTE]   2c: track.mute()...');
-                            pub.track.mute();
-                            console.log('[MUTE]   2c: done');
-                        }
-
-                        // 2d: Stop the track entirely (nuclear option)
-                        if (pub.track && pub.track.mediaStreamTrack) {
-                            console.log('[MUTE]   2d: mediaStreamTrack.stop() (NUCLEAR)...');
-                            pub.track.mediaStreamTrack.stop();
-                            console.log('[MUTE]   2d: done, readyState now:', pub.track.mediaStreamTrack.readyState);
-                        }
-                    });
-                }
-                console.log('[MUTE] Strategy 2: COMPLETE');
-            } catch (e) {
-                console.error('[MUTE] Strategy 2 FAILED:', e);
-            }
-            
-        } else {
-            // ============================================
-            // UNMUTING — re-enable microphone
-            // ============================================
-            console.log('[MUTE] === UNMUTING (re-enabling audio) ===');
-            
-            try {
-                // Build audio capture options (same as publishMicrophone)
+                console.log('[MUTE] setMicrophoneEnabled(false) SUCCESS');
+            } else {
+                // Re-enable with user's preferred audio settings
                 const inputDevice = localStorage.getItem('voice_chat_input_device');
                 const noiseSuppression = localStorage.getItem('voice_chat_noise_suppression') === 'true';
                 const echoCancellation = localStorage.getItem('voice_chat_echo_cancellation') !== 'false';
@@ -477,34 +410,24 @@ class LiveKitClient {
                     noiseSuppression: noiseSuppression,
                     autoGainControl: true,
                 };
+                if (inputDevice) opts.deviceId = inputDevice;
                 
-                if (inputDevice) {
-                    opts.deviceId = inputDevice;
-                }
-                
-                console.log('[MUTE] Calling setMicrophoneEnabled(true) with opts...');
+                console.log('[MUTE] Calling setMicrophoneEnabled(true)...');
                 await this.localParticipant.setMicrophoneEnabled(true, opts);
                 console.log('[MUTE] setMicrophoneEnabled(true) SUCCESS');
-            } catch (e) {
-                console.error('[MUTE] Unmute FAILED:', e);
             }
+        } catch (e) {
+            console.error('[MUTE] setMicrophoneEnabled FAILED:', e);
         }
         
-        // DIAGNOSTIC: Show ALL audio publications AFTER mute action
-        console.log('[MUTE] --- AFTER STATE ---');
-        console.log('[MUTE] audioTrackPublications size:', this.localParticipant.audioTrackPublications?.size);
+        // DIAGNOSTIC: Show state AFTER
         if (this.localParticipant.audioTrackPublications) {
             this.localParticipant.audioTrackPublications.forEach((pub, sid) => {
-                console.log('[MUTE]   pub sid:', sid);
-                console.log('[MUTE]   pub.isMuted:', pub.isMuted);
-                console.log('[MUTE]   pub.track:', pub.track);
-                console.log('[MUTE]   pub.track?.mediaStreamTrack?.enabled:', pub.track?.mediaStreamTrack?.enabled);
-                console.log('[MUTE]   pub.track?.mediaStreamTrack?.readyState:', pub.track?.mediaStreamTrack?.readyState);
+                console.log('[MUTE]   AFTER pub:', sid, 'isMuted:', pub.isMuted, 'track.enabled:', pub.track?.mediaStreamTrack?.enabled, 'readyState:', pub.track?.mediaStreamTrack?.readyState);
             });
         }
         
         console.log('[MUTE] COMPLETE, isMuted:', muted);
-        console.log('[MUTE] ==========================================');
     }
     
     /**
