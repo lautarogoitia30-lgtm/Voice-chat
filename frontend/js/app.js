@@ -1308,10 +1308,7 @@ function handleToggleMute() {
 
 // Alias for button onclick handlers
 window.toggleMuteMic = handleToggleMute;
-window.toggleMuteAudio = function() {
-    console.log('toggleMuteAudio called');
-    // TODO: Implement deafen/unmute speakers
-};
+window.toggleMuteAudio = handleToggleDeaf;
 window.joinVoiceChannel = handleJoinVoice;
 window.leaveVoiceChannel = handleLeaveVoice;
 
@@ -1340,12 +1337,12 @@ function updateVoiceControlsUI() {
     console.log('updateVoiceControlsUI called, isInVoice:', state.isInVoice);
     
     const muteBtn = document.getElementById('mute-mic-btn');
-    const deafBtn = document.getElementById('deaf-btn');
+    const deafBtn = document.getElementById('mute-audio-btn');
     const joinBtn = document.getElementById('join-voice-btn');
     const leaveBtn = document.getElementById('leave-voice-btn');
     
     if (!muteBtn || !deafBtn || !joinBtn || !leaveBtn) {
-        console.warn('Voice control buttons not found in DOM');
+        console.warn('Voice control buttons not found in DOM', { muteBtn, deafBtn, joinBtn, leaveBtn });
         return;
     }
     
