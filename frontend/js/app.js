@@ -551,14 +551,39 @@ async function handleCreateGroup(e) {
 }
 
 // Invite user to group
-async function handleInviteUser() {
+// Show invite user modal
+function showInviteUserModal() {
     if (!state.selectedGroup) {
         alert('Selecciona un grupo primero');
         return;
     }
     
-    const username = prompt('Ingresa el nombre de usuario a invitar:');
-    if (!username) return;
+    const modal = document.getElementById('invite-user-modal');
+    document.getElementById('invite-username-input').value = '';
+    modal.classList.remove('hidden');
+    document.getElementById('invite-username-input').focus();
+}
+
+// Hide invite user modal
+function hideInviteUserModal() {
+    const modal = document.getElementById('invite-user-modal');
+    modal.classList.add('hidden');
+}
+
+// Handle invite user form submission
+async function handleInviteUserSubmit(e) {
+    e.preventDefault();
+    
+    if (!state.selectedGroup) {
+        alert('Selecciona un grupo primero');
+        return;
+    }
+    
+    const username = document.getElementById('invite-username-input').value.trim();
+    if (!username) {
+        alert('Por favor ingresa un nombre de usuario');
+        return;
+    }
     
     try {
         // DEBUG: Log what's being sent
@@ -586,9 +611,21 @@ async function handleInviteUser() {
         const result = await response.json();
         console.log('[INVITE] Success:', result);
         alert('Usuario convidado! La otra cuenta debe hacer click en 🔄 para ver los canales.');
+        hideInviteUserModal();
     } catch (error) {
         alert('Error al convidar: ' + error.message);
     }
+}
+
+// OLD FUNCTION (deprecated, keeping for reference)
+async function handleInviteUser() {
+    if (!state.selectedGroup) {
+        alert('Selecciona un grupo primero');
+        return;
+    }
+    
+    // Now use the modal instead of prompt
+    showInviteUserModal();
 }
 
 // Channel operations

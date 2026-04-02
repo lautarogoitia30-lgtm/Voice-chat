@@ -510,10 +510,24 @@
         </div>
     </div>
 
+    <!-- Invite User Modal -->
+    <div id="invite-user-modal" class="modal-backdrop hidden">
+        <div class="modal">
+            <h3>Invitar Usuario a Grupo</h3>
+            <form id="invite-user-form" onsubmit="handleInviteUserSubmit(event)">
+                <input type="text" id="invite-username-input" placeholder="Nombre de usuario" required>
+                <div class="modal-buttons">
+                    <button type="button" class="btn btn-secondary" onclick="hideInviteUserModal()">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Invitar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Scripts -->
     <script src="js/api.js?v=10"></script>
     <script src="js/websocket.js?v=10"></script>
     <script src="js/livekit.js?v=14"></script>
-    <script src="js/app.js?v=13"></script>
+    <script src="js/app.js?v=14"></script>
 </body>
 </html>
