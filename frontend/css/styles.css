@@ -210,22 +210,45 @@ body {
     border-right: 1px solid var(--border);
 }
 
-/* Channel header */
+/* Channels header */
 .channels-header {
     height: var(--header-height);
     min-height: var(--header-height);
     padding: 0 16px;
     display: flex;
     align-items: center;
-    justify-content: space-between;
     border-bottom: 1px solid var(--border);
     box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.channels-header .group-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 12px;
+    font-size: 14px;
+    color: white;
+}
+
+.channels-header .group-icon img {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
 }
 
 .channels-header h2 {
     font-size: 16px;
     font-weight: 600;
     color: var(--text-primary);
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .channels-header .header-actions button {
@@ -575,8 +598,109 @@ body {
     color: var(--text-muted);
 }
 
-/* ===== VOICE CHAT ===== */
-.voice-chat {
+/* ===== VOICE CONTROLS BAR ===== */
+.voice-controls-bar {
+    height: var(--footer-height);
+    min-height: var(--footer-height);
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+}
+
+.voice-controls-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.voice-channel-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.voice-channel-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--bg-tertiary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+}
+
+.voice-channel-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.voice-participants-preview {
+    display: flex;
+    gap: 4px;
+    margin-left: 8px;
+}
+
+.voice-participants-preview .avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    color: white;
+    margin-left: -8px;
+    border: 2px solid var(--bg-secondary);
+}
+
+.voice-controls-buttons {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.voice-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: none;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    transition: all 0.15s;
+}
+
+.voice-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.voice-btn.active {
+    background: var(--red);
+    color: white;
+}
+
+.voice-btn.leave {
+    background: var(--red);
+    color: white;
+}
+
+.voice-btn.leave:hover {
+    opacity: 0.9;
+}
+
+/* Voice Chat Area */
+.voice-chat-container {
     flex: 1;
     display: flex;
     flex-direction: column;
