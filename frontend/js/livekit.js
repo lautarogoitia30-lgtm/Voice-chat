@@ -1,11 +1,11 @@
 /**
  * LiveKit client for voice chat.
  * Handles room connections, microphone publishing, and participant tracking.
- * VERSION 3 - NO createLocalMicrophoneTrackAndShow
+ * VERSION 8 - NATIVE LIVEKIT MUTE (setMicrophoneEnabled)
  */
 
 // DEBUG: Make sure this is the latest version
-console.log('=== LIVEKIT CLIENT v7 LOADED ===');
+console.log('=== LIVEKIT CLIENT v8 LOADED ===');
 
 class LiveKitClient {
     constructor() {
@@ -13,11 +13,8 @@ class LiveKitClient {
         this.localParticipant = null;
         this.knownParticipants = []; // Track known participants manually
         this.audioElements = []; // Store all audio elements for control
-        this.localAudioTrack = null; // Store local audio track for mute/unmute
-        this.localAudioPublication = null; // Store the publication for setMuted()
-        this._originalAudioTrack = null; // For mute/unmute cycle
-        this._originalAudioTrackSid = null;
         this._isMuted = false;
+        this._pendingVolume = null;
         // State flags to prevent race conditions between connect/disconnect
         this._connecting = false;
         this._disconnecting = false;
@@ -288,319 +285,116 @@ class LiveKitClient {
     
     /**
      * Publish local microphone to the room
-     * Using browser's native echo cancellation + Chrome's experimental noise suppression
+     * Uses LiveKit's NATIVE setMicrophoneEnabled — creates a proper LocalAudioTrack
+     * that the SFU can control (mute/unmute/subscribe/unsubscribe)
      */
     async publishMicrophone() {
-        console.log('=== PUBLISH MICROPHONE ===');
-        console.log('[AUDIO] Step 1: Check room and localParticipant');
+        console.log('=== PUBLISH MICROPHONE (NATIVE) ===');
         
-        // Ensure room is connected and localParticipant exists. Wait a short time for the client to populate
-        if (!this.room) {
-            console.warn('No room object, cannot publish microphone yet');
+        if (!this.room || this.room.state !== 'connected') {
+            console.warn('[AUDIO] Room not connected, cannot publish');
             return;
         }
-
-        if (this.room.state !== 'connected') {
-            console.warn('[AUDIO] Room state is not connected yet:', this.room.state);
-            // don't try to publish until connected
-            return;
-        }
-
-        // Attempt to ensure localParticipant is populated (race from connect)
+        
         if (!this.localParticipant) {
-            console.log('[AUDIO] localParticipant null - attempting to read from room.localParticipant and waiting up to 2s');
-            // try immediate assignment
-            this.localParticipant = this.room.localParticipant || null;
-            const start = Date.now();
-            while (!this.localParticipant && Date.now() - start < 2000) {
-                // wait 100ms
-                // eslint-disable-next-line no-await-in-loop
-                await new Promise(r => setTimeout(r, 100));
-                this.localParticipant = this.room.localParticipant || null;
+            this.localParticipant = this.room.localParticipant;
+            if (!this.localParticipant) {
+                console.error('[AUDIO] No localParticipant available');
+                return;
             }
-        }
-
-        if (!this.localParticipant) {
-            console.error('[AUDIO] localParticipant still null after wait - aborting publish');
-            alert('Error al acceder al micrófono: localParticipant no está disponible. Reintentá unir de nuevo.');
-            return;
         }
         
         try {
-            // CRITICAL: Wait for room to be FULLY ready before publishing
-            // LiveKit needs time for the engine to initialize after connection
-            console.log('[AUDIO] Step 2: Waiting for room engine to be ready...');
+            // Wait for room engine to be fully ready
             await new Promise(resolve => setTimeout(resolve, 500));
-            console.log('[AUDIO] Step 3: Room engine ready, room.state:', this.room.state);
             
-            // Get settings from localStorage
+            // Get user settings
             const inputDevice = localStorage.getItem('voice_chat_input_device');
-            const inputVolume = parseInt(localStorage.getItem('voice_chat_input_volume') || '30');
             const noiseSuppression = localStorage.getItem('voice_chat_noise_suppression') === 'true';
             const echoCancellation = localStorage.getItem('voice_chat_echo_cancellation') !== 'false';
             
-            console.log('[AUDIO] Step 4: Settings loaded - Volume:', inputVolume, 'NS:', noiseSuppression, 'EC:', echoCancellation);
+            console.log('[AUDIO] Publishing mic natively. Device:', inputDevice, 'NS:', noiseSuppression, 'EC:', echoCancellation);
             
-            // Use Chrome's EXPERIMENTAL noise suppression settings
-            const constraints = {
-                audio: {
-                    echoCancellation: echoCancellation,
-                    noiseSuppression: noiseSuppression,
-                    autoGainControl: true,
-                    sampleRate: 48000,
-                    // Chrome experimental - more aggressive
-                    googEchoCancellation: true,
-                    googNoiseSuppression: true,
-                    googAutoGainControl: true,
-                    googHighpassFilter: true,
-                    googTypingNoiseDetectionThreshold: 0.5,
-                }
+            // Build audio capture options
+            const opts = {
+                echoCancellation: echoCancellation,
+                noiseSuppression: noiseSuppression,
+                autoGainControl: true,
             };
             
             if (inputDevice) {
-                constraints.audio.deviceId = { exact: inputDevice };
+                opts.deviceId = inputDevice;
             }
             
-            console.log('[AUDIO] Step 5: About to call getUserMedia with constraints:', JSON.stringify(constraints));
-            console.log('[AUDIO] navigator.mediaDevices:', !!navigator.mediaDevices);
-            console.log('[AUDIO] navigator.mediaDevices.getUserMedia:', !!navigator.mediaDevices?.getUserMedia);
+            // USE LIVEKIT'S NATIVE API — this creates a proper LocalAudioTrack
+            // that the SFU knows how to mute/unmute correctly
+            await this.localParticipant.setMicrophoneEnabled(true, opts);
             
-            let stream;
-            try {
-                stream = await navigator.mediaDevices.getUserMedia(constraints);
-                console.log('[AUDIO] Step 6: SUCCESS! Got microphone stream:', stream);
-            } catch (gumError) {
-                console.error('[AUDIO] Step 6: ERROR - getUserMedia failed:', gumError.name, gumError.message);
-                throw gumError;
-            }
+            console.log('[AUDIO] Microphone published via native LiveKit API!');
+            console.log('[AUDIO] audioTrackPublications:', this.localParticipant.audioTrackPublications?.size);
             
-            console.log('[AUDIO] Step 7: Creating AudioContext');
-            // Apply volume reduction
-            this.audioContext = new AudioContext();
-            const source = this.audioContext.createMediaStreamSource(stream);
-            
-            this.inputGainNode = this.audioContext.createGain();
-            this.inputGainNode.gain.value = (inputVolume / 100) * 0.15;
-            
-            this._mediaStreamDest = this.audioContext.createMediaStreamDestination();
-            
-            source.connect(this.inputGainNode);
-            this.inputGainNode.connect(this._mediaStreamDest);
-            
-            const processedTrack = this._mediaStreamDest.stream.getAudioTracks()[0];
-            this._processedTrack = processedTrack; // Store for mute/unmute
-            console.log('[AUDIO] Step 8: Processed track ready:', !!processedTrack);
-            console.log('[AUDIO] Step 9: About to publish track, localParticipant:', !!this.localParticipant);
-            
-            // Try to publish with timeout handling
-            const publishOpts = { simulcast: false };
-            // Tag as microphone source so LiveKit SFU handles mute correctly
-            if (this._Track && this._Track.Source) {
-                publishOpts.source = this._Track.Source.Microphone;
-            }
-                try {
-                    console.log('[AUDIO] Step 10: First publish attempt with opts:', JSON.stringify(publishOpts));
-                    // publishTrack can be undefined if participant is not ready; guard again
-                    if (!this.localParticipant.publishTrack && !this.localParticipant.publishLocalTrack && !this.localParticipant.publishTracks) {
-                        throw new Error('localParticipant.publishTrack unavailable');
-                    }
-
-                    // Prefer publishTrack if available
-                    let publication;
-                    if (this.localParticipant.publishTrack) {
-                        publication = await this.localParticipant.publishTrack(processedTrack, publishOpts);
-                        // Store reference for mute/unmute
-                        this.localAudioTrack = processedTrack;
-                        this.localAudioPublication = publication;
-                        console.log('[AUDIO] Track reference stored. Publication:', publication);
-                        console.log('[AUDIO] Publication type:', typeof publication, 'setMuted:', typeof publication?.setMuted);
-                    } else if (this.localParticipant.publishLocalTrack) {
-                        publication = await this.localParticipant.publishLocalTrack(processedTrack, publishOpts);
-                        this.localAudioTrack = processedTrack;
-                        this.localAudioPublication = publication;
-                    } else if (this.localParticipant.publishTracks) {
-                        const publications = await this.localParticipant.publishTracks([processedTrack], publishOpts);
-                        publication = publications[0];
-                        this.localAudioTrack = processedTrack;
-                        this.localAudioPublication = publication;
-                    }
-
-                    console.log('[AUDIO] Step 11: SUCCESS - Track published!');
-                } catch (publishError) {
-                    // If first attempt fails, wait a bit and retry once
-                    console.warn('[AUDIO] Step 11: First publish attempt failed, retrying...', publishError?.message || publishError);
-                    console.warn('[AUDIO] Error details:', publishError);
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-
-                    // Try again but verify methods exist
-                    let publication;
-                    if (this.localParticipant.publishTrack) {
-                        publication = await this.localParticipant.publishTrack(processedTrack, publishOpts);
-                        this.localAudioTrack = processedTrack;
-                        this.localAudioPublication = publication;
-                    } else if (this.localParticipant.publishLocalTrack) {
-                        publication = await this.localParticipant.publishLocalTrack(processedTrack, publishOpts);
-                        this.localAudioTrack = processedTrack;
-                        this.localAudioPublication = publication;
-                    } else if (this.localParticipant.publishTracks) {
-                        const publications = await this.localParticipant.publishTracks([processedTrack], publishOpts);
-                        publication = publications[0];
-                        this.localAudioTrack = processedTrack;
-                        this.localAudioPublication = publication;
-                    } else {
-                        throw new Error('No publish method available on localParticipant');
-                    }
-
-                    console.log('[AUDIO] Step 13: SUCCESS - Track published on retry!');
-                    console.log('[AUDIO] Publication type:', typeof publication, 'setMuted:', typeof publication?.setMuted);
-                }
-            
-            console.log('[AUDIO] Mic published with Chrome experimental NS!');
-            console.log('=== MICROPHONE READY ===');
+            console.log('=== MICROPHONE READY (NATIVE) ===');
         } catch (error) {
-            console.error('ERROR publishing microphone:', error);
+            console.error('[AUDIO] Error publishing microphone:', error);
             console.error('[AUDIO] Error name:', error.name);
             console.error('[AUDIO] Error message:', error.message);
-            console.error('[AUDIO] Error stack:', error.stack);
             alert('Error al acceder al micrófono: ' + error.message);
         }
     }
     
     /**
      * Update input volume dynamically
+     * With native LiveKit, volume control is limited — we store preference
+     * and can apply via Web Audio if needed in the future
      */
     setInputVolume(volume) {
         console.log('[AUDIO] setInputVolume called with:', volume);
+        this._pendingVolume = volume;
         
-        if (this.inputGainNode && this.audioContext) {
-            if (this.audioContext.state === 'suspended') {
-                this.audioContext.resume();
-            }
-            const gainValue = volume / 100;
-            // If currently muted, just save the value for when we unmute
-            if (this._isMuted) {
-                this._preMuteGain = gainValue;
-                console.log('[AUDIO] Muted — saved volume for unmute:', volume + '%');
-            } else {
-                this.inputGainNode.gain.value = gainValue;
-                console.log('[AUDIO] Volume set to:', volume + '%');
-            }
-        } else {
-            console.log('[AUDIO] Volume will apply on next join');
+        if (this._isMuted) {
+            console.log('[AUDIO] Muted — saved volume for later:', volume + '%');
+            return;
         }
+        
+        console.log('[AUDIO] Volume preference saved:', volume + '%');
     }
     
     /**
      * Set muted state (mute/unmute microphone)
-     * STRATEGY (per LiveKit official docs):
-     *   1. publication.setMuted(true) — tells LiveKit SFU to stop forwarding audio (THE correct way)
-     *   2. localParticipant.audioTrackPublications iterate as fallback
-     *   3. processedTrack.enabled = false — WebRTC-level backup
-     *   4. inputGainNode.disconnect() — physical audio graph cut
+     * Uses LiveKit's NATIVE setMicrophoneEnabled — the ONLY approach that
+     * correctly tells the SFU to stop forwarding audio to other participants
      */
     async setMuted(muted) {
         console.log('[MUTE] ===== SETMUTED CALLED =====', muted);
-        
         this._isMuted = muted;
-        let livekitMuted = false;
-
-        // === STRATEGY 1: Use the stored publication reference (official LiveKit API) ===
-        if (this.localAudioPublication && typeof this.localAudioPublication.setMuted === 'function') {
-            try {
-                await this.localAudioPublication.setMuted(muted);
-                console.log('[MUTE] publication.setMuted(' + muted + ') SUCCESS');
-                livekitMuted = true;
-            } catch (e) {
-                console.error('[MUTE] publication.setMuted failed:', e);
-            }
-        } else {
-            console.warn('[MUTE] No localAudioPublication or setMuted method');
-        }
-
-        // === STRATEGY 2: Iterate all audio publications on localParticipant ===
-        if (!livekitMuted && this.localParticipant) {
-            try {
-                const audioPublications = this.localParticipant.audioTrackPublications;
-                if (audioPublications && audioPublications.size > 0) {
-                    for (const [sid, pub] of audioPublications) {
-                        if (pub && typeof pub.setMuted === 'function') {
-                            await pub.setMuted(muted);
-                            console.log('[MUTE] audioTrackPublications[' + sid + '].setMuted(' + muted + ') SUCCESS');
-                            livekitMuted = true;
-                        }
-                    }
-                } else {
-                    console.warn('[MUTE] No audioTrackPublications found');
-                }
-            } catch (e) {
-                console.error('[MUTE] audioTrackPublications iteration failed:', e);
-            }
-        }
-
-        // === STRATEGY 3: WebRTC-level track disable ===
-        if (this._processedTrack) {
-            this._processedTrack.enabled = !muted;
-            console.log('[MUTE] processedTrack.enabled =', !muted);
-        }
-
-        // === STRATEGY 4: Disconnect/reconnect the gain node from destination ===
-        if (this.inputGainNode && this._mediaStreamDest) {
-            try {
-                if (muted) {
-                    this.inputGainNode.disconnect(this._mediaStreamDest);
-                    console.log('[MUTE] GainNode DISCONNECTED from MediaStreamDestination');
-                } else {
-                    this.inputGainNode.connect(this._mediaStreamDest);
-                    console.log('[MUTE] GainNode RECONNECTED to MediaStreamDestination');
-                }
-            } catch (e) {
-                console.warn('[MUTE] disconnect/connect error (safe to ignore):', e.message);
-            }
-        }
-
-        // === STRATEGY 5: Gain value = 0 ===
-        if (this.inputGainNode && this.audioContext) {
-            try {
-                if (this.audioContext.state === 'suspended') {
-                    await this.audioContext.resume();
-                }
-                if (muted) {
-                    this._preMuteGain = this.inputGainNode.gain.value;
-                    this.inputGainNode.gain.value = 0;
-                    console.log('[MUTE] Gain set to 0 (was', this._preMuteGain, ')');
-                } else {
-                    const restoreValue = this._preMuteGain != null ? this._preMuteGain : 0.15;
-                    this.inputGainNode.gain.value = restoreValue;
-                    console.log('[MUTE] Gain restored to', restoreValue);
-                }
-            } catch (e) {
-                console.error('[MUTE] Error setting gain:', e);
-            }
+        
+        if (!this.localParticipant) {
+            console.error('[MUTE] No localParticipant!');
+            return;
         }
         
-        console.log('[MUTE] COMPLETE, isMuted:', muted, 'livekitMuted:', livekitMuted);
+        try {
+            // THE FIX: Use LiveKit's native setMicrophoneEnabled
+            // When we published with setMicrophoneEnabled(true), LiveKit created a proper
+            // LocalAudioTrack with full SFU integration. Calling setMicrophoneEnabled(false)
+            // tells the SFU to STOP forwarding this track to subscribers.
+            // This is fundamentally different from the old approach of publishTrack(rawMediaStreamTrack)
+            // where the SFU didn't have proper control over the track.
+            await this.localParticipant.setMicrophoneEnabled(!muted);
+            console.log('[MUTE] setMicrophoneEnabled(' + !muted + ') SUCCESS');
+        } catch (e) {
+            console.error('[MUTE] setMicrophoneEnabled failed:', e);
+        }
+        
+        console.log('[MUTE] COMPLETE, isMuted:', muted);
     }
     
     /**
-     * Get microphone audio track
+     * Get microphone audio track (deprecated — mic now managed by LiveKit natively)
      */
     async getMicrophoneAudio() {
-        try {
-            // Use navigator.mediaDevices to get microphone
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            
-            // Create audio track from stream
-            const audioTrack = stream.getAudioTracks()[0];
-            
-            // We need to wrap it in a LiveKit track
-            // For now, just log the success
-            console.log('Got microphone access, track:', audioTrack.id);
-            
-            return audioTrack;
-        } catch (error) {
-            console.warn('Could not get microphone:', error);
-            return null;
-        }
+        console.log('[AUDIO] getMicrophoneAudio — mic is managed natively by LiveKit');
+        return null;
     }
     
     /**
