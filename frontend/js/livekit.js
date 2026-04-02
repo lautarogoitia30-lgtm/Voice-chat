@@ -461,22 +461,36 @@ class LiveKitClient {
      */
     async setMuted(muted) {
         console.log('[MUTE] Setting mute to:', muted, new Date().toISOString());
+        console.log('[MUTE] Current _isMuted state:', this._isMuted);
         
         // Guardamos referencia al track original para poder restaurarlo
         if (!this._originalAudioTrack && !muted) {
             console.log('[MUTE] No original track stored yet');
         }
         
-        // Si ya estamos en el estado correcto, no hacer nada
-        if (this._isMuted === muted) {
-            console.log('[MUTE] Already in requested state, skipping');
-            return;
+        // Remove the early return check - we need to always process
+        // if (this._isMuted === muted) {
+        //     console.log('[MUTE] Already in requested state, skipping');
+        //     return;
+        // }
+        
+        // Debug: Log the audio publications
+        if (this.localParticipant) {
+            console.log('[MUTE] localParticipant:', !!this.localParticipant);
+            console.log('[MUTE] audioPublications:', !!this.localParticipant.audioPublications);
+            if (this.localParticipant.audioPublications) {
+                console.log('[MUTE] Publications count:', this.localParticipant.audioPublications.length);
+                for (const pub of this.localParticipant.audioPublications) {
+                    console.log('[MUTE]   Pub:', pub.sid, 'track:', !!pub.track, 'kind:', pub.track?.kind);
+                }
+            }
         }
+        
         this._isMuted = muted;
         
         // Método definitivo: unpublish y republish del track
         // Esto corta completamente el audio hacia el servidor
-        if (this.localParticipant && this.localParticipant.audioPublications) {
+        if (this.localParticipant && this.localParticipant.audioPublications && this.localParticipant.audioPublications.length > 0) {
             const publications = [...this.localParticipant.audioPublications];
             console.log('[MUTE] Found publications:', publications.length);
             
@@ -512,6 +526,8 @@ class LiveKitClient {
                     }
                 }
             }
+        } else {
+            console.warn('[MUTE] No audio publications found or localParticipant not ready!');
         }
         
         console.log('[MUTE] Microphone', muted ? 'muted' : 'unmuted', '- COMPLETE');
