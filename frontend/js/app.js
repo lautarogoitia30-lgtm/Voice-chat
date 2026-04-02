@@ -1288,7 +1288,7 @@ async function updateVoiceParticipantsDisplay() {
 
 // Toggle mute microphone
 function handleToggleMute() {
-    console.log('handleToggleMute called, isInVoice:', state.isInVoice);
+    console.log('[MUTE-BTN] handleToggleMute called, isInVoice:', state.isInVoice, 'isMuted:', state.isMuted);
     
     if (!state.isInVoice) {
         alert('No estás en un canal de voz');
@@ -1296,11 +1296,19 @@ function handleToggleMute() {
     }
     
     state.isMuted = !state.isMuted;
-    console.log('Mute toggled:', state.isMuted);
+    console.log('[MUTE-BTN] Mute toggled TO:', state.isMuted);
+    
+    // Debug: check livekitClient
+    console.log('[MUTE-BTN] livekitClient:', !!window.livekitClient);
+    console.log('[MUTE-BTN] setMuted function:', typeof window.livekitClient?.setMuted);
     
     // Call LiveKit to mute/unmute
     if (window.livekitClient && window.livekitClient.setMuted) {
+        console.log('[MUTE-BTN] Calling window.livekitClient.setMuted...');
         window.livekitClient.setMuted(state.isMuted);
+        console.log('[MUTE-BTN] setMuted called');
+    } else {
+        console.error('[MUTE-BTN] livekitClient.setMuted not available!');
     }
     
     updateVoiceControlsUI();
