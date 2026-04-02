@@ -5,7 +5,7 @@
  */
 
 // DEBUG: Make sure this is the latest version
-console.log('=== LIVEKIT CLIENT v5 LOADED ===');
+console.log('=== LIVEKIT CLIENT v6 LOADED ===');
 
 class LiveKitClient {
     constructor() {
@@ -381,12 +381,13 @@ class LiveKitClient {
             this.inputGainNode = this.audioContext.createGain();
             this.inputGainNode.gain.value = (inputVolume / 100) * 0.15;
             
-            const dest = this.audioContext.createMediaStreamDestination();
+            this._mediaStreamDest = this.audioContext.createMediaStreamDestination();
             
             source.connect(this.inputGainNode);
-            this.inputGainNode.connect(dest);
+            this.inputGainNode.connect(this._mediaStreamDest);
             
-            const processedTrack = dest.stream.getAudioTracks()[0];
+            const processedTrack = this._mediaStreamDest.stream.getAudioTracks()[0];
+            this._processedTrack = processedTrack; // Store for mute/unmute
             console.log('[AUDIO] Step 8: Processed track ready:', !!processedTrack);
             console.log('[AUDIO] Step 9: About to publish track, localParticipant:', !!this.localParticipant);
             
@@ -484,42 +485,62 @@ class LiveKitClient {
     
     /**
      * Set muted state (mute/unmute microphone)
-     * Uses gain node to silence the audio pipeline.
-     * publication.setMuted() does NOT work with AudioContext processed tracks
-     * because the published track comes from MediaStreamDestination, not the
-     * original mic track. Setting gain to 0 is the correct approach since the
-     * gain node feeds directly into the published stream.
+     * TRIPLE MUTE STRATEGY (all three applied simultaneously):
+     *   1. processedTrack.enabled = false — WebRTC-level mute (most reliable)
+     *   2. inputGainNode.disconnect() — physically cuts the audio graph
+     *   3. inputGainNode.gain.value = 0 — belt and suspenders
+     * This ensures NO audio leaks through the MediaStreamDestination pipeline.
      */
     async setMuted(muted) {
         console.log('[MUTE] ===== SETMUTED CALLED =====', muted);
         
-        if (!this.inputGainNode || !this.audioContext) {
-            console.warn('[MUTE] No inputGainNode or audioContext — cannot mute');
-            this._isMuted = muted;
-            return;
+        this._isMuted = muted;
+
+        // === STRATEGY 1: WebRTC-level track disable (most reliable) ===
+        if (this._processedTrack) {
+            this._processedTrack.enabled = !muted;
+            console.log('[MUTE] processedTrack.enabled =', !muted);
+        } else {
+            console.warn('[MUTE] No _processedTrack reference — track-level mute skipped');
         }
 
-        try {
-            if (this.audioContext.state === 'suspended') {
-                await this.audioContext.resume();
+        // === STRATEGY 2: Disconnect/reconnect the gain node from destination ===
+        if (this.inputGainNode && this._mediaStreamDest) {
+            try {
+                if (muted) {
+                    this.inputGainNode.disconnect(this._mediaStreamDest);
+                    console.log('[MUTE] GainNode DISCONNECTED from MediaStreamDestination');
+                } else {
+                    this.inputGainNode.connect(this._mediaStreamDest);
+                    console.log('[MUTE] GainNode RECONNECTED to MediaStreamDestination');
+                }
+            } catch (e) {
+                // disconnect() throws if not connected; connect() throws if already connected
+                console.warn('[MUTE] disconnect/connect error (safe to ignore):', e.message);
             }
+        }
 
-            if (muted) {
-                // Save current gain value before muting so we can restore it
-                this._preMuteGain = this.inputGainNode.gain.value;
-                this.inputGainNode.gain.value = 0;
-                console.log('[MUTE] Gain set to 0 (was', this._preMuteGain, ')');
-            } else {
-                // Restore the gain value from before mute
-                const restoreValue = this._preMuteGain != null ? this._preMuteGain : 0.15;
-                this.inputGainNode.gain.value = restoreValue;
-                console.log('[MUTE] Gain restored to', restoreValue);
+        // === STRATEGY 3: Gain value = 0 (belt and suspenders) ===
+        if (this.inputGainNode && this.audioContext) {
+            try {
+                if (this.audioContext.state === 'suspended') {
+                    await this.audioContext.resume();
+                }
+
+                if (muted) {
+                    this._preMuteGain = this.inputGainNode.gain.value;
+                    this.inputGainNode.gain.value = 0;
+                    console.log('[MUTE] Gain set to 0 (was', this._preMuteGain, ')');
+                } else {
+                    const restoreValue = this._preMuteGain != null ? this._preMuteGain : 0.15;
+                    this.inputGainNode.gain.value = restoreValue;
+                    console.log('[MUTE] Gain restored to', restoreValue);
+                }
+            } catch (e) {
+                console.error('[MUTE] Error setting gain:', e);
             }
-        } catch (e) {
-            console.error('[MUTE] Error setting gain:', e);
         }
         
-        this._isMuted = muted;
         console.log('[MUTE] COMPLETE, isMuted:', muted);
     }
     
