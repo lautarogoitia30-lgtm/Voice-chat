@@ -471,17 +471,35 @@ class LiveKitClient {
         
         // Also manually handle the audio track
         // Find the local audio publication and mute/unmute at track level
-        // Use setMuted() method (not setEnabled()) to properly stop audio
+        // Try multiple methods: setMuted(), then pauseUpstream() for server-side mute
         if (this.localParticipant && this.localParticipant.audioPublications) {
             const publications = this.localParticipant.audioPublications;
             console.log('[MUTE] Audio publications:', publications.length);
             
             for (const pub of publications) {
-                console.log('[MUTE] Calling setMuted on publication:', muted);
+                console.log('[MUTE] Processing publication:', pub.sid, 'track:', !!pub.track);
+                
+                // Method 1: Try setMuted on the publication
                 try {
                     await pub.setMuted(muted);
-                } catch (trackErr) {
-                    console.warn('[MUTE] Could not set track muted:', trackErr);
+                    console.log('[MUTE] setMuted called:', muted);
+                } catch (e) {
+                    console.warn('[MUTE] setMuted failed:', e);
+                }
+                
+                // Method 2: Try pauseUpstream on the actual track (stops audio to server)
+                if (pub.track && pub.track.pauseUpstream) {
+                    try {
+                        if (muted) {
+                            await pub.track.pauseUpstream();
+                            console.log('[MUTE] pauseUpstream called - should stop audio to server');
+                        } else if (pub.track.resumeUpstream) {
+                            await pub.track.resumeUpstream();
+                            console.log('[MUTE] resumeUpstream called');
+                        }
+                    } catch (e) {
+                        console.warn('[MUTE] pauseUpstream/resumeUpstream failed:', e);
+                    }
                 }
             }
         }
