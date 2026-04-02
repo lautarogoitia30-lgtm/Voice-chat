@@ -482,8 +482,6 @@ class LiveKitClient {
     async setMuted(muted) {
         console.log('[MUTE] ===== SETMUTED CALLED =====', muted, new Date().toISOString());
         console.log('[MUTE] Current _isMuted state:', this._isMuted);
-        console.log('[MUTE] localAudioTrack:', this.localAudioTrack);
-        console.log('[MUTE] localAudioPublication:', this.localAudioPublication);
         
         // Get the localParticipant (always from room for latest state)
         const lp = this.localParticipant || (this.room ? this.room.localParticipant : null);
@@ -495,85 +493,22 @@ class LiveKitClient {
         }
         
         console.log('[MUTE] localParticipant exists:', !!lp);
-        console.log('[MUTE] lp.audioPublications:', lp.audioPublications);
         
-        // FIRST: Try using the stored publication reference (most reliable)
-        if (this.localAudioPublication) {
-            console.log('[MUTE] Using stored publication reference');
-            try {
-                this.localAudioPublication.setMuted(muted);
-                console.log('[MUTE] setMuted called successfully on stored publication');
-                this._isMuted = muted;
-                console.log('[MUTE] COMPLETE (stored publication)');
-                return;
-            } catch (e) {
-                console.warn('[MUTE] setMuted on stored publication failed:', e);
-            }
-        }
-        
-        // SECOND: Try to get track from audioPublications
-        if (lp.audioPublications && lp.audioPublications.length > 0) {
-            console.log('[MUTE] Found audioPublications:', lp.audioPublications.length);
-            for (const pub of lp.audioPublications) {
-                console.log('[MUTE]   Pub:', pub.sid, 'track:', !!pub.track, 'kind:', pub.track?.kind);
-                if (pub.track && (pub.track.kind === 'audio' || pub.kind === 'audio')) {
-                    // Store reference
-                    this.localAudioTrack = pub.track;
-                    console.log('[MUTE] Stored track from publication');
-                    
-                    // Use setMuted() - this is the CORRECT way to mute in LiveKit
-                    // Don't unpublish/republish - that causes reconnection issues
-                    console.log('[MUTE] Calling pub.setMuted(' + muted + ')...');
-                    try {
-                        pub.setMuted(muted);
-                        console.log('[MUTE] setMuted called successfully');
-                    } catch (e) {
-                        console.warn('[MUTE] setMuted error:', e);
-                        // Fallback: try unpublish/republish if setMuted fails
-                        console.log('[MUTE] Fallback: trying unpublish/republish...');
-                        if (muted) {
-                            await lp.unpublishTrack(pub.track);
-                        } else {
-                            await lp.publishTrack(pub.track, { simulcast: false });
-                        }
-                    }
-                    
-                    this._isMuted = muted;
-                    console.log('[MUTE] COMPLETE');
-                    return;
-                }
-            }
-        }
-        
-        // If we still don't have a track reference but need to mute/unmute,
-        // re-acquire the microphone entirely (this is the fallback)
-        console.log('[MUTE] No track found, re-acquiring microphone...');
-        
-        if (muted) {
-            // For mute: we need to stop publishing. Try unpublishing any audio track
-            // Get all tracks from localParticipant
-            console.log('[MUTE] Trying to find and unpublish existing tracks...');
-            if (lp.audioTracks) {
-                for (const [sid, pub] of lp.audioTracks) {
-                    if (pub.track) {
-                        console.log('[MUTE] Found audio track to unpublish:', sid);
-                        try {
-                            await lp.unpublishTrack(pub.track);
-                            console.log('[MUTE] Unpublished:', sid);
-                        } catch(e) {
-                            console.warn('[MUTE] Error unpublishing:', e);
-                        }
-                    }
-                }
-            }
-        } else {
-            // For unmute: re-publish the microphone
-            console.log('[MUTE] Re-acquiring microphone...');
-            await this.publishMicrophone();
+        // Use setMicrophoneEnabled() - this is the CORRECT LiveKit API
+        // This works even without audioPublications being populated
+        console.log('[MUTE] Calling lp.setMicrophoneEnabled(' + muted + ')...');
+        try {
+            await lp.setMicrophoneEnabled(!muted); // false = muted, true = unmuted
+            console.log('[MUTE] setMicrophoneEnabled called successfully');
+            this._isMuted = muted;
+            console.log('[MUTE] COMPLETE');
+            return;
+        } catch (e) {
+            console.warn('[MUTE] setMicrophoneEnabled error:', e);
         }
         
         this._isMuted = muted;
-        console.log('[MUTE] COMPLETE (fallback mode)');
+        console.log('[MUTE] COMPLETE (after try/catch)');
     }
     
     /**
