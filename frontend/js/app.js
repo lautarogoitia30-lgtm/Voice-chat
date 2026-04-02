@@ -903,52 +903,85 @@ function handleWebSocketMessage(message) {
 
 // Voice operations
 async function handleJoinVoice() {
+    // Prevent re-entrant join attempts without disabling the UI button
+    if (state.joining) {
+        console.log('[JOIN] Join already in progress, ignoring duplicate click');
+        return;
+    }
+
+    state.joining = true;
+    window.appState = state;
+
     try {
         console.log('=== JOINING VOICE ===');
         console.log('Channel ID:', state.selectedChannel.id);
         console.log('Current user:', state.currentUser);
-        
+
         // Register in database first
         console.log('[JOIN] Calling joinVoice API...');
         await API.channels.joinVoice(state.selectedChannel.id);
         console.log('[JOIN] Registered in database');
-        
+
         // Get token from API
         console.log('[JOIN] Getting LiveKit token...');
         const tokenData = await API.livekit.getToken(state.selectedChannel.id);
         console.log('[JOIN] Token received, URL:', tokenData.url, 'Room:', tokenData.room_name);
         console.log('[JOIN] Token starts with:', tokenData.token.substring(0, 50) + '...');
-        
+
         // Connect to LiveKit
         console.log('[JOIN] Connecting to LiveKit...');
         console.log('[JOIN] livekitClient exists:', !!window.livekitClient);
         console.log('[JOIN] livekitClient object:', window.livekitClient);
-        
+
         if (!window.livekitClient || !window.livekitClient.connect) {
             console.error('[JOIN] livekitClient not loaded!', window.livekitClient);
             alert('Error: LiveKit client not loaded. Please refresh the page.');
             return;
         }
-        
-        await window.livekitClient.connect(tokenData.url, tokenData.token);
+
+        // If a connect is already in progress inside the livekit client, wait for it
+        if (window.livekitClient._connecting) {
+            console.log('[JOIN] livekitClient._connecting is true - waiting up to 3s for it to finish');
+            const start = Date.now();
+            while (window.livekitClient._connecting && Date.now() - start < 3000) {
+                // eslint-disable-next-line no-await-in-loop
+                await new Promise(r => setTimeout(r, 100));
+            }
+            if (window.livekitClient._connecting) {
+                console.warn('[JOIN] previous connect still in progress after wait - aborting this join');
+                throw new Error('Connect already in progress');
+            }
+            // If the room is already connected by the previous call, skip connect
+            if (window.livekitClient.room && window.livekitClient.room.state === 'connected') {
+                console.log('[JOIN] Room already connected from previous attempt - skipping connect()');
+            } else {
+                await window.livekitClient.connect(tokenData.url, tokenData.token);
+            }
+        } else {
+            await window.livekitClient.connect(tokenData.url, tokenData.token);
+        }
         console.log('[JOIN] Connected to LiveKit!');
-        
+
         // Check room state
         const room = window.livekitClient.room;
         console.log('[JOIN] Room state:', room?.state);
         console.log('[JOIN] Room name:', room?.name);
         console.log('[JOIN] Local participant identity:', room?.localParticipant?.identity);
         console.log('[JOIN] Local participant name:', room?.localParticipant?.name);
-        
-        // Try to publish microphone
+
+        // Try to publish microphone, only if connected
         try {
-            console.log('[JOIN] Publishing microphone...');
-            await window.livekitClient.publishMicrophone();
-            console.log('[JOIN] Microphone published!');
+            if (window.livekitClient.room && window.livekitClient.room.state === 'connected') {
+                console.log('[JOIN] Publishing microphone...');
+                await window.livekitClient.publishMicrophone();
+                console.log('[JOIN] Microphone published!');
+            } else {
+                console.warn('[JOIN] Room not connected yet, skipping publishMicrophone');
+            }
         } catch (micError) {
-            console.warn('[JOIN] Microphone access error:', micError.message);
+            console.warn('[JOIN] Microphone access error:', micError?.message || micError);
         }
-        
+
         // Update state
         state.isInVoice = true;
         state.isMuted = false;
@@ -957,27 +990,32 @@ async function handleJoinVoice() {
         window.appState = state; // Update global reference for livekit.js
 
         console.log('[JOIN] State updated, calling updateVoiceControlsUI');
-        
+
         // Update UI - show all voice controls
         updateVoiceControlsUI();
-        
+
         // Update participants list
         updateParticipantsList();
-        
+
         // Start periodic update for speaking detection
         startParticipantsUpdateInterval();
-        
+
         console.log('[JOIN] Join complete! You should see yourself in the list.');
-        
+
         // Update the channel list to show voice participants
         updateVoiceParticipantsDisplay();
-        
+
      } catch (error) {
          console.error('[JOIN] Voice connection error:', error);
          console.error('[JOIN] Full error:', error);
          console.error('[JOIN] Error message:', error.message);
          console.error('[JOIN] Error stack:', error.stack);
          alert('No se pudo unir a voz: ' + error.message + '\n\nRevisa la consola (F12) para más detalles.');
+     } finally {
+         // Clear joining flag so user can try again
+         state.joining = false;
+         window.appState = state;
+         console.log('[JOIN] joining flag cleared');
      }
 }
 
