@@ -201,7 +201,7 @@ function setupEventListeners(elements) {
         console.log('Mute button clicked');
         handleToggleMute();
     });
-    document.getElementById('deaf-btn')?.addEventListener('click', () => {
+    document.getElementById('mute-audio-btn')?.addEventListener('click', () => {
         console.log('Deaf button clicked');
         handleToggleDeaf();
     });
