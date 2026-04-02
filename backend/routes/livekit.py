@@ -106,7 +106,9 @@ async def generate_token(
     token = token.with_grants(grants)
     
     # Build URLs - CRITICAL: Convert HTTPS to WSS for WebSocket
-    livekit_url = LIVEKIT_URL.rstrip("/")
+    livekit_url = LIVEKIT_URL.strip().rstrip("/")  # Clean whitespace AND trailing slash
+    print(f"[LIVEKIT URL] Raw LIVEKIT_URL: '{LIVEKIT_URL}'")
+    print(f"[LIVEKIT URL] After strip/rstrip: '{livekit_url}'")
     
     # Convert HTTPS to WSS (WebSocket Secure)
     if livekit_url.startswith("https://"):
