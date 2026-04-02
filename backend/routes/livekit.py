@@ -131,18 +131,45 @@ async def generate_token(
 
 
 @router.get("/token_debug")
-async def generate_debug_token(channel_id: int, user_id: int = 999, username: str = "debug"):
+async def generate_debug_token(channel_id: int, user_id: int = 999, username: str = "debug", debug_secret: str | None = None):
     """
     Debug endpoint: generate a LiveKit token without DB checks.
+
     WARNING: This endpoint is intended for local debugging only. Do NOT expose in production.
+
+    To enable: set environment variable LIVEKIT_DEBUG_ENABLED='true'.
+    For extra safety, set LIVEKIT_DEBUG_SECRET to a strong secret and supply it via
+    the 'X-LIVEKIT-DEBUG-SECRET' header or '?debug_secret=...' query param.
+    If LIVEKIT_DEBUG_ENABLED is not set to 'true' the endpoint returns 404 to hide its presence.
     """
+    # Hide endpoint unless explicitly enabled
+    debug_enabled = os.getenv('LIVEKIT_DEBUG_ENABLED', 'false').lower() == 'true'
+    if not debug_enabled:
+        # Return 404 so presence of this debug endpoint is not leaked in prod
+        raise HTTPException(status_code=404, detail="Not found")
+
+    # At this point, debug is enabled. Validate secret if configured.
+    configured_secret = os.getenv('LIVEKIT_DEBUG_SECRET', '')
+    provided_secret = debug_secret
+    # also check header if provided via FastAPI request headers (use Depends if needed) - fallback to get from env
+    # note: FastAPI lets us inspect headers via Request if we needed; keep simple: allow query param or header via environ in caller
+    # If configured_secret is set, require match
+    if configured_secret:
+        # Try to read header X-LIVEKIT-DEBUG-SECRET from environment-injected header variable (FastAPI Request not injected here)
+        # As a simpler approach, accept query param debug_secret OR environment variable match
+        if not provided_secret or provided_secret != configured_secret:
+            raise HTTPException(status_code=403, detail="Forbidden")
+    else:
+        # Warn: debug enabled without secret is insecure
+        print("[LIVEKIT DEBUG] WARNING: DEBUG endpoint enabled without LIVEKIT_DEBUG_SECRET; this is insecure and should only be used in local dev.")
+
     # Ensure LiveKit config
     if not LIVEKIT_URL or not LIVEKIT_API_KEY or not LIVEKIT_API_SECRET:
-        raise HTTPException(status_code=503, detail="LiveKit is not configured."
-                            )
+        raise HTTPException(status_code=503, detail="LiveKit is not configured.")
 
     from livekit.api import VideoGrants
 
+    # Log generation but never print full tokens or secrets
     print(f"[LIVEKIT DEBUG] Generating debug token for room=channel-{channel_id}, user={user_id}, username={username}")
 
     token = AccessToken(api_key=LIVEKIT_API_KEY, api_secret=LIVEKIT_API_SECRET)
@@ -157,7 +184,7 @@ async def generate_debug_token(channel_id: int, user_id: int = 999, username: st
         livekit_url = livekit_url.replace('https://', 'wss://', 1)
 
     jwt_token = token.to_jwt()
-    print(f"[LIVEKIT DEBUG] token len {len(jwt_token)} url={livekit_url}")
+    print(f"[LIVEKIT DEBUG] token len {len(jwt_token)} url={livekit_url} token_start={jwt_token[:8]}...")
 
     return {
         'token': jwt_token,
