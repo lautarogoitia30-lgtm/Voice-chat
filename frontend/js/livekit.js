@@ -14,6 +14,7 @@ class LiveKitClient {
         this.knownParticipants = []; // Track known participants manually
         this.audioElements = []; // Store all audio elements for control
         this.localAudioTrack = null; // Store local audio track for mute/unmute
+        this.localAudioPublication = null; // Store the publication for setMuted()
         this._originalAudioTrack = null; // For mute/unmute cycle
         this._originalAudioTrackSid = null;
         this._isMuted = false;
@@ -398,17 +399,22 @@ class LiveKitClient {
                     }
 
                     // Prefer publishTrack if available
+                    let publication;
                     if (this.localParticipant.publishTrack) {
-                        await this.localParticipant.publishTrack(processedTrack, { simulcast: false });
+                        publication = await this.localParticipant.publishTrack(processedTrack, { simulcast: false });
                         // Store reference for mute/unmute
                         this.localAudioTrack = processedTrack;
-                        console.log('[AUDIO] Track reference stored in this.localAudioTrack');
+                        this.localAudioPublication = publication;
+                        console.log('[AUDIO] Track reference stored in this.localAudioTrack and publication in this.localAudioPublication');
                     } else if (this.localParticipant.publishLocalTrack) {
-                        await this.localParticipant.publishLocalTrack(processedTrack, { simulcast: false });
+                        publication = await this.localParticipant.publishLocalTrack(processedTrack, { simulcast: false });
                         this.localAudioTrack = processedTrack;
+                        this.localAudioPublication = publication;
                     } else if (this.localParticipant.publishTracks) {
-                        await this.localParticipant.publishTracks([processedTrack], { simulcast: false });
+                        const publications = await this.localParticipant.publishTracks([processedTrack], { simulcast: false });
+                        publication = publications[0];
                         this.localAudioTrack = processedTrack;
+                        this.localAudioPublication = publication;
                     }
 
                     console.log('[AUDIO] Step 11: SUCCESS - Track published!');
@@ -419,21 +425,26 @@ class LiveKitClient {
                     await new Promise(resolve => setTimeout(resolve, 1000));
 
                     // Try again but verify methods exist
+                    let publication;
                     if (this.localParticipant.publishTrack) {
-                        await this.localParticipant.publishTrack(processedTrack, { simulcast: false });
+                        publication = await this.localParticipant.publishTrack(processedTrack, { simulcast: false });
                         this.localAudioTrack = processedTrack;
+                        this.localAudioPublication = publication;
                     } else if (this.localParticipant.publishLocalTrack) {
-                        await this.localParticipant.publishLocalTrack(processedTrack, { simulcast: false });
+                        publication = await this.localParticipant.publishLocalTrack(processedTrack, { simulcast: false });
                         this.localAudioTrack = processedTrack;
+                        this.localAudioPublication = publication;
                     } else if (this.localParticipant.publishTracks) {
-                        await this.localParticipant.publishTracks([processedTrack], { simulcast: false });
+                        const publications = await this.localParticipant.publishTracks([processedTrack], { simulcast: false });
+                        publication = publications[0];
                         this.localAudioTrack = processedTrack;
+                        this.localAudioPublication = publication;
                     } else {
                         throw new Error('No publish method available on localParticipant');
                     }
 
                     console.log('[AUDIO] Step 13: SUCCESS - Track published on retry!');
-                    console.log('[AUDIO] Track reference stored after retry');
+                    console.log('[AUDIO] Track reference and publication stored after retry');
                 }
             
             console.log('[AUDIO] Mic published with Chrome experimental NS!');
@@ -472,6 +483,7 @@ class LiveKitClient {
         console.log('[MUTE] ===== SETMUTED CALLED =====', muted, new Date().toISOString());
         console.log('[MUTE] Current _isMuted state:', this._isMuted);
         console.log('[MUTE] localAudioTrack:', this.localAudioTrack);
+        console.log('[MUTE] localAudioPublication:', this.localAudioPublication);
         
         // Get the localParticipant (always from room for latest state)
         const lp = this.localParticipant || (this.room ? this.room.localParticipant : null);
@@ -485,7 +497,21 @@ class LiveKitClient {
         console.log('[MUTE] localParticipant exists:', !!lp);
         console.log('[MUTE] lp.audioPublications:', lp.audioPublications);
         
-        // Try to get track from audioPublications first (might work sometimes)
+        // FIRST: Try using the stored publication reference (most reliable)
+        if (this.localAudioPublication) {
+            console.log('[MUTE] Using stored publication reference');
+            try {
+                this.localAudioPublication.setMuted(muted);
+                console.log('[MUTE] setMuted called successfully on stored publication');
+                this._isMuted = muted;
+                console.log('[MUTE] COMPLETE (stored publication)');
+                return;
+            } catch (e) {
+                console.warn('[MUTE] setMuted on stored publication failed:', e);
+            }
+        }
+        
+        // SECOND: Try to get track from audioPublications
         if (lp.audioPublications && lp.audioPublications.length > 0) {
             console.log('[MUTE] Found audioPublications:', lp.audioPublications.length);
             for (const pub of lp.audioPublications) {
