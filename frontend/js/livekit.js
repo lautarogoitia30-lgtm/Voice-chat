@@ -22,7 +22,12 @@ class LiveKitClient {
     async connect(url, token) {
         try {
             // Disconnect from previous room if any
-            this.disconnect();
+            if (this.room && this.isConnected()) {
+                console.log('[LIVEKIT] Disconnecting from previous room...');
+                await this.disconnect();
+                // Wait a bit for disconnect to complete
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
             
             console.log('Connecting to LiveKit room at:', url);
             
@@ -312,9 +317,10 @@ class LiveKitClient {
     /**
      * Disconnect from the current room
      */
-    disconnect() {
+    async disconnect() {
         if (this.room) {
-            this.room.disconnect();
+            console.log('[LIVEKIT] Disconnecting...');
+            await this.room.disconnect();
             this.room = null;
             this.localParticipant = null;
             this.knownParticipants = []; // Clear known participants
