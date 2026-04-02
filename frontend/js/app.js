@@ -1064,21 +1064,18 @@ function startParticipantsUpdateInterval() {
         window.livekitClient.knownParticipants = [];
     }
     
-    // Update every 100ms to detect speaking state changes
+    // Update every 3000ms (was 100ms — reduced to stop console spam)
     if (participantsUpdateInterval) clearInterval(participantsUpdateInterval);
     
     participantsUpdateInterval = setInterval(() => {
         // Keep updating even if left voice - to see who's still there
         if (state.isInVoice) {
-            // Get current participants
+            // Get current participants (quiet — no logging)
             let currentParticipants = [];
             
             if (window.livekitClient && window.livekitClient.room) {
-                // Try to get from room directly
                 const remoteParticipants = window.livekitClient.getParticipants();
-                console.log('[INTERVAL] Room has', remoteParticipants.length, 'remote participants');
                 
-                // Update knownParticipants with current room state
                 if (remoteParticipants.length > 0) {
                     window.livekitClient.knownParticipants = remoteParticipants;
                     currentParticipants = remoteParticipants;
@@ -1086,7 +1083,7 @@ function startParticipantsUpdateInterval() {
             }
             updateParticipantsList();
         }
-    }, 100);
+    }, 3000);
 }
 
 function stopParticipantsUpdateInterval() {
@@ -1287,7 +1284,7 @@ async function updateVoiceParticipantsDisplay() {
 }
 
 // Toggle mute microphone
-function handleToggleMute() {
+async function handleToggleMute() {
     console.log('[MUTE-BTN] handleToggleMute called, isInVoice:', state.isInVoice, 'isMuted:', state.isMuted);
     
     if (!state.isInVoice) {
@@ -1302,11 +1299,15 @@ function handleToggleMute() {
     console.log('[MUTE-BTN] livekitClient:', !!window.livekitClient);
     console.log('[MUTE-BTN] setMuted function:', typeof window.livekitClient?.setMuted);
     
-    // Call LiveKit to mute/unmute
+    // Call LiveKit to mute/unmute — AWAIT the async call
     if (window.livekitClient && window.livekitClient.setMuted) {
-        console.log('[MUTE-BTN] Calling window.livekitClient.setMuted...');
-        window.livekitClient.setMuted(state.isMuted);
-        console.log('[MUTE-BTN] setMuted called');
+        console.log('[MUTE-BTN] Calling window.livekitClient.setMuted (awaiting)...');
+        try {
+            await window.livekitClient.setMuted(state.isMuted);
+            console.log('[MUTE-BTN] setMuted COMPLETED');
+        } catch (e) {
+            console.error('[MUTE-BTN] setMuted ERROR:', e);
+        }
     } else {
         console.error('[MUTE-BTN] livekitClient.setMuted not available!');
     }

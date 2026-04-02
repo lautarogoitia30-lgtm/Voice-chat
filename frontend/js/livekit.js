@@ -1,11 +1,11 @@
 /**
  * LiveKit client for voice chat.
  * Handles room connections, microphone publishing, and participant tracking.
- * VERSION 8 - NATIVE LIVEKIT MUTE (setMicrophoneEnabled)
+ * VERSION 9 - NUCLEAR MUTE (track.stop + unpublish + setMicrophoneEnabled)
  */
 
 // DEBUG: Make sure this is the latest version
-console.log('=== LIVEKIT CLIENT v8 LOADED ===');
+console.log('=== LIVEKIT CLIENT v9 LOADED ===');
 
 class LiveKitClient {
     constructor() {
@@ -228,6 +228,19 @@ class LiveKitClient {
                     if (window.livekitCallbacks && window.livekitCallbacks.onActiveSpeakersChanged) {
                         window.livekitCallbacks.onActiveSpeakersChanged(speakers);
                     }
+                })
+                // DEBUG: Listen for TrackMuted/TrackUnmuted to verify SFU receives mute signal
+                .on(RoomEvent.TrackMuted, (publication, participant) => {
+                    console.log('[MUTE-EVENT] 🔇 TrackMuted event! participant:', participant.identity, 'source:', publication.source, 'trackSid:', publication.trackSid);
+                })
+                .on(RoomEvent.TrackUnmuted, (publication, participant) => {
+                    console.log('[MUTE-EVENT] 🔊 TrackUnmuted event! participant:', participant.identity, 'source:', publication.source, 'trackSid:', publication.trackSid);
+                })
+                .on(RoomEvent.LocalTrackPublished, (publication, participant) => {
+                    console.log('[TRACK-EVENT] 📤 LocalTrackPublished! source:', publication.source, 'trackSid:', publication.trackSid, 'kind:', publication.kind);
+                })
+                .on(RoomEvent.LocalTrackUnpublished, (publication, participant) => {
+                    console.log('[TRACK-EVENT] 📥 LocalTrackUnpublished! source:', publication.source, 'trackSid:', publication.trackSid);
                 });
             
             // Connect to the room
@@ -361,11 +374,13 @@ class LiveKitClient {
     
     /**
      * Set muted state (mute/unmute microphone)
-     * Uses LiveKit's NATIVE setMicrophoneEnabled — the ONLY approach that
-     * correctly tells the SFU to stop forwarding audio to other participants
+     * VERSION 9 — NUCLEAR MUTE: tries EVERY possible approach and logs everything
+     * so we can diagnose EXACTLY what's happening
      */
     async setMuted(muted) {
-        console.log('[MUTE] ===== SETMUTED CALLED =====', muted);
+        console.log('[MUTE] ==========================================');
+        console.log('[MUTE] ===== SETMUTED v9 CALLED =====', muted);
+        console.log('[MUTE] ==========================================');
         this._isMuted = muted;
         
         if (!this.localParticipant) {
@@ -373,20 +388,123 @@ class LiveKitClient {
             return;
         }
         
-        try {
-            // THE FIX: Use LiveKit's native setMicrophoneEnabled
-            // When we published with setMicrophoneEnabled(true), LiveKit created a proper
-            // LocalAudioTrack with full SFU integration. Calling setMicrophoneEnabled(false)
-            // tells the SFU to STOP forwarding this track to subscribers.
-            // This is fundamentally different from the old approach of publishTrack(rawMediaStreamTrack)
-            // where the SFU didn't have proper control over the track.
-            await this.localParticipant.setMicrophoneEnabled(!muted);
-            console.log('[MUTE] setMicrophoneEnabled(' + !muted + ') SUCCESS');
-        } catch (e) {
-            console.error('[MUTE] setMicrophoneEnabled failed:', e);
+        // DIAGNOSTIC: Show ALL current audio publications BEFORE mute action
+        console.log('[MUTE] --- BEFORE STATE ---');
+        console.log('[MUTE] audioTrackPublications size:', this.localParticipant.audioTrackPublications?.size);
+        if (this.localParticipant.audioTrackPublications) {
+            this.localParticipant.audioTrackPublications.forEach((pub, sid) => {
+                console.log('[MUTE]   pub sid:', sid);
+                console.log('[MUTE]   pub.source:', pub.source);
+                console.log('[MUTE]   pub.isMuted:', pub.isMuted);
+                console.log('[MUTE]   pub.track:', pub.track);
+                console.log('[MUTE]   pub.track?.isMuted:', pub.track?.isMuted);
+                console.log('[MUTE]   pub.track?.mediaStreamTrack:', pub.track?.mediaStreamTrack);
+                console.log('[MUTE]   pub.track?.mediaStreamTrack?.enabled:', pub.track?.mediaStreamTrack?.enabled);
+                console.log('[MUTE]   pub.track?.mediaStreamTrack?.readyState:', pub.track?.mediaStreamTrack?.readyState);
+            });
+        }
+        
+        if (muted) {
+            // ============================================
+            // MUTING — try EVERYTHING
+            // ============================================
+            console.log('[MUTE] === MUTING (disabling audio) ===');
+            
+            // STRATEGY 1: setMicrophoneEnabled(false) — tells LiveKit to unpublish mic
+            try {
+                console.log('[MUTE] Strategy 1: setMicrophoneEnabled(false)...');
+                await this.localParticipant.setMicrophoneEnabled(false);
+                console.log('[MUTE] Strategy 1: SUCCESS');
+            } catch (e) {
+                console.error('[MUTE] Strategy 1 FAILED:', e);
+            }
+            
+            // STRATEGY 2: For each audio publication, call pub.mute() or pub.track.stop()
+            try {
+                console.log('[MUTE] Strategy 2: Direct track manipulation...');
+                if (this.localParticipant.audioTrackPublications) {
+                    this.localParticipant.audioTrackPublications.forEach((pub, sid) => {
+                        console.log('[MUTE]   Processing pub:', sid);
+                        
+                        // 2a: Try publication.setMuted(true)
+                        if (typeof pub.setMuted === 'function') {
+                            console.log('[MUTE]   2a: pub.setMuted(true)...');
+                            pub.setMuted(true);
+                            console.log('[MUTE]   2a: done, pub.isMuted now:', pub.isMuted);
+                        }
+                        
+                        // 2b: Disable the underlying MediaStreamTrack
+                        if (pub.track && pub.track.mediaStreamTrack) {
+                            console.log('[MUTE]   2b: mediaStreamTrack.enabled = false...');
+                            pub.track.mediaStreamTrack.enabled = false;
+                            console.log('[MUTE]   2b: done, enabled now:', pub.track.mediaStreamTrack.enabled);
+                        }
+                        
+                        // 2c: Try track.mute() if available (LocalTrack method)
+                        if (pub.track && typeof pub.track.mute === 'function') {
+                            console.log('[MUTE]   2c: track.mute()...');
+                            pub.track.mute();
+                            console.log('[MUTE]   2c: done');
+                        }
+
+                        // 2d: Stop the track entirely (nuclear option)
+                        if (pub.track && pub.track.mediaStreamTrack) {
+                            console.log('[MUTE]   2d: mediaStreamTrack.stop() (NUCLEAR)...');
+                            pub.track.mediaStreamTrack.stop();
+                            console.log('[MUTE]   2d: done, readyState now:', pub.track.mediaStreamTrack.readyState);
+                        }
+                    });
+                }
+                console.log('[MUTE] Strategy 2: COMPLETE');
+            } catch (e) {
+                console.error('[MUTE] Strategy 2 FAILED:', e);
+            }
+            
+        } else {
+            // ============================================
+            // UNMUTING — re-enable microphone
+            // ============================================
+            console.log('[MUTE] === UNMUTING (re-enabling audio) ===');
+            
+            try {
+                // Build audio capture options (same as publishMicrophone)
+                const inputDevice = localStorage.getItem('voice_chat_input_device');
+                const noiseSuppression = localStorage.getItem('voice_chat_noise_suppression') === 'true';
+                const echoCancellation = localStorage.getItem('voice_chat_echo_cancellation') !== 'false';
+                
+                const opts = {
+                    echoCancellation: echoCancellation,
+                    noiseSuppression: noiseSuppression,
+                    autoGainControl: true,
+                };
+                
+                if (inputDevice) {
+                    opts.deviceId = inputDevice;
+                }
+                
+                console.log('[MUTE] Calling setMicrophoneEnabled(true) with opts...');
+                await this.localParticipant.setMicrophoneEnabled(true, opts);
+                console.log('[MUTE] setMicrophoneEnabled(true) SUCCESS');
+            } catch (e) {
+                console.error('[MUTE] Unmute FAILED:', e);
+            }
+        }
+        
+        // DIAGNOSTIC: Show ALL audio publications AFTER mute action
+        console.log('[MUTE] --- AFTER STATE ---');
+        console.log('[MUTE] audioTrackPublications size:', this.localParticipant.audioTrackPublications?.size);
+        if (this.localParticipant.audioTrackPublications) {
+            this.localParticipant.audioTrackPublications.forEach((pub, sid) => {
+                console.log('[MUTE]   pub sid:', sid);
+                console.log('[MUTE]   pub.isMuted:', pub.isMuted);
+                console.log('[MUTE]   pub.track:', pub.track);
+                console.log('[MUTE]   pub.track?.mediaStreamTrack?.enabled:', pub.track?.mediaStreamTrack?.enabled);
+                console.log('[MUTE]   pub.track?.mediaStreamTrack?.readyState:', pub.track?.mediaStreamTrack?.readyState);
+            });
         }
         
         console.log('[MUTE] COMPLETE, isMuted:', muted);
+        console.log('[MUTE] ==========================================');
     }
     
     /**
@@ -462,16 +580,12 @@ class LiveKitClient {
      * Get all participants in the room
      */
     getParticipants() {
-        console.log('[LIVEKIT] getParticipants called');
+        // Reduced logging — only log on changes
         
         // Always try to get from room first (more accurate)
         if (!this.room) {
-            console.log('[LIVEKIT] No room, returning known participants:', this.knownParticipants.length);
             return this.knownParticipants;
         }
-        
-        console.log('[LIVEKIT] room.state:', this.room.state);
-        console.log('[LIVEKIT] room.name:', this.room.name);
         
         // Get remote participants from room
         let participants = [];
@@ -480,12 +594,10 @@ class LiveKitClient {
         if (this.room.remoteParticipants) {
             if (this.room.remoteParticipants instanceof Map) {
                 const size = this.room.remoteParticipants.size;
-                console.log('[LIVEKIT] remoteParticipants Map size:', size);
                 if (size > 0) {
                     participants = Array.from(this.room.remoteParticipants.values());
                 }
             } else if (typeof this.room.remoteParticipants === 'object') {
-                console.log('[LIVEKIT] remoteParticipants is object');
                 participants = Object.values(this.room.remoteParticipants);
             }
         }
@@ -494,7 +606,6 @@ class LiveKitClient {
         if (participants.length === 0 && this.room.participants) {
             if (this.room.participants instanceof Map) {
                 const size = this.room.participants.size;
-                console.log('[LIVEKIT] participants Map size:', size);
                 if (size > 0) {
                     participants = Array.from(this.room.participants.values());
                     // Filter out local participant
@@ -505,11 +616,6 @@ class LiveKitClient {
         
         // Update knownParticipants with current room state
         this.knownParticipants = participants;
-        
-        console.log('[LIVEKIT] Found remote participants:', participants.length);
-        participants.forEach(p => {
-            console.log('[LIVEKIT]   - identity:', p.identity, 'name:', p.name, 'isSpeaking:', p.isSpeaking);
-        });
         
         return participants;
     }
