@@ -128,3 +128,39 @@ async def generate_token(
         url=livekit_url,
         room_name=f"channel-{channel.id}"
     )
+
+
+@router.get("/token_debug")
+async def generate_debug_token(channel_id: int, user_id: int = 999, username: str = "debug"):
+    """
+    Debug endpoint: generate a LiveKit token without DB checks.
+    WARNING: This endpoint is intended for local debugging only. Do NOT expose in production.
+    """
+    # Ensure LiveKit config
+    if not LIVEKIT_URL or not LIVEKIT_API_KEY or not LIVEKIT_API_SECRET:
+        raise HTTPException(status_code=503, detail="LiveKit is not configured."
+                            )
+
+    from livekit.api import VideoGrants
+
+    print(f"[LIVEKIT DEBUG] Generating debug token for room=channel-{channel_id}, user={user_id}, username={username}")
+
+    token = AccessToken(api_key=LIVEKIT_API_KEY, api_secret=LIVEKIT_API_SECRET)
+    token = token.with_identity(str(user_id))
+    token = token.with_name(username)
+
+    grants = VideoGrants(room=f"channel-{channel_id}", room_join=True, can_publish=True, can_subscribe=True)
+    token = token.with_grants(grants)
+
+    livekit_url = LIVEKIT_URL.strip().rstrip('/')
+    if livekit_url.startswith('https://'):
+        livekit_url = livekit_url.replace('https://', 'wss://', 1)
+
+    jwt_token = token.to_jwt()
+    print(f"[LIVEKIT DEBUG] token len {len(jwt_token)} url={livekit_url}")
+
+    return {
+        'token': jwt_token,
+        'url': livekit_url,
+        'room_name': f"channel-{channel_id}",
+    }
