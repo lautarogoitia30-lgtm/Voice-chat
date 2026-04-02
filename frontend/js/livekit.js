@@ -14,30 +14,62 @@ class LiveKitClient {
         this.knownParticipants = []; // Track known participants manually
         this.audioElements = []; // Store all audio elements for control
         this.localAudioTrack = null; // Store local audio track for mute/unmute
+        // State flags to prevent race conditions between connect/disconnect
+        this._connecting = false;
+        this._disconnecting = false;
     }
     
     /**
      * Connect to a LiveKit room (voice channel)
      */
     async connect(url, token) {
+        // Prevent concurrent connect attempts
+        if (this._connecting) {
+            console.log('[LIVEKIT] Connect already in progress - waiting up to 3s for it to finish');
+            const waitForConnect = new Promise(resolve => {
+                const start = Date.now();
+                const iv = setInterval(() => {
+                    if (!this._connecting) {
+                        clearInterval(iv);
+                        resolve(true);
+                    } else if (Date.now() - start > 3000) {
+                        clearInterval(iv);
+                        resolve(false);
+                    }
+                }, 50);
+            });
+            const ok = await waitForConnect;
+            if (!ok) {
+                console.warn('[LIVEKIT] Previous connect did not finish in time - aborting new connect');
+                throw new Error('Connect already in progress');
+            }
+        }
+
+        this._connecting = true;
         try {
             // FIRST: Always ensure clean disconnect from ANY previous room
             // This prevents the "Client initiated disconnect" error on reconnect
             console.log('[LIVEKIT] PRE-CONNECT CLEANUP: room exists?', !!this.room);
             if (this.room) {
                 console.log('[LIVEKIT] PRE-CONNECT: Previous room state:', this.room.state);
-                try {
-                    // Try to disconnect gracefully but don't wait too long
-                    const disconnectPromise = this.room.disconnect();
-                    await Promise.race([
-                        disconnectPromise,
-                        new Promise(resolve => setTimeout(resolve, 1000))
-                    ]);
-                    console.log('[LIVEKIT] PRE-CONNECT: Graceful disconnect completed');
-                } catch (e) {
-                    console.log('[LIVEKIT] PRE-CONNECT: Graceful disconnect failed, force cleaning:', e.message);
+                // If the previous room is still connecting/connected, wait for a graceful disconnect
+                if (this.room.state && this.room.state !== 'disconnected') {
+                    console.log('[LIVEKIT] PRE-CONNECT: waiting for previous room to disconnect gracefully');
+                    try {
+                        this._disconnecting = true;
+                        await Promise.race([
+                            this.room.disconnect(),
+                            new Promise(resolve => setTimeout(resolve, 1500))
+                        ]);
+                        console.log('[LIVEKIT] PRE-CONNECT: Graceful disconnect completed');
+                    } catch (e) {
+                        console.log('[LIVEKIT] PRE-CONNECT: Graceful disconnect failed, force cleaning:', e?.message || e);
+                    } finally {
+                        this._disconnecting = false;
+                    }
                 }
-                // Force null out the room object
+
+                // Clear references to ensure a clean start
                 this.room = null;
                 this.localParticipant = null;
                 this.knownParticipants = [];
@@ -189,9 +221,15 @@ class LiveKitClient {
                 console.error('[LIVEKIT] FATAL: URL is not WSS or WS! Got:', cleanUrl);
                 throw new Error(`Invalid LiveKit URL protocol. Must be wss:// or ws://, got: ${cleanUrl}`);
             }
-            
+
             console.log('[LIVEKIT] URL validation passed, connecting...');
-            await this.room.connect(cleanUrl, token);
+            try {
+                await this.room.connect(cleanUrl, token);
+            } catch (connErr) {
+                console.error('[LIVEKIT] room.connect failed:', connErr);
+                // Do not auto-disconnect here; just rethrow so caller can decide
+                throw connErr;
+            }
             
             this.localParticipant = this.room.localParticipant;
             
@@ -216,6 +254,8 @@ class LiveKitClient {
         } catch (error) {
             console.error('Failed to connect to LiveKit:', error);
             throw error;
+        } finally {
+            this._connecting = false;
         }
     }
     
@@ -389,15 +429,33 @@ class LiveKitClient {
      * Disconnect from the current room
      */
     async disconnect() {
-        if (this.room) {
-            console.log('[LIVEKIT] Disconnecting...');
+        if (this._disconnecting) {
+            console.log('[LIVEKIT] Disconnect already in progress, skipping duplicate call');
+            return;
+        }
+
+        if (!this.room) {
+            console.log('[LIVEKIT] No room to disconnect');
+            return;
+        }
+
+        this._disconnecting = true;
+        try {
+            console.log('[LIVEKIT] Disconnecting... (caller stack)');
+            console.log(new Error().stack.split('\n').slice(1,4).join('\n'));
             await this.room.disconnect();
+            console.log('Disconnected from LiveKit room');
+        } catch (e) {
+            console.warn('[LIVEKIT] Error during disconnect:', e);
+        } finally {
+            // Clear local references only after attempt
             this.room = null;
             this.localParticipant = null;
             this.knownParticipants = []; // Clear known participants
             this.audioElements = []; // Clear audio elements
-            console.log('Disconnected from LiveKit room');
+            this._disconnecting = false;
         }
+        
     }
     
     /**
