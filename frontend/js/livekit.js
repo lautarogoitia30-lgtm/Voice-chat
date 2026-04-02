@@ -468,8 +468,15 @@ class LiveKitClient {
             if (this.audioContext.state === 'suspended') {
                 this.audioContext.resume();
             }
-            this.inputGainNode.gain.value = volume / 100;
-            console.log('[AUDIO] Volume set to:', volume + '%');
+            const gainValue = volume / 100;
+            // If currently muted, just save the value for when we unmute
+            if (this._isMuted) {
+                this._preMuteGain = gainValue;
+                console.log('[AUDIO] Muted — saved volume for unmute:', volume + '%');
+            } else {
+                this.inputGainNode.gain.value = gainValue;
+                console.log('[AUDIO] Volume set to:', volume + '%');
+            }
         } else {
             console.log('[AUDIO] Volume will apply on next join');
         }
@@ -477,66 +484,43 @@ class LiveKitClient {
     
     /**
      * Set muted state (mute/unmute microphone)
-     * Uses publication.setMuted() - the proper LiveKit API
+     * Uses gain node to silence the audio pipeline.
+     * publication.setMuted() does NOT work with AudioContext processed tracks
+     * because the published track comes from MediaStreamDestination, not the
+     * original mic track. Setting gain to 0 is the correct approach since the
+     * gain node feeds directly into the published stream.
      */
     async setMuted(muted) {
         console.log('[MUTE] ===== SETMUTED CALLED =====', muted);
         
-        const lp = this.localParticipant || (this.room ? this.room.localParticipant : null);
-        
-        if (!lp) {
-            console.error('[MUTE] No localParticipant!');
+        if (!this.inputGainNode || !this.audioContext) {
+            console.warn('[MUTE] No inputGainNode or audioContext — cannot mute');
             this._isMuted = muted;
             return;
         }
-        
+
         try {
-            // Get the publication directly from localParticipant
-            // Try to get microphone publication
-            let publication = null;
-            
-            // Try different methods to get the audio publication
-            if (lp.getTrackPublication) {
-                // Method 1: getTrackPublication with Track.Source
-                const LK = window.LiveKit;
-                if (LK && LK.Track && LK.Track.Source) {
-                    publication = lp.getTrackPublication(LK.Track.Source.Microphone);
-                    console.log('[MUTE] Got publication via getTrackPublication(Microphone):', !!publication);
-                }
+            if (this.audioContext.state === 'suspended') {
+                await this.audioContext.resume();
             }
-            
-            // Method 2: Try to get from getPublishedTracks if available
-            if (!publication && lp.getPublishedTracks) {
-                const tracks = lp.getPublishedTracks();
-                for (const pub of tracks) {
-                    if (pub.kind === 'audio') {
-                        publication = pub;
-                        console.log('[MUTE] Got audio publication from getPublishedTracks');
-                        break;
-                    }
-                }
-            }
-            
-            // Method 3: Try localAudioPublication that was stored during publish
-            if (!publication && this.localAudioPublication) {
-                publication = this.localAudioPublication;
-                console.log('[MUTE] Using stored this.localAudioPublication');
-            }
-            
-            if (publication && typeof publication.setMuted === 'function') {
-                console.log('[MUTE] Calling publication.setMuted(', muted, ')');
-                publication.setMuted(muted);
-                console.log('[MUTE] setMuted called successfully');
+
+            if (muted) {
+                // Save current gain value before muting so we can restore it
+                this._preMuteGain = this.inputGainNode.gain.value;
+                this.inputGainNode.gain.value = 0;
+                console.log('[MUTE] Gain set to 0 (was', this._preMuteGain, ')');
             } else {
-                console.warn('[MUTE] No valid publication found or setMuted not available');
-                // Fallback: just update the internal state
+                // Restore the gain value from before mute
+                const restoreValue = this._preMuteGain != null ? this._preMuteGain : 0.15;
+                this.inputGainNode.gain.value = restoreValue;
+                console.log('[MUTE] Gain restored to', restoreValue);
             }
         } catch (e) {
-            console.error('[MUTE] Error calling setMuted:', e);
+            console.error('[MUTE] Error setting gain:', e);
         }
         
         this._isMuted = muted;
-        console.log('[MUTE] COMPLETE');
+        console.log('[MUTE] COMPLETE, isMuted:', muted);
     }
     
     /**
