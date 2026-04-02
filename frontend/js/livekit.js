@@ -5,7 +5,7 @@
  */
 
 // DEBUG: Make sure this is the latest version
-console.log('=== LIVEKIT CLIENT v6 LOADED ===');
+console.log('=== LIVEKIT CLIENT v7 LOADED ===');
 
 class LiveKitClient {
     constructor() {
@@ -91,7 +91,8 @@ class LiveKitClient {
             const livekit = await import('https://cdn.jsdelivr.net/npm/livekit-client@2/+esm');
             console.log('LiveKit imported:', livekit);
             
-            const { Room, RoomEvent } = livekit;
+            const { Room, RoomEvent, Track } = livekit;
+            this._Track = Track; // Store Track class for later use (e.g. source tagging)
             console.log('Room class:', Room);
             
             this.room = new Room({
@@ -392,8 +393,13 @@ class LiveKitClient {
             console.log('[AUDIO] Step 9: About to publish track, localParticipant:', !!this.localParticipant);
             
             // Try to publish with timeout handling
+            const publishOpts = { simulcast: false };
+            // Tag as microphone source so LiveKit SFU handles mute correctly
+            if (this._Track && this._Track.Source) {
+                publishOpts.source = this._Track.Source.Microphone;
+            }
                 try {
-                    console.log('[AUDIO] Step 10: First publish attempt...');
+                    console.log('[AUDIO] Step 10: First publish attempt with opts:', JSON.stringify(publishOpts));
                     // publishTrack can be undefined if participant is not ready; guard again
                     if (!this.localParticipant.publishTrack && !this.localParticipant.publishLocalTrack && !this.localParticipant.publishTracks) {
                         throw new Error('localParticipant.publishTrack unavailable');
@@ -402,17 +408,18 @@ class LiveKitClient {
                     // Prefer publishTrack if available
                     let publication;
                     if (this.localParticipant.publishTrack) {
-                        publication = await this.localParticipant.publishTrack(processedTrack, { simulcast: false });
+                        publication = await this.localParticipant.publishTrack(processedTrack, publishOpts);
                         // Store reference for mute/unmute
                         this.localAudioTrack = processedTrack;
                         this.localAudioPublication = publication;
-                        console.log('[AUDIO] Track reference stored in this.localAudioTrack and publication in this.localAudioPublication');
+                        console.log('[AUDIO] Track reference stored. Publication:', publication);
+                        console.log('[AUDIO] Publication type:', typeof publication, 'setMuted:', typeof publication?.setMuted);
                     } else if (this.localParticipant.publishLocalTrack) {
-                        publication = await this.localParticipant.publishLocalTrack(processedTrack, { simulcast: false });
+                        publication = await this.localParticipant.publishLocalTrack(processedTrack, publishOpts);
                         this.localAudioTrack = processedTrack;
                         this.localAudioPublication = publication;
                     } else if (this.localParticipant.publishTracks) {
-                        const publications = await this.localParticipant.publishTracks([processedTrack], { simulcast: false });
+                        const publications = await this.localParticipant.publishTracks([processedTrack], publishOpts);
                         publication = publications[0];
                         this.localAudioTrack = processedTrack;
                         this.localAudioPublication = publication;
@@ -428,15 +435,15 @@ class LiveKitClient {
                     // Try again but verify methods exist
                     let publication;
                     if (this.localParticipant.publishTrack) {
-                        publication = await this.localParticipant.publishTrack(processedTrack, { simulcast: false });
+                        publication = await this.localParticipant.publishTrack(processedTrack, publishOpts);
                         this.localAudioTrack = processedTrack;
                         this.localAudioPublication = publication;
                     } else if (this.localParticipant.publishLocalTrack) {
-                        publication = await this.localParticipant.publishLocalTrack(processedTrack, { simulcast: false });
+                        publication = await this.localParticipant.publishLocalTrack(processedTrack, publishOpts);
                         this.localAudioTrack = processedTrack;
                         this.localAudioPublication = publication;
                     } else if (this.localParticipant.publishTracks) {
-                        const publications = await this.localParticipant.publishTracks([processedTrack], { simulcast: false });
+                        const publications = await this.localParticipant.publishTracks([processedTrack], publishOpts);
                         publication = publications[0];
                         this.localAudioTrack = processedTrack;
                         this.localAudioPublication = publication;
@@ -445,7 +452,7 @@ class LiveKitClient {
                     }
 
                     console.log('[AUDIO] Step 13: SUCCESS - Track published on retry!');
-                    console.log('[AUDIO] Track reference and publication stored after retry');
+                    console.log('[AUDIO] Publication type:', typeof publication, 'setMuted:', typeof publication?.setMuted);
                 }
             
             console.log('[AUDIO] Mic published with Chrome experimental NS!');
@@ -485,26 +492,58 @@ class LiveKitClient {
     
     /**
      * Set muted state (mute/unmute microphone)
-     * TRIPLE MUTE STRATEGY (all three applied simultaneously):
-     *   1. processedTrack.enabled = false — WebRTC-level mute (most reliable)
-     *   2. inputGainNode.disconnect() — physically cuts the audio graph
-     *   3. inputGainNode.gain.value = 0 — belt and suspenders
-     * This ensures NO audio leaks through the MediaStreamDestination pipeline.
+     * STRATEGY (per LiveKit official docs):
+     *   1. publication.setMuted(true) — tells LiveKit SFU to stop forwarding audio (THE correct way)
+     *   2. localParticipant.audioTrackPublications iterate as fallback
+     *   3. processedTrack.enabled = false — WebRTC-level backup
+     *   4. inputGainNode.disconnect() — physical audio graph cut
      */
     async setMuted(muted) {
         console.log('[MUTE] ===== SETMUTED CALLED =====', muted);
         
         this._isMuted = muted;
+        let livekitMuted = false;
 
-        // === STRATEGY 1: WebRTC-level track disable (most reliable) ===
+        // === STRATEGY 1: Use the stored publication reference (official LiveKit API) ===
+        if (this.localAudioPublication && typeof this.localAudioPublication.setMuted === 'function') {
+            try {
+                await this.localAudioPublication.setMuted(muted);
+                console.log('[MUTE] publication.setMuted(' + muted + ') SUCCESS');
+                livekitMuted = true;
+            } catch (e) {
+                console.error('[MUTE] publication.setMuted failed:', e);
+            }
+        } else {
+            console.warn('[MUTE] No localAudioPublication or setMuted method');
+        }
+
+        // === STRATEGY 2: Iterate all audio publications on localParticipant ===
+        if (!livekitMuted && this.localParticipant) {
+            try {
+                const audioPublications = this.localParticipant.audioTrackPublications;
+                if (audioPublications && audioPublications.size > 0) {
+                    for (const [sid, pub] of audioPublications) {
+                        if (pub && typeof pub.setMuted === 'function') {
+                            await pub.setMuted(muted);
+                            console.log('[MUTE] audioTrackPublications[' + sid + '].setMuted(' + muted + ') SUCCESS');
+                            livekitMuted = true;
+                        }
+                    }
+                } else {
+                    console.warn('[MUTE] No audioTrackPublications found');
+                }
+            } catch (e) {
+                console.error('[MUTE] audioTrackPublications iteration failed:', e);
+            }
+        }
+
+        // === STRATEGY 3: WebRTC-level track disable ===
         if (this._processedTrack) {
             this._processedTrack.enabled = !muted;
             console.log('[MUTE] processedTrack.enabled =', !muted);
-        } else {
-            console.warn('[MUTE] No _processedTrack reference — track-level mute skipped');
         }
 
-        // === STRATEGY 2: Disconnect/reconnect the gain node from destination ===
+        // === STRATEGY 4: Disconnect/reconnect the gain node from destination ===
         if (this.inputGainNode && this._mediaStreamDest) {
             try {
                 if (muted) {
@@ -515,18 +554,16 @@ class LiveKitClient {
                     console.log('[MUTE] GainNode RECONNECTED to MediaStreamDestination');
                 }
             } catch (e) {
-                // disconnect() throws if not connected; connect() throws if already connected
                 console.warn('[MUTE] disconnect/connect error (safe to ignore):', e.message);
             }
         }
 
-        // === STRATEGY 3: Gain value = 0 (belt and suspenders) ===
+        // === STRATEGY 5: Gain value = 0 ===
         if (this.inputGainNode && this.audioContext) {
             try {
                 if (this.audioContext.state === 'suspended') {
                     await this.audioContext.resume();
                 }
-
                 if (muted) {
                     this._preMuteGain = this.inputGainNode.gain.value;
                     this.inputGainNode.gain.value = 0;
@@ -541,7 +578,7 @@ class LiveKitClient {
             }
         }
         
-        console.log('[MUTE] COMPLETE, isMuted:', muted);
+        console.log('[MUTE] COMPLETE, isMuted:', muted, 'livekitMuted:', livekitMuted);
     }
     
     /**
