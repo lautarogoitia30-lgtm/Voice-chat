@@ -176,10 +176,18 @@ class LiveKitClient {
             
             // Connect to the room
             console.log('[LIVEKIT] About to connect to:', url);
+            console.log('[LIVEKIT] URL protocol:', url.startsWith('wss://') ? 'WSS (correct)' : url.startsWith('https://') ? 'HTTPS (wrong!)' : 'OTHER');
             console.log('[LIVEKIT] Token (first 50 chars):', token.substring(0, 50) + '...');
             console.log('[LIVEKIT] Token length:', token.length);
             console.log('[LIVEKIT] Token is string:', typeof token === 'string');
             
+            // Validate URL protocol
+            if (!url.startsWith('wss://') && !url.startsWith('ws://')) {
+                console.error('[LIVEKIT] FATAL: URL is not WSS or WS! Got:', url);
+                throw new Error(`Invalid LiveKit URL protocol. Must be wss:// or ws://, got: ${url}`);
+            }
+            
+            console.log('[LIVEKIT] URL validation passed, connecting...');
             await this.room.connect(url, token);
             
             this.localParticipant = this.room.localParticipant;

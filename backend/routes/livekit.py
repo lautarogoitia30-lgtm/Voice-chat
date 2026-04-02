@@ -79,6 +79,14 @@ async def generate_token(
     # Generate LiveKit token - new API
     from livekit.api import VideoGrants
     
+    print(f"[LIVEKIT TOKEN GENERATION]")
+    print(f"  API_KEY exists: {bool(LIVEKIT_API_KEY)}")
+    print(f"  API_SECRET exists: {bool(LIVEKIT_API_SECRET)}")
+    print(f"  LIVEKIT_URL: {LIVEKIT_URL}")
+    print(f"  Room name: channel-{channel.id}")
+    print(f"  User ID: {current_user['user_id']}")
+    print(f"  Username: {current_user['username']}")
+    
     token = AccessToken(
         api_key=LIVEKIT_API_KEY,
         api_secret=LIVEKIT_API_SECRET
@@ -97,11 +105,24 @@ async def generate_token(
     )
     token = token.with_grants(grants)
     
-    # Build URLs
+    # Build URLs - CRITICAL: Convert HTTPS to WSS for WebSocket
     livekit_url = LIVEKIT_URL.rstrip("/")
     
+    # Convert HTTPS to WSS (WebSocket Secure)
+    if livekit_url.startswith("https://"):
+        livekit_url = livekit_url.replace("https://", "wss://", 1)
+        print(f"[LIVEKIT URL] Converted HTTPS to WSS: {livekit_url}")
+    elif not livekit_url.startswith("wss://"):
+        print(f"[LIVEKIT URL] WARNING - URL doesn't start with https:// or wss://: {livekit_url}")
+    
+    jwt_token = token.to_jwt()
+    print(f"[LIVEKIT TOKEN GENERATED]")
+    print(f"  Token length: {len(jwt_token)}")
+    print(f"  Token (first 50 chars): {jwt_token[:50]}...")
+    print(f"  Final LiveKit URL (WSS): {livekit_url}")
+    
     return LiveKitTokenResponse(
-        token=token.to_jwt(),
+        token=jwt_token,
         url=livekit_url,
         room_name=f"channel-{channel.id}"
     )
