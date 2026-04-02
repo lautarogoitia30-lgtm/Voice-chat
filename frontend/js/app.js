@@ -141,6 +141,28 @@ function init() {
     setupEventListeners(elements);
 }
 
+// Ensure the voice container exists on startup so livekit can attach audio elements
+(function ensureVoiceContainer(){
+    try {
+        if (!document.getElementById('voice-container')) {
+            const c = document.createElement('div');
+            c.id = 'voice-container';
+            // Keep it visually hidden but available for audio elements
+            c.style.position = 'fixed';
+            c.style.width = '1px';
+            c.style.height = '1px';
+            c.style.overflow = 'hidden';
+            c.style.pointerEvents = 'none';
+            c.style.bottom = '0';
+            c.style.right = '0';
+            document.body.appendChild(c);
+            console.log('[APP] Created #voice-container fallback');
+        }
+    } catch (e) {
+        console.warn('[APP] Failed to ensure #voice-container:', e);
+    }
+})();
+
 // Setup event listeners
 function setupEventListeners(elements) {
     // Auth forms
