@@ -477,31 +477,11 @@ class LiveKitClient {
     
     /**
      * Set muted state (mute/unmute microphone)
-     * Uses direct browser track control as fallback when LiveKit APIs fail
+     * Unpublish and republish track - most reliable method!
      */
     async setMuted(muted) {
         console.log('[MUTE] ===== SETMUTED CALLED =====', muted, new Date().toISOString());
-        console.log('[MUTE] Current _isMuted state:', this._isMuted);
         
-        // If we're trying to unmute and we have a stored track, just enable it directly
-        if (!muted && this.localAudioTrack) {
-            console.log('[MUTE] Direct browser track enable (unmute)');
-            this.localAudioTrack.enabled = true;
-            this._isMuted = false;
-            console.log('[MUTE] COMPLETE - track enabled');
-            return;
-        }
-        
-        // If we're trying to mute and we have a stored track, disable it directly
-        if (muted && this.localAudioTrack) {
-            console.log('[MUTE] Direct browser track disable (mute)');
-            this.localAudioTrack.enabled = false;
-            this._isMuted = true;
-            console.log('[MUTE] COMPLETE - track disabled');
-            return;
-        }
-        
-        // If no stored track, try the LiveKit API as fallback
         const lp = this.localParticipant || (this.room ? this.room.localParticipant : null);
         
         if (!lp) {
@@ -510,12 +490,34 @@ class LiveKitClient {
             return;
         }
         
-        console.log('[MUTE] Trying setMicrophoneEnabled as fallback...');
-        try {
-            await lp.setMicrophoneEnabled(!muted);
-            console.log('[MUTE] setMicrophoneEnabled called');
-        } catch (e) {
-            console.warn('[MUTE] setMicrophoneEnabled error:', e);
+        console.log('[MUTE] Using unpublish/republish method...');
+        
+        if (muted) {
+            // MUTE: unpublish the track
+            console.log('[MUTE] Unpublishing audio track...');
+            try {
+                // Find and unpublish all audio tracks
+                if (lp.audioTracks) {
+                    for (const [sid, pub] of lp.audioTracks) {
+                        if (pub.kind === 'audio') {
+                            console.log('[MUTE] Unpublishing track:', sid);
+                            await lp.unpublishTrack(pub.track);
+                        }
+                    }
+                }
+                console.log('[MUTE] Track unpublished successfully');
+            } catch (e) {
+                console.warn('[MUTE] Unpublish error:', e);
+            }
+        } else {
+            // UNMUTE: republish the microphone
+            console.log('[MUTE] Re-publishing microphone...');
+            try {
+                await this.publishMicrophone();
+                console.log('[MUTE] Microphone re-published successfully');
+            } catch (e) {
+                console.warn('[MUTE] Republish error:', e);
+            }
         }
         
         this._isMuted = muted;
