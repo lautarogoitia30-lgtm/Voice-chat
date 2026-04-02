@@ -454,18 +454,17 @@ class LiveKitClient {
     
     /**
      * Set muted state (mute/unmute microphone)
-     * Using the gain node for instant mute
      */
     async setMuted(muted) {
         console.log('[MUTE] Setting mute to:', muted);
         
-        if (this.inputGainNode) {
-            this.inputGainNode.gain.value = muted ? 0 : 0.5;
-            console.log('[MUTE] Muted:', muted);
-        } else {
-            // Fallback to setMicrophoneEnabled
-            if (this.localParticipant) {
+        // Always use LiveKit's setMicrophoneEnabled - it's more reliable
+        if (this.localParticipant) {
+            try {
                 await this.localParticipant.setMicrophoneEnabled(!muted);
+                console.log('[MUTE] Microphone', muted ? 'muted' : 'unmuted');
+            } catch (e) {
+                console.error('[MUTE] Error:', e);
             }
         }
     }
