@@ -447,10 +447,18 @@ function renderMembers(members) {
 
 // Select group
 async function selectGroup(group) {
+    console.log('selectGroup called with:', group);
     state.selectedGroup = group;
     state.selectedChannel = null;
     const elements = getElements();
-    elements.currentServerName.textContent = group.name;
+    console.log('currentServerName element:', elements.currentServerName);
+    console.log('Setting currentServerName to:', group.name);
+    if (elements.currentServerName) {
+        elements.currentServerName.textContent = group.name;
+        console.log('After setting, textContent is:', elements.currentServerName.textContent);
+    } else {
+        console.error('currentServerName element not found!');
+    }
     elements.createChannelBtn.classList.remove('hidden');
     elements.editServerBtn.classList.remove('hidden');
     
@@ -552,12 +560,12 @@ async function selectChannel(channel) {
     if (channel.type === 'text') {
         elements.textChat.classList.remove('hidden');
         elements.voiceChat.classList.add('hidden');
-        elements.voiceControls.classList.add('hidden');
+        elements.emptyState.classList.add('hidden');
         window.wsClient.connect(channel.id);
     } else {
         elements.textChat.classList.add('hidden');
         elements.voiceChat.classList.remove('hidden');
-        elements.voiceControls.classList.remove('hidden');
+        elements.emptyState.classList.add('hidden');
         elements.joinVoiceBtn.classList.remove('hidden');
         elements.leaveVoiceBtn.classList.add('hidden');
         
@@ -1232,6 +1240,15 @@ function handleToggleMute() {
     
     updateVoiceControlsUI();
 }
+
+// Alias for button onclick handlers
+window.toggleMuteMic = handleToggleMute;
+window.toggleMuteAudio = function() {
+    console.log('toggleMuteAudio called');
+    // TODO: Implement deafen/unmute speakers
+};
+window.joinVoiceChannel = handleJoinVoice;
+window.leaveVoiceChannel = handleLeaveVoice;
 
 // Toggle deafen (mute speakers)
 function handleToggleDeaf() {
