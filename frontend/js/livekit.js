@@ -421,15 +421,19 @@ class LiveKitClient {
                     // Try again but verify methods exist
                     if (this.localParticipant.publishTrack) {
                         await this.localParticipant.publishTrack(processedTrack, { simulcast: false });
+                        this.localAudioTrack = processedTrack;
                     } else if (this.localParticipant.publishLocalTrack) {
                         await this.localParticipant.publishLocalTrack(processedTrack, { simulcast: false });
+                        this.localAudioTrack = processedTrack;
                     } else if (this.localParticipant.publishTracks) {
                         await this.localParticipant.publishTracks([processedTrack], { simulcast: false });
+                        this.localAudioTrack = processedTrack;
                     } else {
                         throw new Error('No publish method available on localParticipant');
                     }
 
                     console.log('[AUDIO] Step 13: SUCCESS - Track published on retry!');
+                    console.log('[AUDIO] Track reference stored after retry');
                 }
             
             console.log('[AUDIO] Mic published with Chrome experimental NS!');
@@ -465,8 +469,9 @@ class LiveKitClient {
      * Uses stored localAudioTrack reference to avoid timing issues with audioPublications
      */
     async setMuted(muted) {
-        console.log('[MUTE] Setting mute to:', muted, new Date().toISOString());
+        console.log('[MUTE] ===== SETMUTED CALLED =====', muted, new Date().toISOString());
         console.log('[MUTE] Current _isMuted state:', this._isMuted);
+        console.log('[MUTE] localAudioTrack stored:', !!this.localAudioTrack);
         
         // Get the localParticipant (always from room for latest state)
         const lp = this.localParticipant || (this.room ? this.room.localParticipant : null);
@@ -490,7 +495,8 @@ class LiveKitClient {
                     await lp.unpublishTrack(this.localAudioTrack);
                     console.log('[MUTE] Track unpublished successfully');
                 } catch (e) {
-                    console.warn('[MUTE] Unpublish failed:', e);
+                    console.warn('[MUTE] Unpublish failed:', e?.message || e);
+                    console.warn('[MUTE] Full error:', e);
                 }
             } else {
                 // UNMUTE: republish the stored track
@@ -499,9 +505,11 @@ class LiveKitClient {
                     await lp.publishTrack(this.localAudioTrack, { simulcast: false });
                     console.log('[MUTE] Track republished successfully');
                 } catch (e) {
-                    console.warn('[MUTE] Republish failed, re-acquiring microphone:', e);
-                    // Re-acquire microphone
-                    console.log('[MUTE] Calling publishMicrophone to re-acquire...');
+                    console.warn('[MUTE] Republish failed:', e?.message || e);
+                    console.warn('[MUTE] Full error:', e);
+                    // Republish failed - need to re-acquire microphone with NEW track
+                    console.log('[MUTE] Clearing stale track reference and re-acquiring...');
+                    this.localAudioTrack = null;
                     await this.publishMicrophone();
                 }
             }
