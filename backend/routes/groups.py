@@ -3,7 +3,7 @@ Group routes: /groups (list, create), /groups/{id}
 """
 from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, delete
 from sqlalchemy.orm import selectinload
 from typing import List
 
@@ -311,7 +311,22 @@ async def delete_group(
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
     
-    # Delete all memberships first
+    # Delete all voice participants in this group's channels first
+    from backend.models import Channel, VoiceParticipant
+    result = await db.execute(
+        select(Channel).where(Channel.group_id == group_id)
+    )
+    channels = result.scalars().all()
+    for ch in channels:
+        await db.execute(
+            delete(VoiceParticipant).where(VoiceParticipant.channel_id == ch.id)
+        )
+    
+    # Delete all channels
+    for ch in channels:
+        await db.delete(ch)
+    
+    # Delete all memberships
     result = await db.execute(
         select(GroupMember).where(GroupMember.group_id == group_id)
     )
