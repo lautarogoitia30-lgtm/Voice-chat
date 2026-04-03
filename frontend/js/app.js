@@ -559,6 +559,15 @@ function renderChannels(channels) {
                 showEditChannelModal(channel);
             });
             categoryDiv.appendChild(div);
+            
+            // Add voice participants container below this channel
+            const participantsDiv = document.createElement('div');
+            participantsDiv.className = 'voice-channel-participants';
+            participantsDiv.id = 'voice-participants-ch-' + channel.id;
+            categoryDiv.appendChild(participantsDiv);
+            
+            // Load participants for this voice channel
+            loadChannelVoiceParticipants(channel.id);
         });
         
         elements.channelsList.appendChild(categoryDiv);
@@ -583,6 +592,41 @@ function renderChannels(channels) {
         });
         
         elements.channelsList.appendChild(categoryDiv);
+    }
+}
+
+// Load voice participants for a specific channel and render in sidebar
+async function loadChannelVoiceParticipants(channelId) {
+    try {
+        const participants = await API.channels.getVoiceParticipants(channelId);
+        const container = document.getElementById('voice-participants-ch-' + channelId);
+        if (!container) return;
+        
+        container.innerHTML = '';
+        
+        if (!participants || participants.length === 0) return;
+        
+        participants.forEach(p => {
+            const isCurrentUser = p.user_id === state.currentUser?.user_id;
+            const initial = p.username.charAt(0).toUpperCase();
+            const nameDisplay = isCurrentUser ? p.username + ' (vos)' : p.username;
+            
+            const item = document.createElement('div');
+            item.className = 'voice-participant-item';
+            
+            let avatarHtml = '';
+            if (p.avatar_url) {
+                const avatarSrc = p.avatar_url.startsWith('http') ? p.avatar_url : 'https://voice-chat-production-a794.up.railway.app' + p.avatar_url;
+                avatarHtml = `<img src="${avatarSrc}" alt="${p.username}" class="voice-participant-avatar-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"><div class="voice-participant-avatar">${initial}</div>`;
+            } else {
+                avatarHtml = `<div class="voice-participant-avatar">${initial}</div>`;
+            }
+            
+            item.innerHTML = `${avatarHtml}<span class="voice-participant-name">${nameDisplay}</span>`;
+            container.appendChild(item);
+        });
+    } catch (e) {
+        console.log('[VOICE] Error loading participants for channel', channelId, e);
     }
 }
 
@@ -1268,6 +1312,8 @@ async function updateVoiceParticipantsDisplay() {
         
         if (participants.length === 0) {
             partsList.innerHTML = '<div class="text-gray-400 p-2">No hay nadie en voz</div>';
+            // Also update sidebar
+            loadChannelVoiceParticipants(state.selectedChannel.id);
             return;
         }
         
@@ -1303,6 +1349,9 @@ async function updateVoiceParticipantsDisplay() {
             
             partsList.appendChild(div);
         });
+        
+        // Also update sidebar participants
+        loadChannelVoiceParticipants(state.selectedChannel.id);
         
     } catch (e) {
         console.log('[VOICE DB] Error getting participants:', e);
