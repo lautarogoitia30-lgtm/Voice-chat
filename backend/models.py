@@ -61,12 +61,13 @@ class Channel(Base):
 
 
 class GroupMember(Base):
-    """Many-to-many relationship between users and groups."""
+    """Many-to-many relationship between users and groups with role."""
     __tablename__ = "group_members"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     group_id = Column(Integer, ForeignKey("groups.id"), nullable=False)
+    role = Column(String(20), default="member", nullable=False)  # "owner", "admin", "member"
 
     # Relationships
     user = relationship("User", back_populates="memberships")

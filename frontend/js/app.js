@@ -30,12 +30,52 @@ const state = {
     isMuted: false,
     isDeafened: false,
     leftVoice: false, // Track if user explicitly left the voice channel
+    myRole: 'member', // Current user's role in selected group: "owner", "admin", "member"
 };
 
 // Expose state globally so livekit.js can check observer mode
 window.appState = state;
 
 console.log('Initial state:', state);
+
+// ==================== TOAST NOTIFICATIONS ====================
+function showToast(message, type = 'error', duration = 4000) {
+    // Remove existing toast
+    const existing = document.getElementById('app-toast');
+    if (existing) existing.remove();
+    
+    const toast = document.createElement('div');
+    toast.id = 'app-toast';
+    toast.className = `app-toast app-toast-${type}`;
+    toast.innerHTML = `
+        <span class="toast-icon">${type === 'error' ? '❌' : type === 'success' ? '✅' : 'ℹ️'}</span>
+        <span class="toast-message">${message}</span>
+    `;
+    document.body.appendChild(toast);
+    
+    // Animate in
+    requestAnimationFrame(() => toast.classList.add('show'));
+    
+    // Auto-remove
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+    }, duration);
+}
+
+// Permission helpers
+function canCreateChannel() {
+    return state.myRole === 'owner' || state.myRole === 'admin';
+}
+function canEditGroup() {
+    return state.myRole === 'owner' || state.myRole === 'admin';
+}
+function canKickMembers() {
+    return state.myRole === 'owner' || state.myRole === 'admin';
+}
+function canManageRoles() {
+    return state.myRole === 'owner';
+}
 
 // DOM Elements - use function to get them when DOM is ready
 function getElements() {
@@ -443,10 +483,14 @@ function renderMembers(members) {
     // Show members section
     membersSection.classList.remove('hidden');
     
+    // Sort: owner first, then admins, then members
+    const roleOrder = { owner: 0, admin: 1, member: 2 };
+    const sorted = [...members].sort((a, b) => (roleOrder[a.role] || 2) - (roleOrder[b.role] || 2));
+    
     // Clear and render members
     membersList.innerHTML = '';
     
-    members.forEach(member => {
+    sorted.forEach(member => {
         const div = document.createElement('div');
         div.className = 'member-item';
         
@@ -455,25 +499,60 @@ function renderMembers(members) {
         let avatarHtml = '';
         
         if (member.avatar_url) {
-            // Use avatar image
             const avatarSrc = member.avatar_url.startsWith('http') ? member.avatar_url : 'https://voice-chat-production-a794.up.railway.app' + member.avatar_url;
             avatarHtml = `<img src="${avatarSrc}" alt="${member.username}" class="member-avatar-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"><div class="member-avatar" style="display:none">${initial}</div>`;
         } else {
             avatarHtml = `<div class="member-avatar">${initial}</div>`;
         }
         
+        // Role badge
+        const role = member.role || 'member';
+        let roleBadge = '';
+        if (role === 'owner') {
+            roleBadge = '<span class="role-badge role-owner" title="Owner">👑</span>';
+        } else if (role === 'admin') {
+            roleBadge = '<span class="role-badge role-admin" title="Admin">🛡️</span>';
+        }
+        
         // Check if it's the current user
         const isCurrentUser = member.id === state.currentUser?.user_id;
         const nameDisplay = isCurrentUser ? member.username + ' (tú)' : member.username;
         
+        // Action buttons (only for owner/admin managing others)
+        let actionsHtml = '';
+        if (!isCurrentUser && (canManageRoles() || canKickMembers())) {
+            let actionButtons = '';
+            
+            // Owner can promote/demote
+            if (canManageRoles() && role !== 'owner') {
+                if (role === 'member') {
+                    actionButtons += `<button class="member-action-btn promote-btn" onclick="handlePromoteMember(${member.id}, '${member.username}')" title="Promote to Admin">⬆️</button>`;
+                } else if (role === 'admin') {
+                    actionButtons += `<button class="member-action-btn demote-btn" onclick="handleDemoteMember(${member.id}, '${member.username}')" title="Demote to Member">⬇️</button>`;
+                }
+            }
+            
+            // Owner/Admin can kick (but not owner, and admin can't kick admin)
+            if (canKickMembers() && role !== 'owner') {
+                if (state.myRole === 'owner' || (state.myRole === 'admin' && role === 'member')) {
+                    actionButtons += `<button class="member-action-btn kick-btn" onclick="handleKickMember(${member.id}, '${member.username}')" title="Kick">🚫</button>`;
+                }
+            }
+            
+            if (actionButtons) {
+                actionsHtml = `<div class="member-actions">${actionButtons}</div>`;
+            }
+        }
+        
         div.innerHTML = `
             <div class="member-avatar-container">${avatarHtml}</div>
             <div class="member-info">
-                <div class="member-name">${nameDisplay}</div>
+                <div class="member-name">${roleBadge}${nameDisplay}</div>
                 <div class="member-status">
-                    <span>🟢 Online</span>
+                    <span class="role-label role-label-${role}">${role}</span>
                 </div>
             </div>
+            ${actionsHtml}
         `;
         
         membersList.appendChild(div);
@@ -500,8 +579,7 @@ async function selectGroup(group) {
     } else {
         console.error('currentServerName element not found!');
     }
-    elements.createChannelBtn.classList.remove('hidden');
-    elements.editServerBtn.classList.remove('hidden');
+    // Don't show create/edit buttons yet — wait for role detection in members load below
     
     // Show invite button
     if (elements.inviteUserBtn) {
@@ -514,7 +592,25 @@ async function selectGroup(group) {
         if (API?.groups?.getMembers) {
             const members = await API.groups.getMembers(group.id);
             console.log('Members loaded:', members);
+            
+            // Detect current user's role
+            const myMember = members.find(m => m.id === state.currentUser?.user_id);
+            state.myRole = myMember?.role || 'member';
+            console.log('My role in this group:', state.myRole);
+            
             renderMembers(members);
+            
+            // Show/hide admin controls based on role
+            if (canCreateChannel()) {
+                elements.createChannelBtn.classList.remove('hidden');
+            } else {
+                elements.createChannelBtn.classList.add('hidden');
+            }
+            if (canEditGroup()) {
+                elements.editServerBtn.classList.remove('hidden');
+            } else {
+                elements.editServerBtn.classList.add('hidden');
+            }
         } else {
             console.warn('API.groups.getMembers not available');
         }
@@ -779,6 +875,46 @@ async function handleCreateChannel(e) {
         renderChannels(channels);
     } catch (error) {
         console.error('Failed to create channel:', error);
+        showToast(error.message || 'No se pudo crear el canal', 'error');
+    }
+}
+
+// ==================== ROLE MANAGEMENT ====================
+
+async function handlePromoteMember(userId, username) {
+    if (!confirm(`¿Promover a ${username} a Admin?`)) return;
+    try {
+        await API.groups.updateMemberRole(state.selectedGroup.id, userId, 'admin');
+        showToast(`${username} ahora es Admin 🛡️`, 'success');
+        // Refresh members
+        const members = await API.groups.getMembers(state.selectedGroup.id);
+        renderMembers(members);
+    } catch (error) {
+        showToast(error.message || 'Error al promover', 'error');
+    }
+}
+
+async function handleDemoteMember(userId, username) {
+    if (!confirm(`¿Quitar Admin a ${username}?`)) return;
+    try {
+        await API.groups.updateMemberRole(state.selectedGroup.id, userId, 'member');
+        showToast(`${username} ahora es Member`, 'success');
+        const members = await API.groups.getMembers(state.selectedGroup.id);
+        renderMembers(members);
+    } catch (error) {
+        showToast(error.message || 'Error al degradar', 'error');
+    }
+}
+
+async function handleKickMember(userId, username) {
+    if (!confirm(`¿Expulsar a ${username} del grupo?`)) return;
+    try {
+        await API.groups.kickMember(state.selectedGroup.id, userId);
+        showToast(`${username} fue expulsado del grupo`, 'success');
+        const members = await API.groups.getMembers(state.selectedGroup.id);
+        renderMembers(members);
+    } catch (error) {
+        showToast(error.message || 'Error al expulsar', 'error');
     }
 }
 

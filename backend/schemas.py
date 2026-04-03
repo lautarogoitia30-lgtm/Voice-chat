@@ -117,3 +117,31 @@ class ChatMessage(BaseModel):
     sender_username: str
     content: str
     timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+
+# ==================== ROLE SCHEMAS ====================
+
+class RoleUpdate(BaseModel):
+    """Schema for updating a member's role."""
+    role: str = Field(..., pattern="^(admin|member)$")  # Can't set "owner" via this endpoint
+
+
+class MemberWithRole(BaseModel):
+    """Schema for member data including role."""
+    id: int
+    username: str
+    email: str
+    avatar_url: str | None = None
+    bio: str | None = None
+    role: str = "member"
+
+
+class TransferOwnership(BaseModel):
+    """Schema for transferring group ownership."""
+    new_owner_id: int
+
+
+class KickMember(BaseModel):
+    """Schema for kick response."""
+    status: str
+    message: str

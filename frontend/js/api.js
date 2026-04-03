@@ -228,6 +228,56 @@ const groupsAPI = {
         
         return response.json();
     },
+    
+    /**
+     * Update a member's role (owner only)
+     */
+    async updateMemberRole(groupId, userId, role) {
+        const response = await apiRequest(`/groups/${groupId}/members/${userId}/role`, {
+            method: 'PATCH',
+            body: JSON.stringify({ role }),
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to update role');
+        }
+        
+        return response.json();
+    },
+    
+    /**
+     * Kick a member from the group (owner/admin)
+     */
+    async kickMember(groupId, userId) {
+        const response = await apiRequest(`/groups/${groupId}/members/${userId}`, {
+            method: 'DELETE',
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to kick member');
+        }
+        
+        return response.json();
+    },
+    
+    /**
+     * Transfer group ownership (owner only)
+     */
+    async transferOwnership(groupId, newOwnerId) {
+        const response = await apiRequest(`/groups/${groupId}/transfer-ownership`, {
+            method: 'POST',
+            body: JSON.stringify({ new_owner_id: newOwnerId }),
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to transfer ownership');
+        }
+        
+        return response.json();
+    },
 };
 
 /**

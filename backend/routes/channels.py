@@ -11,6 +11,7 @@ from backend.database import get_db
 from backend.models import Group, Channel, GroupMember, VoiceParticipant
 from backend.schemas import ChannelCreate, ChannelResponse
 from backend.auth import get_current_user
+from backend.permissions import require_role, get_member_role
 import time
 
 router = APIRouter()
@@ -99,9 +100,8 @@ async def create_channel(
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
     
-    # Check if user is the owner
-    if group.owner_id != current_user["user_id"]:
-        raise HTTPException(status_code=403, detail="Only the group owner can create channels")
+    # Check if user is owner or admin
+    await require_role(db, group_id, current_user["user_id"], min_role="admin")
     
     # Create channel
     new_channel = Channel(
@@ -364,7 +364,7 @@ async def update_channel(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Update a channel's name or type (only group members can edit).
+    Update a channel's name or type (only owner/admin can edit).
     """
     # Get channel
     result = await db.execute(
@@ -375,19 +375,8 @@ async def update_channel(
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
     
-    # Check if user is a member of the group
-    result = await db.execute(
-        select(GroupMember).where(
-            and_(
-                GroupMember.group_id == channel.group_id,
-                GroupMember.user_id == current_user["user_id"]
-            )
-        )
-    )
-    membership = result.scalar_one_or_none()
-    
-    if not membership:
-        raise HTTPException(status_code=403, detail="You are not a member of this group")
+    # Check if user is owner or admin
+    await require_role(db, channel.group_id, current_user["user_id"], min_role="admin")
     
     # Update name if provided
     if "name" in channel_data and channel_data["name"]:
@@ -410,7 +399,7 @@ async def delete_channel(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Delete a channel (only group members can delete).
+    Delete a channel (only owner/admin can delete).
     """
     # Get channel
     result = await db.execute(
@@ -421,19 +410,8 @@ async def delete_channel(
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
     
-    # Check if user is a member of the group
-    result = await db.execute(
-        select(GroupMember).where(
-            and_(
-                GroupMember.group_id == channel.group_id,
-                GroupMember.user_id == current_user["user_id"]
-            )
-        )
-    )
-    membership = result.scalar_one_or_none()
-    
-    if not membership:
-        raise HTTPException(status_code=403, detail="You are not a member of this group")
+    # Check if user is owner or admin
+    await require_role(db, channel.group_id, current_user["user_id"], min_role="admin")
     
     # Delete any voice participants in this channel
     result = await db.execute(

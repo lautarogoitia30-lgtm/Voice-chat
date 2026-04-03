@@ -58,11 +58,28 @@ async def get_db() -> AsyncSession:
 
 async def init_db():
     """
-    Initialize database tables.
+    Initialize database tables and run migrations.
     Call this on app startup.
     """
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        
+        # Migration: add 'role' column to group_members if it doesn't exist
+        from sqlalchemy import text
+        result = await conn.execute(text("PRAGMA table_info(group_members)"))
+        columns = [row[1] for row in result]
+        if "role" not in columns:
+            print("[MIGRATION] Adding 'role' column to group_members table...")
+            await conn.execute(text("ALTER TABLE group_members ADD COLUMN role VARCHAR(20) DEFAULT 'member' NOT NULL"))
+            # Set existing group owners to "owner" role
+            await conn.execute(text("""
+                UPDATE group_members SET role = 'owner' 
+                WHERE user_id IN (
+                    SELECT g.owner_id FROM groups g 
+                    WHERE g.id = group_members.group_id
+                ) AND role = 'member'
+            """))
+            print("[MIGRATION] Role column added and owners set.")
 
 
 async def close_db():
