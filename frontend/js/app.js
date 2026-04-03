@@ -1727,7 +1727,7 @@ function handleLocalScreenShareStopped() {
 }
 
 // Show the expanded screen share view (Discord-style)
-function showScreenShareView(track, participant) {
+async function showScreenShareView(track, participant) {
     const screenShareView = document.getElementById('screen-share-view');
     const videoContainer = document.getElementById('screen-share-video-container');
     const usernameLabel = document.getElementById('screen-share-username');
@@ -1738,8 +1738,23 @@ function showScreenShareView(track, participant) {
         return;
     }
     
+    // CRITICAL: Show the screen share view FIRST (before attaching track)
+    // This ensures adaptiveStream sees the correct container dimensions
+    // and doesn't default to low-res because the element was 0x0
+    screenShareView.classList.remove('hidden');
+    if (normalView) normalView.classList.add('hidden');
+    
+    // Wait one frame for the DOM to layout and compute dimensions
+    await new Promise(resolve => requestAnimationFrame(resolve));
+    
     // Clear previous video
     videoContainer.innerHTML = '';
+    
+    // CRITICAL: Set explicit dimensions on the container BEFORE attaching
+    // This tells LiveKit's adaptiveStream to use the full container size
+    // and not downscale the video quality
+    videoContainer.style.width = '100%';
+    videoContainer.style.height = '100%';
     
     // Attach the video track to a <video> element
     const videoElement = track.attach();
@@ -1747,6 +1762,10 @@ function showScreenShareView(track, participant) {
     videoElement.autoplay = true;
     videoElement.playsInline = true;
     videoElement.muted = true; // Video element muted (audio is handled separately by LiveKit)
+    // Force explicit dimensions on the video element itself
+    videoElement.style.width = '100%';
+    videoElement.style.height = '100%';
+    videoElement.style.objectFit = 'contain';
     
     // Double-click for browser fullscreen
     videoElement.addEventListener('dblclick', () => {
@@ -1758,6 +1777,23 @@ function showScreenShareView(track, participant) {
     });
     
     videoContainer.appendChild(videoElement);
+    
+    // Log the actual video dimensions after attach
+    const trackSettings = track.mediaStreamTrack?.getSettings();
+    console.log('[SCREEN-UI] Video dimensions after attach:', trackSettings?.width, 'x', trackSettings?.height);
+    
+    // Force LiveKit to re-evaluate the video element size for adaptiveStream
+    // This ensures it doesn't use a low-res stream
+    setTimeout(() => {
+        if (track.setVideoOutputSize) {
+            try {
+                track.setVideoOutputSize(videoContainer.clientWidth, videoContainer.clientHeight);
+                console.log('[SCREEN-UI] Forced video output size:', videoContainer.clientWidth, 'x', videoContainer.clientHeight);
+            } catch(e) {
+                console.log('[SCREEN-UI] setVideoOutputSize not available:', e.message);
+            }
+        }
+    }, 500);
     
     // Set who is sharing
     const displayName = participant.name || participant.identity || 'Alguien';

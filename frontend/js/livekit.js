@@ -231,6 +231,13 @@ class LiveKitClient {
                     // If it's a video track (screen share), notify the UI
                     if (track.kind === 'video') {
                         console.log('[LIVEKIT] 🖥️ Video track received from:', participant.name || participant.identity, 'source:', track.source);
+                        
+                        // Log track dimensions for diagnostics
+                        if (track.mediaStreamTrack) {
+                            const s = track.mediaStreamTrack.getSettings();
+                            console.log('[LIVEKIT] 🖥️ Track settings:', s.width, 'x', s.height, '@', s.frameRate, 'fps');
+                        }
+                        
                         this._screenShareParticipant = participant.identity;
                         
                         // Notify UI about screen share started
@@ -718,44 +725,84 @@ class LiveKitClient {
         }
         
         try {
-            // Import LiveKit for ScreenSharePresets and createLocalScreenTracks
+            // Import LiveKit for Track class
             const livekit = await import('https://cdn.jsdelivr.net/npm/livekit-client@2/+esm');
-            const { createLocalScreenTracks, ScreenSharePresets, Track } = livekit;
+            const { Track, createLocalScreenTracks, ScreenSharePresets } = livekit;
             
-            // Create screen share tracks with HIGH QUALITY settings
-            // Using createLocalScreenTracks gives us full control over encoding
-            const screenTracks = await createLocalScreenTracks({
-                audio: true,           // Capture system audio (Chromium only)
-                resolution: ScreenSharePresets.h1080fps30.resolution,
-                contentHint: 'detail', // Optimize for screen content (text, UI)
+            // STEP 1: Get display media manually with EXPLICIT high quality constraints
+            // This bypasses createLocalScreenTracks which may not respect resolution properly
+            console.log('[SCREEN] Requesting displayMedia with high quality constraints...');
+            
+            const displayStream = await navigator.mediaDevices.getDisplayMedia({
+                video: {
+                    // Force high resolution — these are the constraints sent to the browser
+                    width: { ideal: 2560, max: 3840 },  // Up to 4K, ideal 2560
+                    height: { ideal: 1440, max: 2160 }, // Up to 4K, ideal 1440p
+                    frameRate: { ideal: 30, max: 30 },
+                    displaySurface: 'monitor', // Prefer full screen
+                },
+                audio: true, // System audio (Chromium only)
             });
             
-            // Publish each track with explicit high-bitrate encoding
-            for (const track of screenTracks) {
-                if (track.kind === 'video') {
-                    await this.localParticipant.publishTrack(track, {
-                        source: Track.Source.ScreenShare,
-                        // HIGH QUALITY encoding — 3 Mbps max, 1.5 Mbps target
-                        videoEncoding: {
-                            maxBitrate: 3_000_000,  // 3 Mbps (default is ~1 Mbps, way too low)
-                            maxFramerate: 30,
-                        },
-                        // Disable simulcast for screen share — single high quality stream
-                        simulcast: false,
-                        // Scalability: single layer, max quality
-                        scalabilityMode: 'L1T1',
-                    });
-                    console.log('[SCREEN] Video track published at 3 Mbps / 30fps');
-                } else {
-                    // Audio track from screen share
-                    await this.localParticipant.publishTrack(track, {
-                        source: Track.Source.ScreenShareAudio,
-                        // High quality audio for system sound
-                        audioBitrate: 128_000, // 128kbps for system audio
-                    });
-                    console.log('[SCREEN] Audio track published at 128kbps');
-                }
+            console.log('[SCREEN] Display stream acquired');
+            
+            // Log the actual resolution we got
+            const videoTrack = displayStream.getVideoTracks()[0];
+            const settings = videoTrack.getSettings();
+            console.log('[SCREEN] Actual capture resolution:', settings.width, 'x', settings.height, '@', settings.frameRate, 'fps');
+            console.log('[SCREEN] Content hint:', videoTrack.contentHint);
+            
+            // Set content hint for screen content — tells the encoder to preserve detail
+            videoTrack.contentHint = 'detail';
+            
+            // STEP 2: Create LocalVideoTrack from the stream
+            const LocalVideoTrack = livekit.LocalVideoTrack;
+            const localScreenTrack = new LocalVideoTrack(videoTrack, {
+                source: Track.Source.ScreenShare,
+                // Force high bitrate encoding
+                simulcast: false,
+                videoEncoding: {
+                    maxBitrate: 5_000_000,  // 5 Mbps — very high quality
+                    maxFramerate: 30,
+                },
+                scalabilityMode: 'L1T1', // Single layer, max quality
+            });
+            
+            // STEP 3: Publish the video track
+            await this.localParticipant.publishTrack(localScreenTrack, {
+                source: Track.Source.ScreenShare,
+                simulcast: false,
+                videoEncoding: {
+                    maxBitrate: 5_000_000,
+                    maxFramerate: 30,
+                },
+                scalabilityMode: 'L1T1',
+            });
+            console.log('[SCREEN] Video track published at 5 Mbps');
+            
+            // STEP 4: Publish audio track if available
+            const audioTracks = displayStream.getAudioTracks();
+            if (audioTracks.length > 0) {
+                const LocalAudioTrack = livekit.LocalAudioTrack;
+                const localScreenAudio = new LocalAudioTrack(audioTracks[0], {
+                    source: Track.Source.ScreenShareAudio,
+                });
+                await this.localParticipant.publishTrack(localScreenAudio, {
+                    source: Track.Source.ScreenShareAudio,
+                    audioBitrate: 128_000, // 128kbps
+                });
+                console.log('[SCREEN] Audio track published at 128kbps');
             }
+            
+            // Handle when user stops sharing via browser UI
+            videoTrack.addEventListener('ended', () => {
+                console.log('[SCREEN] User stopped sharing via browser UI');
+                this._isScreenSharing = false;
+                this._screenShareParticipant = null;
+                if (window.livekitCallbacks && window.livekitCallbacks.onLocalScreenShareStopped) {
+                    window.livekitCallbacks.onLocalScreenShareStopped();
+                }
+            });
             
             console.log('[SCREEN] ✅ Screen share started successfully!');
             // State is updated by LocalTrackPublished event handler
