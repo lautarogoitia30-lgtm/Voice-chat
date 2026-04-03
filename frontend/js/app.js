@@ -1757,38 +1757,31 @@ async function showScreenShareView(track, publication, participant) {
     // Clear previous video
     videoContainer.innerHTML = '';
     
-    // === ADAPTIVESTREAM BYPASS: Hidden high-quality element ===
+    // === ADAPTIVESTREAM BYPASS: Start hidden at full resolution ===
     // LiveKit's adaptiveStream uses ResizeObserver to measure video element size.
-    // If the visible element is constrained to 1366px, it requests 768p from the SFU.
-    // Solution: create a HIDDEN video element at full resolution (2560x1440).
-    // adaptiveStream measures THIS element and requests the high quality stream.
-    // The visible element mirrors the stream and scales to fit.
-    const hiddenEl = document.createElement('video');
-    hiddenEl.style.cssText = `position:absolute;width:${targetWidth}px;height:${targetHeight}px;visibility:hidden;pointer-events:none;opacity:0;`;
-    hiddenEl.autoplay = true;
-    hiddenEl.playsInline = true;
-    hiddenEl.muted = true;
-    videoContainer.appendChild(hiddenEl);
-    
-    // Attach the track to the HIDDEN element — adaptiveStream measures this at full res
-    track.attach(hiddenEl);
-    console.log('[SCREEN-UI] Attached track to hidden element at', targetWidth, 'x', targetHeight);
-    
-    // Create the VISIBLE element that mirrors the stream
+    // We create the element at full resolution (2560x1440), invisible.
+    // adaptiveStream measures this and requests the high quality stream from the SFU.
+    // Once the stream arrives, we make it visible and let it scale to fit the container.
     const videoElement = document.createElement('video');
-    videoElement.className = 'screen-share-video';
+    videoElement.style.cssText = `position:absolute;width:${targetWidth}px;height:${targetHeight}px;visibility:hidden;pointer-events:none;opacity:0;`;
     videoElement.autoplay = true;
     videoElement.playsInline = true;
     videoElement.muted = true;
-    videoElement.style.width = '100%';
-    videoElement.style.height = '100%';
-    videoElement.style.objectFit = 'contain';
     videoContainer.appendChild(videoElement);
     
-    // Mirror the stream from hidden to visible element
-    hiddenEl.addEventListener('loadedmetadata', () => {
-        videoElement.srcObject = hiddenEl.srcObject;
-        console.log('[SCREEN-UI] Stream mirrored — visible video dimensions:', videoElement.videoWidth, 'x', videoElement.videoHeight);
+    // Attach the track — adaptiveStream sees 2560x1440 and requests max quality
+    track.attach(videoElement);
+    console.log('[SCREEN-UI] Attached track to hidden element at', targetWidth, 'x', targetHeight);
+    
+    // When the stream arrives, make it visible and scale to fit
+    videoElement.addEventListener('loadedmetadata', () => {
+        console.log('[SCREEN-UI] Stream received — dimensions:', videoElement.videoWidth, 'x', videoElement.videoHeight);
+        // Make visible — scale to fit container
+        videoElement.style.cssText = '';
+        videoElement.className = 'screen-share-video';
+        videoElement.style.width = '100%';
+        videoElement.style.height = '100%';
+        videoElement.style.objectFit = 'contain';
     });
     
     // Double-click for browser fullscreen
