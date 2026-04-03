@@ -17,7 +17,7 @@ from fastapi.staticfiles import StaticFiles
 
 from backend.database import init_db, close_db
 from backend.routes import auth, groups, channels, livekit, users, files, dm
-from backend.websocket import websocket_endpoint, dm_websocket_endpoint
+from backend.websocket import websocket_endpoint, dm_websocket_endpoint, dm_notification_websocket_endpoint
 
 # Paths
 BASE_DIR = Path(__file__).parent.parent
@@ -140,3 +140,24 @@ async def dm_websocket(websocket: WebSocket, conversation_id: int, token: str = 
     
     # Pass user_data to the DM endpoint
     await dm_websocket_endpoint(websocket, conversation_id, user_data)
+
+
+# WebSocket endpoint for DM notifications (global per-user)
+@app.websocket("/ws/dm-notifications")
+async def dm_notifications_websocket(websocket: WebSocket, token: str = ""):
+    """WebSocket endpoint for DM notifications — notifies user about new messages in any conversation."""
+    if not token or token == "null" or token == "undefined":
+        await websocket.close(code=4001, reason="Authentication required")
+        return
+    
+    user_data = None
+    try:
+        from backend.auth import verify_jwt_token
+        user_data = verify_jwt_token(token)
+        print(f"DM Notifications WS: User {user_data['username']} (ID: {user_data['user_id']}) connected")
+    except Exception as e:
+        print(f"DM Notifications WS auth failed: {e}")
+        await websocket.close(code=4001, reason="Invalid token")
+        return
+    
+    await dm_notification_websocket_endpoint(websocket, user_data)

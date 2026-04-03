@@ -243,6 +243,9 @@ function showAppView() {
     updateUserDisplay();
     loadGroups();
     
+    // Connect global DM notification WebSocket
+    connectDMNotificationWS();
+    
     // Auto-refresh groups every 30 seconds to detect new invites
     setInterval(() => {
         if (state.currentUser) {
@@ -2777,6 +2780,9 @@ state.isDMMode = false;
 state.dmConversations = [];
 state.selectedDMConversation = null;
 state.dmWebSocket = null;
+state.dmNotificationWS = null;
+state.dmUnreadCounts = {};  // { conversation_id: count }
+state.totalDMUnread = 0;
 
 // Show DM view (called when clicking 💬 button)
 function showDMView() {
@@ -2858,7 +2864,11 @@ function renderDMConversations(conversations) {
     
     conversations.forEach(conv => {
         const item = document.createElement('div');
-        item.className = 'dm-conversation-item' + (state.selectedDMConversation?.id === conv.id ? ' active' : '');
+        const unreadCount = state.dmUnreadCounts[conv.id] || 0;
+        let cls = 'dm-conversation-item';
+        if (state.selectedDMConversation?.id === conv.id) cls += ' active';
+        if (unreadCount > 0) cls += ' unread';
+        item.className = cls;
         item.onclick = () => selectDMConversation(conv);
         
         const initial = conv.other_username.charAt(0).toUpperCase();
@@ -2872,6 +2882,7 @@ function renderDMConversations(conversations) {
         
         const timeStr = conv.last_message_at ? formatDMTimestamp(conv.last_message_at) : '';
         const lastMsg = conv.last_message || 'Sin mensajes todavía';
+        const unreadBadge = unreadCount > 0 ? `<span class="dm-conversation-unread-badge">${unreadCount}</span>` : '';
         
         item.innerHTML = `
             <div class="dm-conversation-avatar">${avatarHtml || initial}</div>
@@ -2880,7 +2891,7 @@ function renderDMConversations(conversations) {
                     <span class="dm-conversation-name">${conv.other_username}</span>
                     <span class="dm-conversation-time">${timeStr}</span>
                 </div>
-                <div class="dm-conversation-last-msg">${lastMsg}</div>
+                <div class="dm-conversation-last-msg">${lastMsg}${unreadBadge}</div>
             </div>
         `;
         
@@ -2905,6 +2916,13 @@ function filterDMConversations(query) {
 async function selectDMConversation(conv) {
     console.log('[DM] Selecting conversation:', conv);
     state.selectedDMConversation = conv;
+    
+    // Clear unread for this conversation
+    if (state.dmUnreadCounts[conv.id]) {
+        delete state.dmUnreadCounts[conv.id];
+        recalcTotalUnread();
+        updateDMBadge();
+    }
     
     // Update sidebar active state
     document.querySelectorAll('.dm-conversation-item').forEach(item => item.classList.remove('active'));
@@ -3145,6 +3163,116 @@ function disconnectDMWebSocket() {
     if (state.dmWebSocket) {
         state.dmWebSocket.close();
         state.dmWebSocket = null;
+    }
+}
+
+// ==================== DM NOTIFICATIONS ====================
+
+// Connect global DM notification WebSocket (called once at app init)
+function connectDMNotificationWS() {
+    disconnectDMNotificationWS();
+    
+    const token = API.getAuthToken();
+    if (!token) return;
+    
+    const wsBase = API_BASE.replace('https://', 'wss://').replace('http://', 'ws://');
+    const wsUrl = `${wsBase}/ws/dm-notifications?token=${token}`;
+    
+    console.log('[DM-Notif] Connecting to:', wsUrl);
+    
+    try {
+        state.dmNotificationWS = new WebSocket(wsUrl);
+        
+        state.dmNotificationWS.onopen = () => {
+            console.log('[DM-Notif] Connected');
+        };
+        
+        state.dmNotificationWS.onmessage = (event) => {
+            try {
+                const msg = JSON.parse(event.data);
+                console.log('[DM-Notif] Received:', msg);
+                
+                if (msg.type === 'dm_notification') {
+                    handleDMNotification(msg);
+                }
+            } catch (e) {
+                console.error('[DM-Notif] Error parsing:', e);
+            }
+        };
+        
+        state.dmNotificationWS.onclose = (event) => {
+            console.log('[DM-Notif] Disconnected:', event.code);
+            // Reconnect after 3 seconds (unless intentional close)
+            if (event.code !== 1000) {
+                setTimeout(() => {
+                    if (state.currentUser) connectDMNotificationWS();
+                }, 3000);
+            }
+        };
+        
+        state.dmNotificationWS.onerror = (error) => {
+            console.error('[DM-Notif] Error:', error);
+        };
+    } catch (e) {
+        console.error('[DM-Notif] Failed to connect:', e);
+    }
+}
+
+function disconnectDMNotificationWS() {
+    if (state.dmNotificationWS) {
+        state.dmNotificationWS.close(1000);
+        state.dmNotificationWS = null;
+    }
+}
+
+// Handle incoming DM notification
+function handleDMNotification(msg) {
+    const convId = msg.conversation_id;
+    
+    // If user is currently viewing this conversation, ignore
+    if (state.isDMMode && state.selectedDMConversation?.id === convId) {
+        return;
+    }
+    
+    // Increment unread count
+    state.dmUnreadCounts[convId] = (state.dmUnreadCounts[convId] || 0) + 1;
+    recalcTotalUnread();
+    
+    // Update the conversation's last message in state
+    const conv = state.dmConversations.find(c => c.id === convId);
+    if (conv) {
+        conv.last_message = msg.content;
+        conv.last_message_at = msg.created_at;
+        // Re-sort: move this conversation to the top
+        state.dmConversations.sort((a, b) => (b.last_message_at || 0) - (a.last_message_at || 0));
+    }
+    
+    // Update UI
+    updateDMBadge();
+    if (state.isDMMode) {
+        renderDMConversations(state.dmConversations);
+    }
+}
+
+// Recalculate total unread count
+function recalcTotalUnread() {
+    state.totalDMUnread = Object.values(state.dmUnreadCounts).reduce((sum, n) => sum + n, 0);
+}
+
+// Update the badge on the 💬 button
+function updateDMBadge() {
+    const btn = document.querySelector('.dm-btn');
+    if (!btn) return;
+    
+    // Remove existing badge
+    const existing = btn.querySelector('.dm-badge');
+    if (existing) existing.remove();
+    
+    if (state.totalDMUnread > 0) {
+        const badge = document.createElement('span');
+        badge.className = 'dm-badge';
+        badge.textContent = state.totalDMUnread > 99 ? '99+' : state.totalDMUnread;
+        btn.appendChild(badge);
     }
 }
 

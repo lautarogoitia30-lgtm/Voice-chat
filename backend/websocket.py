@@ -117,9 +117,52 @@ class DMConnectionManager:
             self.disconnect(conversation_id, ws)
 
 
+class DMNotificationManager:
+    """
+    Tracks per-user WebSocket connections for DM notifications.
+    Unlike DMConnectionManager (per-conversation), this is per-user
+    so we can notify users about messages in ANY conversation.
+    """
+    
+    def __init__(self):
+        # {user_id: [WebSocket connections]}
+        self.active_connections: Dict[int, List[WebSocket]] = {}
+    
+    async def connect(self, user_id: int, websocket: WebSocket):
+        """Accept a new notification WebSocket for a user."""
+        await websocket.accept()
+        if user_id not in self.active_connections:
+            self.active_connections[user_id] = []
+        self.active_connections[user_id].append(websocket)
+        print(f"DM Notification WS connected for user {user_id}")
+    
+    def disconnect(self, user_id: int, websocket: WebSocket):
+        """Remove a notification WebSocket for a user."""
+        if user_id in self.active_connections:
+            if websocket in self.active_connections[user_id]:
+                self.active_connections[user_id].remove(websocket)
+            if not self.active_connections[user_id]:
+                del self.active_connections[user_id]
+        print(f"DM Notification WS disconnected for user {user_id}")
+    
+    async def notify(self, user_id: int, message: dict):
+        """Send a notification to a specific user."""
+        if user_id not in self.active_connections:
+            return
+        disconnected = []
+        for conn in self.active_connections[user_id]:
+            try:
+                await conn.send_json(message)
+            except Exception:
+                disconnected.append(conn)
+        for ws in disconnected:
+            self.disconnect(user_id, ws)
+
+
 # Global connection managers
 manager = ConnectionManager()
 dm_manager = DMConnectionManager()
+dm_notification_manager = DMNotificationManager()
 
 
 async def websocket_endpoint(websocket: WebSocket, channel_id: int, user_data: Optional[dict] = None):
@@ -209,6 +252,10 @@ async def dm_websocket_endpoint(websocket: WebSocket, conversation_id: int, user
             await websocket.close(code=4003, reason="Not authorized for this conversation")
             return
     
+    # Store conversation user IDs for notifications
+    conv_user1_id = conv.user1_id
+    conv_user2_id = conv.user2_id
+    
     await dm_manager.connect(conversation_id, websocket)
     
     try:
@@ -257,8 +304,40 @@ async def dm_websocket_endpoint(websocket: WebSocket, conversation_id: int, user
                     
                     await dm_manager.broadcast(conversation_id, broadcast_message)
                     
+                    # Notify the OTHER user via global notification WS
+                    other_user_id = conv_user2_id if sender_id == conv_user1_id else conv_user1_id
+                    await dm_notification_manager.notify(other_user_id, {
+                        "type": "dm_notification",
+                        "conversation_id": conversation_id,
+                        "sender_id": sender_id,
+                        "sender_username": sender_username,
+                        "content": content.strip(),
+                        "created_at": created_at
+                    })
+                    
             except json.JSONDecodeError:
                 print(f"Invalid JSON in DM: {data}")
                 
     except WebSocketDisconnect:
         dm_manager.disconnect(conversation_id, websocket)
+
+
+async def dm_notification_websocket_endpoint(websocket: WebSocket, user_data: Optional[dict] = None):
+    """
+    Global DM notification WebSocket.
+    Keeps a persistent connection per user to receive notifications
+    about new messages in ANY of their conversations.
+    """
+    if not user_data:
+        await websocket.close(code=4001, reason="Authentication required")
+        return
+    
+    user_id = user_data["user_id"]
+    await dm_notification_manager.connect(user_id, websocket)
+    
+    try:
+        while True:
+            # Keep alive — just wait for pings/disconnect
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        dm_notification_manager.disconnect(user_id, websocket)
