@@ -35,3 +35,13 @@ Thumbs.db
 
 # Uploads (don't track user uploads)
 uploads/
+
+# Tauri / Rust
+src-tauri/target/
+
+# Electron (legacy)
+electron/node_modules/
+
+# Misc
+nul
+tmp_livekit_test/
