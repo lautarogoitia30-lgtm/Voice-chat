@@ -236,6 +236,16 @@ class LiveKitClient {
                         // For remote tracks, use publication.dimensions (set by SFU)
                         if (publication && publication.dimensions) {
                             console.log('[LIVEKIT] 🖥️ Publication dimensions:', publication.dimensions.width, 'x', publication.dimensions.height);
+                            // CRITICAL FIX: Force the SFU to send MAX quality for screen share
+                            // adaptiveStream normally downscales based on container size,
+                            // but screen share needs full resolution regardless
+                            try {
+                                // Force output size to publication dimensions (max quality)
+                                track.setVideoOutputSize(publication.dimensions.width, publication.dimensions.height);
+                                console.log('[LIVEKIT] 🖥️ Forced max quality:', publication.dimensions.width, 'x', publication.dimensions.height);
+                            } catch(e) {
+                                console.log('[LIVEKIT] 🖥️ setVideoOutputSize failed:', e.message);
+                            }
                         }
                         if (track.mediaStreamTrack) {
                             const s = track.mediaStreamTrack.getSettings();
