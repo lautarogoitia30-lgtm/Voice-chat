@@ -233,6 +233,10 @@ class LiveKitClient {
                         console.log('[LIVEKIT] 🖥️ Video track received from:', participant.name || participant.identity, 'source:', track.source);
                         
                         // Log track dimensions for diagnostics
+                        // For remote tracks, use publication.dimensions (set by SFU)
+                        if (publication && publication.dimensions) {
+                            console.log('[LIVEKIT] 🖥️ Publication dimensions:', publication.dimensions.width, 'x', publication.dimensions.height);
+                        }
                         if (track.mediaStreamTrack) {
                             const s = track.mediaStreamTrack.getSettings();
                             console.log('[LIVEKIT] 🖥️ Track settings:', s.width, 'x', s.height, '@', s.frameRate, 'fps');
@@ -242,7 +246,7 @@ class LiveKitClient {
                         
                         // Notify UI about screen share started
                         if (window.livekitCallbacks && window.livekitCallbacks.onScreenShareStarted) {
-                            window.livekitCallbacks.onScreenShareStarted(track, participant);
+                            window.livekitCallbacks.onScreenShareStarted(track, publication, participant);
                         }
                     }
                     

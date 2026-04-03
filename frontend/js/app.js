@@ -1700,8 +1700,12 @@ async function handleToggleScreenShare() {
 }
 
 // When a remote participant starts sharing their screen
-function handleRemoteScreenShareStarted(track, participant) {
+function handleRemoteScreenShareStarted(track, publication, participant) {
     console.log('[SCREEN-UI] Remote screen share started from:', participant.name || participant.identity);
+    // Log publication dimensions from SFU
+    if (publication && publication.dimensions) {
+        console.log('[SCREEN-UI] SFU dimensions:', publication.dimensions.width, 'x', publication.dimensions.height);
+    }
     showScreenShareView(track, participant);
 }
 
@@ -1778,20 +1782,30 @@ async function showScreenShareView(track, participant) {
     
     videoContainer.appendChild(videoElement);
     
-    // Log the actual video dimensions after attach
-    const trackSettings = track.mediaStreamTrack?.getSettings();
-    console.log('[SCREEN-UI] Video dimensions after attach:', trackSettings?.width, 'x', trackSettings?.height);
+    // Log dimensions AFTER the video starts playing (not before — remote tracks need time)
+    videoElement.addEventListener('loadedmetadata', () => {
+        console.log('[SCREEN-UI] Video loaded — actual dimensions:', videoElement.videoWidth, 'x', videoElement.videoHeight);
+        // Also log the track dimensions now that it's playing
+        const s = track.mediaStreamTrack?.getSettings();
+        console.log('[SCREEN-UI] Track settings after play:', s?.width, 'x', s?.height);
+    });
     
     // Force LiveKit to re-evaluate the video element size for adaptiveStream
     // This ensures it doesn't use a low-res stream
     setTimeout(() => {
         if (track.setVideoOutputSize) {
             try {
-                track.setVideoOutputSize(videoContainer.clientWidth, videoContainer.clientHeight);
-                console.log('[SCREEN-UI] Forced video output size:', videoContainer.clientWidth, 'x', videoContainer.clientHeight);
+                const w = videoContainer.clientWidth || 1920;
+                const h = videoContainer.clientHeight || 1080;
+                track.setVideoOutputSize(w, h);
+                console.log('[SCREEN-UI] Forced video output size:', w, 'x', h);
             } catch(e) {
                 console.log('[SCREEN-UI] setVideoOutputSize not available:', e.message);
             }
+        }
+        // Also check video dimensions after a delay
+        if (videoElement.videoWidth > 0) {
+            console.log('[SCREEN-UI] Video dimensions at 500ms:', videoElement.videoWidth, 'x', videoElement.videoHeight);
         }
     }, 500);
     
