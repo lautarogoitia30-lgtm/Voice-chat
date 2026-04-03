@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VoiceSpace</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link rel="stylesheet" href="css/styles.css?v=11">
+    <link rel="stylesheet" href="css/styles.css?v=12">
 </head>
 <body class="h-screen overflow-hidden">
     
@@ -124,10 +124,6 @@
                 <div class="messages-container" id="messages-list">
                     <!-- Messages will be inserted here -->
                 </div>
-                <div class="message-input-area">
-                    <input type="text" id="message-input" placeholder="Escribe un mensaje..." class="message-input">
-                    <button type="button" class="btn-send" onclick="sendMessage()">📤</button>
-                </div>
             </div>
             
             <!-- Voice Chat Area -->
@@ -154,6 +150,12 @@
                     <span id="user-initial">?</span>
                 </div>
                 <span id="user-display-name" class="user-name">Usuario</span>
+            </div>
+            
+            <!-- Message input (only visible in text channels) -->
+            <div id="bottom-message-area" class="bottom-message-area hidden">
+                <input type="text" id="message-input" placeholder="Enviar mensaje..." class="bottom-message-input">
+                <button type="button" class="btn-send" onclick="sendMessage()">📤</button>
             </div>
             
             <!-- Voice control buttons -->
@@ -354,6 +356,6 @@
     <script src="js/api.js?v=10"></script>
     <script src="js/websocket.js?v=10"></script>
     <script src="js/livekit.js?v=19"></script>
-    <script src="js/app.js?v=30"></script>
+    <script src="js/app.js?v=31"></script>
 </body>
 </html>

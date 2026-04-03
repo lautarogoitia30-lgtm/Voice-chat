@@ -74,6 +74,7 @@ function getElements() {
         messageInput: document.getElementById('message-input'),
         voiceContainer: document.getElementById('voice-container'),
         emptyState: document.getElementById('empty-state'),
+        bottomMessageArea: document.getElementById('bottom-message-area'),
         
         // Bottom controls
         userDisplayName: document.getElementById('user-display-name'),
@@ -192,7 +193,16 @@ function setupEventListeners(elements) {
     document.getElementById('edit-channel-form')?.addEventListener('submit', (e) => handleEditChannel(e));
     
     // Chat
-    if (elements.messageForm) elements.messageForm.addEventListener('submit', (e) => handleMessageSubmit(e, elements));
+    // Chat - send message via bottom bar input
+    const messageInput = document.getElementById('message-input');
+    if (messageInput) {
+        messageInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessageFromInput();
+            }
+        });
+    }
     if (elements.joinVoiceBtn) elements.joinVoiceBtn.addEventListener('click', handleJoinVoice);
     if (elements.leaveVoiceBtn) elements.leaveVoiceBtn.addEventListener('click', handleLeaveVoice);
     
@@ -585,11 +595,15 @@ async function selectChannel(channel) {
         elements.textChat.classList.remove('hidden');
         elements.voiceChat.classList.add('hidden');
         elements.emptyState.classList.add('hidden');
+        // Show message input in bottom bar
+        if (elements.bottomMessageArea) elements.bottomMessageArea.classList.remove('hidden');
         window.wsClient.connect(channel.id);
     } else {
         elements.textChat.classList.add('hidden');
         elements.voiceChat.classList.remove('hidden');
         elements.emptyState.classList.add('hidden');
+        // Hide message input in bottom bar
+        if (elements.bottomMessageArea) elements.bottomMessageArea.classList.add('hidden');
         elements.joinVoiceBtn.classList.remove('hidden');
         elements.leaveVoiceBtn.classList.add('hidden');
         
@@ -718,12 +732,17 @@ async function handleCreateChannel(e) {
 }
 
 // Message operations
-async function handleMessageSubmit(e, elements) {
-    e.preventDefault();
-    const content = elements.messageInput.value.trim();
+
+// Send message from bottom bar input (called by Enter key and send button)
+function sendMessageFromInput() {
+    const input = document.getElementById('message-input');
+    if (!input) return;
+    
+    const content = input.value.trim();
     if (!content) return;
     
-    // Include sender info with message
+    if (!state.selectedChannel || state.selectedChannel.type !== 'text') return;
+    
     const message = {
         channel_id: state.selectedChannel.id,
         content: content,
@@ -732,9 +751,16 @@ async function handleMessageSubmit(e, elements) {
     };
     
     console.log('Sending message:', message);
-    
     window.wsClient.send(JSON.stringify(message));
-    elements.messageInput.value = '';
+    input.value = '';
+}
+
+// Global function for onclick button
+window.sendMessage = sendMessageFromInput;
+
+async function handleMessageSubmit(e, elements) {
+    e.preventDefault();
+    sendMessageFromInput();
 }
 
 // File upload handler
