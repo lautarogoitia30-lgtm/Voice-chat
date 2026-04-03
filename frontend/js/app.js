@@ -1731,7 +1731,7 @@ function handleLocalScreenShareStopped() {
 }
 
 // Show the expanded screen share view (Discord-style)
-async function showScreenShareView(track, participant) {
+async function showScreenShareView(track, publication, participant) {
     const screenShareView = document.getElementById('screen-share-view');
     const videoContainer = document.getElementById('screen-share-video-container');
     const usernameLabel = document.getElementById('screen-share-username');
@@ -1741,6 +1741,11 @@ async function showScreenShareView(track, participant) {
         console.error('[SCREEN-UI] Screen share view elements not found');
         return;
     }
+    
+    // Get target resolution from publication (SFU knows the source dimensions)
+    const targetWidth = publication?.dimensions?.width || 1920;
+    const targetHeight = publication?.dimensions?.height || 1080;
+    console.log('[SCREEN-UI] Target resolution from SFU:', targetWidth, 'x', targetHeight);
     
     // CRITICAL: Show the screen share view FIRST (before attaching track)
     // This ensures adaptiveStream sees the correct container dimensions
@@ -1754,11 +1759,12 @@ async function showScreenShareView(track, participant) {
     // Clear previous video
     videoContainer.innerHTML = '';
     
-    // CRITICAL: Set explicit dimensions on the container BEFORE attaching
-    // This tells LiveKit's adaptiveStream to use the full container size
-    // and not downscale the video quality
-    videoContainer.style.width = '100%';
-    videoContainer.style.height = '100%';
+    // CRITICAL: Set the container to the target resolution
+    // This tells LiveKit's adaptiveStream to request the full quality stream
+    videoContainer.style.width = targetWidth + 'px';
+    videoContainer.style.height = targetHeight + 'px';
+    videoContainer.style.maxWidth = '100%';
+    videoContainer.style.maxHeight = '100%';
     
     // Attach the video track to a <video> element
     const videoElement = track.attach();
@@ -1766,9 +1772,13 @@ async function showScreenShareView(track, participant) {
     videoElement.autoplay = true;
     videoElement.playsInline = true;
     videoElement.muted = true; // Video element muted (audio is handled separately by LiveKit)
-    // Force explicit dimensions on the video element itself
-    videoElement.style.width = '100%';
-    videoElement.style.height = '100%';
+    // CRITICAL: Set FIXED pixel dimensions to trick adaptiveStream into requesting max quality
+    // If we use percentages, adaptiveStream sees the container's computed size (e.g. 1366px)
+    // and downscales. With fixed pixel dimensions matching the source, it requests full quality.
+    videoElement.style.width = targetWidth + 'px';
+    videoElement.style.height = targetHeight + 'px';
+    videoElement.style.maxWidth = '100%';
+    videoElement.style.maxHeight = '100%';
     videoElement.style.objectFit = 'contain';
     
     // Double-click for browser fullscreen
@@ -1791,19 +1801,9 @@ async function showScreenShareView(track, participant) {
     });
     
     // Force LiveKit to re-evaluate the video element size for adaptiveStream
-    // This ensures it doesn't use a low-res stream
+    // Wait a bit for the DOM to settle, then trigger a re-evaluation
     setTimeout(() => {
-        if (track.setVideoOutputSize) {
-            try {
-                const w = videoContainer.clientWidth || 1920;
-                const h = videoContainer.clientHeight || 1080;
-                track.setVideoOutputSize(w, h);
-                console.log('[SCREEN-UI] Forced video output size:', w, 'x', h);
-            } catch(e) {
-                console.log('[SCREEN-UI] setVideoOutputSize not available:', e.message);
-            }
-        }
-        // Also check video dimensions after a delay
+        // Check video dimensions after a delay
         if (videoElement.videoWidth > 0) {
             console.log('[SCREEN-UI] Video dimensions at 500ms:', videoElement.videoWidth, 'x', videoElement.videoHeight);
         }
