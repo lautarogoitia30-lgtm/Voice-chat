@@ -1,11 +1,11 @@
 /**
  * LiveKit client for voice chat.
- * Handles room connections, microphone publishing, and participant tracking.
- * VERSION 11 - AUDIO QUALITY: Krisp noise cancellation + high bitrate Opus + NS/EC/AGC defaults
+ * Handles room connections, microphone publishing, participant tracking, and screen sharing.
+ * VERSION 12 - SCREEN SHARE: Share screen + system audio, Discord-style expanded view
  */
 
 // DEBUG: Make sure this is the latest version
-console.log('=== LIVEKIT CLIENT v11 LOADED ===');
+console.log('=== LIVEKIT CLIENT v12 LOADED ===');
 
 class LiveKitClient {
     constructor() {
@@ -20,6 +20,10 @@ class LiveKitClient {
         // State flags to prevent race conditions between connect/disconnect
         this._connecting = false;
         this._disconnecting = false;
+        // Screen share state
+        this._isScreenSharing = false;
+        this._screenShareParticipant = null; // identity of who is sharing
+        this._screenVideoElements = []; // Store screen share video elements
     }
     
     /**
@@ -166,7 +170,7 @@ class LiveKitClient {
                 })
                 // Listen for track subscriptions (when someone starts speaking)
                 .on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
-                    console.log('[LIVEKIT] 🎵 Track subscribed from:', participant.identity, participant.name, 'kind:', track.kind);
+                    console.log('[LIVEKIT] 🎵 Track subscribed from:', participant.identity, participant.name, 'kind:', track.kind, 'source:', track.source);
                     
                     // If it's an audio track, attach and play it
                     if (track.kind === 'audio') {
@@ -218,13 +222,37 @@ class LiveKitClient {
                         }
                     }
                     
+                    // If it's a video track (screen share), notify the UI
+                    if (track.kind === 'video') {
+                        console.log('[LIVEKIT] 🖥️ Video track received from:', participant.name || participant.identity, 'source:', track.source);
+                        this._screenShareParticipant = participant.identity;
+                        
+                        // Notify UI about screen share started
+                        if (window.livekitCallbacks && window.livekitCallbacks.onScreenShareStarted) {
+                            window.livekitCallbacks.onScreenShareStarted(track, participant);
+                        }
+                    }
+                    
                     if (window.livekitCallbacks && window.livekitCallbacks.onTrackSubscribed) {
                         window.livekitCallbacks.onTrackSubscribed(track, publication, participant);
                     }
                 })
                 // Listen for track unsubscriptions
                 .on(RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
-                    console.log('[LIVEKIT] Track unsubscribed from:', participant.identity, participant.name);
+                    console.log('[LIVEKIT] Track unsubscribed from:', participant.identity, participant.name, 'kind:', track.kind);
+                    
+                    // If it's a video track (screen share ended), notify the UI
+                    if (track.kind === 'video') {
+                        console.log('[LIVEKIT] 🖥️ Screen share track ended from:', participant.name || participant.identity);
+                        if (this._screenShareParticipant === participant.identity) {
+                            this._screenShareParticipant = null;
+                        }
+                        
+                        // Notify UI about screen share stopped
+                        if (window.livekitCallbacks && window.livekitCallbacks.onScreenShareStopped) {
+                            window.livekitCallbacks.onScreenShareStopped(track, participant);
+                        }
+                    }
                     
                     // Remove from known participants
                     const idx = this.knownParticipants.findIndex(p => p.identity === participant.identity);
@@ -261,9 +289,29 @@ class LiveKitClient {
                     if (publication.source === Track.Source.Microphone) {
                         this._applyKrisp(publication);
                     }
+                    // Detect local screen share published
+                    if (publication.source === Track.Source.ScreenShare) {
+                        console.log('[TRACK-EVENT] 🖥️ Local screen share published!');
+                        this._isScreenSharing = true;
+                        this._screenShareParticipant = this.localParticipant?.identity;
+                        if (window.livekitCallbacks && window.livekitCallbacks.onLocalScreenShareStarted) {
+                            window.livekitCallbacks.onLocalScreenShareStarted();
+                        }
+                    }
                 })
                 .on(RoomEvent.LocalTrackUnpublished, (publication, participant) => {
                     console.log('[TRACK-EVENT] 📥 LocalTrackUnpublished! source:', publication.source, 'trackSid:', publication.trackSid);
+                    // Detect local screen share stopped
+                    if (publication.source === Track.Source.ScreenShare || publication.source === Track.Source.ScreenShareAudio) {
+                        console.log('[TRACK-EVENT] 🖥️ Local screen share unpublished!');
+                        this._isScreenSharing = false;
+                        if (this._screenShareParticipant === this.localParticipant?.identity) {
+                            this._screenShareParticipant = null;
+                        }
+                        if (window.livekitCallbacks && window.livekitCallbacks.onLocalScreenShareStopped) {
+                            window.livekitCallbacks.onLocalScreenShareStopped();
+                        }
+                    }
                 });
             
             // Connect to the room
@@ -493,6 +541,9 @@ class LiveKitClient {
             this.localParticipant = null;
             this.knownParticipants = []; // Clear known participants
             this.audioElements = []; // Clear audio elements
+            this._isScreenSharing = false; // Clear screen share state
+            this._screenShareParticipant = null;
+            this._screenVideoElements = [];
             this._disconnecting = false;
         }
         
@@ -640,6 +691,90 @@ class LiveKitClient {
      */
     isConnected() {
         return this.room !== null;
+    }
+    
+    /**
+     * Start screen sharing with system audio.
+     * Uses LiveKit's native setScreenShareEnabled — captures screen + system audio.
+     * System audio only works on Chromium browsers (Chrome, Edge, Tauri WebView2).
+     */
+    async startScreenShare() {
+        console.log('[SCREEN] ===== START SCREEN SHARE =====');
+        
+        if (!this.room || this.room.state !== 'connected') {
+            console.warn('[SCREEN] Room not connected, cannot share screen');
+            return false;
+        }
+        
+        if (this._isScreenSharing) {
+            console.warn('[SCREEN] Already sharing screen');
+            return false;
+        }
+        
+        try {
+            // Use LiveKit's native screen share API — handles getDisplayMedia internally
+            // { audio: true } captures system audio on Chromium browsers
+            await this.localParticipant.setScreenShareEnabled(true, {
+                audio: true,           // Capture system audio (tab/window/desktop audio)
+                video: {
+                    displaySurface: 'monitor', // Prefer full screen capture
+                },
+                contentHint: 'detail', // Optimize for screen content (text, UI)
+                resolution: {
+                    width: 1920,
+                    height: 1080,
+                    frameRate: 30,
+                },
+            });
+            
+            console.log('[SCREEN] ✅ Screen share started successfully!');
+            // State is updated by LocalTrackPublished event handler
+            return true;
+        } catch (error) {
+            console.error('[SCREEN] Failed to start screen share:', error);
+            // User cancelled the screen picker dialog — not an error
+            if (error.name === 'NotAllowedError' || error.message?.includes('Permission denied')) {
+                console.log('[SCREEN] User cancelled screen share picker');
+                return false;
+            }
+            throw error;
+        }
+    }
+    
+    /**
+     * Stop screen sharing.
+     */
+    async stopScreenShare() {
+        console.log('[SCREEN] ===== STOP SCREEN SHARE =====');
+        
+        if (!this.localParticipant) {
+            console.warn('[SCREEN] No localParticipant');
+            return;
+        }
+        
+        try {
+            await this.localParticipant.setScreenShareEnabled(false);
+            this._isScreenSharing = false;
+            console.log('[SCREEN] ✅ Screen share stopped');
+        } catch (error) {
+            console.error('[SCREEN] Error stopping screen share:', error);
+            this._isScreenSharing = false;
+        }
+    }
+    
+    /**
+     * Check if currently sharing screen
+     */
+    isScreenSharing() {
+        return this._isScreenSharing;
+    }
+    
+    /**
+     * Get the identity of who is currently sharing their screen
+     * Returns null if nobody is sharing
+     */
+    getScreenShareParticipant() {
+        return this._screenShareParticipant;
     }
     
     /**

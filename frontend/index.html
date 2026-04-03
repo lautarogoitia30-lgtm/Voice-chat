@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VoiceSpace</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link rel="stylesheet" href="css/styles.css?v=23">
+    <link rel="stylesheet" href="css/styles.css?v=24">
 </head>
 <body class="h-screen overflow-hidden">
     
@@ -124,6 +124,22 @@
             
             <!-- Voice Chat Area -->
             <div id="voice-chat" class="voice-chat hidden">
+                <!-- Screen Share Expanded View (Discord-style) -->
+                <div id="screen-share-view" class="screen-share-view hidden">
+                    <div class="screen-share-header">
+                        <span class="screen-share-label">🖥️ <span id="screen-share-username">Alguien</span> está compartiendo pantalla</span>
+                        <button class="screen-share-close-btn" id="screen-share-close-btn" title="Cerrar vista expandida">✕</button>
+                    </div>
+                    <div class="screen-share-main">
+                        <div class="screen-share-video-container" id="screen-share-video-container">
+                            <!-- Video element will be attached here -->
+                        </div>
+                    </div>
+                    <div class="screen-share-participants" id="screen-share-participants">
+                        <!-- Thumbnails of other participants go here -->
+                    </div>
+                </div>
+                <!-- Normal voice participant list -->
                 <div id="voice-container" class="voice-participants">
                     <div id="participants-list"></div>
                 </div>
@@ -219,6 +235,9 @@
                 </button>
                 <button class="control-btn" id="mute-audio-btn" title="Silenciar audio">
                     🔊
+                </button>
+                <button class="control-btn hidden" id="screen-share-btn" title="Compartir pantalla">
+                    🖥️
                 </button>
                 <button class="control-btn hidden" id="join-voice-btn" title="Unirse a voz">
                     📞
@@ -432,7 +451,7 @@
     <!-- Scripts -->
     <script src="js/api.js?v=13"></script>
     <script src="js/websocket.js?v=10"></script>
-    <script src="js/livekit.js?v=20"></script>
-    <script src="js/app.js?v=41"></script>
+    <script src="js/livekit.js?v=21"></script>
+    <script src="js/app.js?v=42"></script>
 </body>
 </html>

@@ -122,6 +122,7 @@ function getElements() {
         userInitial: document.getElementById('user-initial'),
         muteMicBtn: document.getElementById('mute-mic-btn'),
         muteAudioBtn: document.getElementById('mute-audio-btn'),
+        screenShareBtn: document.getElementById('screen-share-btn'),
         joinVoiceBtn: document.getElementById('join-voice-btn'),
         leaveVoiceBtn: document.getElementById('leave-voice-btn'),
         
@@ -255,6 +256,14 @@ function setupEventListeners(elements) {
         console.log('Deaf button clicked');
         handleToggleDeaf();
     });
+    document.getElementById('screen-share-btn')?.addEventListener('click', () => {
+        console.log('Screen share button clicked');
+        handleToggleScreenShare();
+    });
+    document.getElementById('screen-share-close-btn')?.addEventListener('click', () => {
+        console.log('Screen share close button clicked');
+        hideScreenShareView();
+    });
     
     window.wsClient.onMessage = handleWebSocketMessage;
     window.wsClient.onConnect = () => console.log('WebSocket connected');
@@ -266,6 +275,11 @@ function setupEventListeners(elements) {
     window.livekitCallbacks.onParticipantConnected = handleParticipantConnected;
     window.livekitCallbacks.onParticipantDisconnected = handleParticipantDisconnected;
     window.livekitCallbacks.onActiveSpeakersChanged = handleActiveSpeakersChanged;
+    // Screen share callbacks
+    window.livekitCallbacks.onScreenShareStarted = handleRemoteScreenShareStarted;
+    window.livekitCallbacks.onScreenShareStopped = handleRemoteScreenShareStopped;
+    window.livekitCallbacks.onLocalScreenShareStarted = handleLocalScreenShareStarted;
+    window.livekitCallbacks.onLocalScreenShareStopped = handleLocalScreenShareStopped;
 }
 
 // Show/hide views
@@ -1435,6 +1449,10 @@ function handleLeaveVoice() {
     if (elements.leaveVoiceBtn) elements.leaveVoiceBtn.classList.add('hidden');
     if (document.getElementById('mute-mic-btn')) document.getElementById('mute-mic-btn').classList.add('hidden');
     if (document.getElementById('deaf-btn')) document.getElementById('deaf-btn').classList.add('hidden');
+    if (document.getElementById('screen-share-btn')) document.getElementById('screen-share-btn').classList.add('hidden');
+    
+    // Hide screen share view if visible
+    hideScreenShareView();
     
     // Limpiar lista de participantes
     const partsList = document.getElementById('participants-list');
@@ -1579,6 +1597,7 @@ function updateVoiceControlsUI() {
     const deafBtn = document.getElementById('mute-audio-btn');
     const joinBtn = document.getElementById('join-voice-btn');
     const leaveBtn = document.getElementById('leave-voice-btn');
+    const screenBtn = document.getElementById('screen-share-btn');
     
     if (!muteBtn || !deafBtn || !joinBtn || !leaveBtn) {
         console.warn('Voice control buttons not found in DOM', { muteBtn, deafBtn, joinBtn, leaveBtn });
@@ -1591,6 +1610,7 @@ function updateVoiceControlsUI() {
         leaveBtn.classList.remove('hidden');
         muteBtn.classList.remove('hidden');
         deafBtn.classList.remove('hidden');
+        if (screenBtn) screenBtn.classList.remove('hidden');
         
         // Update mute button style - using .active class
         if (state.isMuted) {
@@ -1614,6 +1634,19 @@ function updateVoiceControlsUI() {
             deafBtn.title = 'Silenciar sonido';
         }
         
+        // Update screen share button style
+        if (screenBtn) {
+            if (window.livekitClient && window.livekitClient.isScreenSharing()) {
+                screenBtn.classList.add('active');
+                screenBtn.innerHTML = '🖥️';
+                screenBtn.title = 'Dejar de compartir pantalla';
+            } else {
+                screenBtn.classList.remove('active');
+                screenBtn.innerHTML = '🖥️';
+                screenBtn.title = 'Compartir pantalla';
+            }
+        }
+        
         console.log('Voice controls updated - in voice mode');
     } else {
         // Show join button when not in voice
@@ -1621,10 +1654,201 @@ function updateVoiceControlsUI() {
         leaveBtn.classList.add('hidden');
         muteBtn.classList.add('hidden');
         deafBtn.classList.add('hidden');
+        if (screenBtn) screenBtn.classList.add('hidden');
         
         console.log('Voice controls updated - not in voice mode');
     }
 }
+
+// ==========================================
+// SCREEN SHARE — Toggle, Display, Callbacks
+// ==========================================
+
+// Toggle screen share on/off
+async function handleToggleScreenShare() {
+    console.log('[SCREEN-UI] handleToggleScreenShare called, isInVoice:', state.isInVoice);
+    
+    if (!state.isInVoice) {
+        alert('No estás en un canal de voz');
+        return;
+    }
+    
+    if (!window.livekitClient) {
+        console.error('[SCREEN-UI] livekitClient not available');
+        return;
+    }
+    
+    try {
+        if (window.livekitClient.isScreenSharing()) {
+            // Stop sharing
+            await window.livekitClient.stopScreenShare();
+            console.log('[SCREEN-UI] Screen share stopped');
+        } else {
+            // Start sharing
+            const started = await window.livekitClient.startScreenShare();
+            if (started) {
+                console.log('[SCREEN-UI] Screen share started');
+            } else {
+                console.log('[SCREEN-UI] Screen share cancelled by user');
+            }
+        }
+        updateVoiceControlsUI();
+    } catch (error) {
+        console.error('[SCREEN-UI] Screen share error:', error);
+        showToast('Error al compartir pantalla: ' + error.message, 'error');
+    }
+}
+
+// When a remote participant starts sharing their screen
+function handleRemoteScreenShareStarted(track, participant) {
+    console.log('[SCREEN-UI] Remote screen share started from:', participant.name || participant.identity);
+    showScreenShareView(track, participant);
+}
+
+// When a remote participant stops sharing their screen
+function handleRemoteScreenShareStopped(track, participant) {
+    console.log('[SCREEN-UI] Remote screen share stopped from:', participant.name || participant.identity);
+    hideScreenShareView();
+}
+
+// When WE start sharing our screen
+function handleLocalScreenShareStarted() {
+    console.log('[SCREEN-UI] Local screen share started');
+    updateVoiceControlsUI();
+    showToast('Compartiendo pantalla 🖥️', 'success');
+}
+
+// When WE stop sharing our screen
+function handleLocalScreenShareStopped() {
+    console.log('[SCREEN-UI] Local screen share stopped');
+    updateVoiceControlsUI();
+    hideScreenShareView();
+    showToast('Dejaste de compartir pantalla', 'info');
+}
+
+// Show the expanded screen share view (Discord-style)
+function showScreenShareView(track, participant) {
+    const screenShareView = document.getElementById('screen-share-view');
+    const videoContainer = document.getElementById('screen-share-video-container');
+    const usernameLabel = document.getElementById('screen-share-username');
+    const normalView = document.getElementById('voice-container');
+    
+    if (!screenShareView || !videoContainer) {
+        console.error('[SCREEN-UI] Screen share view elements not found');
+        return;
+    }
+    
+    // Clear previous video
+    videoContainer.innerHTML = '';
+    
+    // Attach the video track to a <video> element
+    const videoElement = track.attach();
+    videoElement.className = 'screen-share-video';
+    videoElement.autoplay = true;
+    videoElement.playsInline = true;
+    videoElement.muted = true; // Video element muted (audio is handled separately by LiveKit)
+    
+    // Double-click for browser fullscreen
+    videoElement.addEventListener('dblclick', () => {
+        if (videoElement.requestFullscreen) {
+            videoElement.requestFullscreen();
+        } else if (videoElement.webkitRequestFullscreen) {
+            videoElement.webkitRequestFullscreen();
+        }
+    });
+    
+    videoContainer.appendChild(videoElement);
+    
+    // Set who is sharing
+    const displayName = participant.name || participant.identity || 'Alguien';
+    if (usernameLabel) usernameLabel.textContent = displayName;
+    
+    // Show screen share view, hide normal voice view
+    screenShareView.classList.remove('hidden');
+    if (normalView) normalView.classList.add('hidden');
+    
+    // Build participant thumbnails in the bottom bar
+    buildScreenShareThumbnails(participant.identity);
+    
+    console.log('[SCREEN-UI] Screen share view shown for:', displayName);
+}
+
+// Hide the expanded screen share view
+function hideScreenShareView() {
+    const screenShareView = document.getElementById('screen-share-view');
+    const videoContainer = document.getElementById('screen-share-video-container');
+    const normalView = document.getElementById('voice-container');
+    
+    if (screenShareView) {
+        screenShareView.classList.add('hidden');
+    }
+    
+    // Detach and clean up video elements
+    if (videoContainer) {
+        const videos = videoContainer.querySelectorAll('video');
+        videos.forEach(v => {
+            v.srcObject = null;
+            v.remove();
+        });
+        videoContainer.innerHTML = '';
+    }
+    
+    // Show normal voice view again
+    if (normalView) normalView.classList.remove('hidden');
+    
+    console.log('[SCREEN-UI] Screen share view hidden');
+}
+
+// Build participant thumbnails at the bottom of screen share view
+function buildScreenShareThumbnails(sharerIdentity) {
+    const thumbContainer = document.getElementById('screen-share-participants');
+    if (!thumbContainer) return;
+    
+    thumbContainer.innerHTML = '';
+    
+    // Get all participants (including local)
+    const localParticipant = window.livekitClient?.getLocalParticipant();
+    const remoteParticipants = window.livekitClient?.getParticipants() || [];
+    
+    // Build list of all participants
+    const allParticipants = [];
+    
+    if (localParticipant) {
+        allParticipants.push({
+            identity: localParticipant.identity,
+            name: localParticipant.name || localParticipant.identity,
+            isLocal: true,
+            isSharing: localParticipant.identity === sharerIdentity
+        });
+    }
+    
+    remoteParticipants.forEach(p => {
+        allParticipants.push({
+            identity: p.identity,
+            name: p.name || p.identity,
+            isLocal: false,
+            isSharing: p.identity === sharerIdentity
+        });
+    });
+    
+    // Create thumbnails
+    allParticipants.forEach(p => {
+        const thumb = document.createElement('div');
+        thumb.className = 'screen-share-thumb' + (p.isSharing ? ' sharing' : '');
+        
+        const initial = (p.name || '?').charAt(0).toUpperCase();
+        thumb.innerHTML = `
+            <div class="thumb-avatar">${initial}</div>
+            <span class="thumb-name">${p.isLocal ? p.name + ' (vos)' : p.name}</span>
+            ${p.isSharing ? '<span class="thumb-sharing-badge">🖥️</span>' : ''}
+        `;
+        
+        thumbContainer.appendChild(thumb);
+    });
+}
+
+// Expose screen share functions globally
+window.handleToggleScreenShare = handleToggleScreenShare;
 
 function handleParticipantConnected(participant) {
     console.log('Participant connected event:', participant);
