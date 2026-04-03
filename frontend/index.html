@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VoiceSpace</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link rel="stylesheet" href="css/styles.css?v=12">
+    <link rel="stylesheet" href="css/styles.css?v=13">
 </head>
 <body class="h-screen overflow-hidden">
     
@@ -59,20 +59,6 @@
             <div id="servers-list" class="servers-list">
                 <!-- Server buttons will be inserted here -->
             </div>
-            
-            <!-- Spacer to push bottom buttons down -->
-            <div style="flex: 1;"></div>
-            
-            <!-- Bottom action buttons -->
-            <button class="server-btn" onclick="loadGroups()" title="Actualizar" type="button">
-                🔄
-            </button>
-            <button class="server-btn" onclick="showCreateGroupModal()" title="Crear Grupo" type="button">
-                ➕
-            </button>
-            <button class="server-btn" onclick="showSettingsModal()" title="Configuración" type="button">
-                ⚙️
-            </button>
         </div>
         
         <!-- MIDDLE SIDEBAR: Channels -->
@@ -142,14 +128,19 @@
         </div>
         </div>
         
-        <!-- BOTTOM BAR: Voice Controls -->
+        <!-- BOTTOM BAR: User + Message + Voice Controls -->
         <div class="voice-controls-bar">
-            <!-- User info -->
+            <!-- User info + action buttons -->
             <div class="user-info">
                 <div class="user-avatar" id="user-avatar">
                     <span id="user-initial">?</span>
                 </div>
                 <span id="user-display-name" class="user-name">Usuario</span>
+                <div class="user-action-buttons">
+                    <button class="action-btn" onclick="showSettingsModal()" title="Configuración" type="button">⚙️</button>
+                    <button class="action-btn" onclick="showCreateGroupModal()" title="Crear Grupo" type="button">➕</button>
+                    <button class="action-btn" onclick="loadGroups()" title="Actualizar" type="button">🔄</button>
+                </div>
             </div>
             
             <!-- Message input (only visible in text channels) -->
