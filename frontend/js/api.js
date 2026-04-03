@@ -84,7 +84,11 @@ const authAPI = {
         
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.detail || 'Registration failed');
+            const detail = error.detail;
+            if (Array.isArray(detail)) {
+                throw new Error(detail.map(e => e.msg).join(', '));
+            }
+            throw new Error(detail || 'Registration failed');
         }
         
         return response.json();
@@ -101,7 +105,11 @@ const authAPI = {
         
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.detail || 'Login failed');
+            const detail = error.detail;
+            if (Array.isArray(detail)) {
+                throw new Error(detail.map(e => e.msg).join(', '));
+            }
+            throw new Error(detail || 'Login failed');
         }
         
         return response.json();
