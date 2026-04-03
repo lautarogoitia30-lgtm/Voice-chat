@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VoiceSpace</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link rel="stylesheet" href="css/styles.css?v=22">
+    <link rel="stylesheet" href="css/styles.css?v=23">
 </head>
 <body class="h-screen overflow-hidden">
     
@@ -249,15 +249,21 @@
     <!-- Edit Group Modal -->
     <div id="edit-group-modal" class="modal-backdrop hidden">
         <div class="modal">
-            <h3>Editar Grupo</h3>
+            <h3>⚙️ Configuración del Grupo</h3>
             <form id="edit-group-form">
                 <input type="hidden" id="edit-group-id">
+                <label class="modal-label">Nombre del grupo</label>
                 <input type="text" id="edit-group-name" placeholder="Nombre del grupo" required>
                 <div class="modal-buttons">
                     <button type="button" class="btn btn-secondary" onclick="hideEditGroupModal()">Cancelar</button>
                     <button type="submit" class="btn btn-primary">Guardar</button>
                 </div>
             </form>
+            <div id="edit-group-danger-zone" class="danger-zone hidden">
+                <hr class="modal-divider">
+                <h4 class="danger-title">⚠️ Zona peligrosa</h4>
+                <button type="button" class="btn btn-danger" onclick="deleteGroup()">🗑️ Eliminar Grupo</button>
+            </div>
         </div>
     </div>
     
@@ -427,6 +433,6 @@
     <script src="js/api.js?v=13"></script>
     <script src="js/websocket.js?v=10"></script>
     <script src="js/livekit.js?v=20"></script>
-    <script src="js/app.js?v=40"></script>
+    <script src="js/app.js?v=41"></script>
 </body>
 </html>

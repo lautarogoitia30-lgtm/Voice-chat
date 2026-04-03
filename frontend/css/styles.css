@@ -1695,3 +1695,42 @@ body {
 .demote-btn:hover {
     background: rgba(234, 179, 8, 0.3);
 }
+
+/* ==================== EDIT GROUP MODAL EXTRAS ==================== */
+.modal-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+    letter-spacing: 0.5px;
+}
+.modal-divider {
+    border: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    margin: 16px 0;
+}
+.danger-zone {
+    margin-top: 8px;
+}
+.danger-title {
+    color: #ef4444;
+    font-size: 13px;
+    margin-bottom: 10px;
+}
+.btn-danger {
+    background: #dc2626;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    width: 100%;
+    transition: background 0.2s;
+}
+.btn-danger:hover {
+    background: #b91c1c;
+}

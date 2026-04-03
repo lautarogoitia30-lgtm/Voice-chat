@@ -1967,6 +1967,17 @@ function showEditGroupModal() {
     
     document.getElementById('edit-group-id').value = state.selectedGroup.id;
     document.getElementById('edit-group-name').value = state.selectedGroup.name;
+    
+    // Show danger zone only for owner
+    const dangerZone = document.getElementById('edit-group-danger-zone');
+    if (dangerZone) {
+        if (state.myRole === 'owner') {
+            dangerZone.classList.remove('hidden');
+        } else {
+            dangerZone.classList.add('hidden');
+        }
+    }
+    
     document.getElementById('edit-group-modal').classList.remove('hidden');
 }
 
