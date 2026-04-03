@@ -264,6 +264,18 @@ async def dm_websocket_endpoint(websocket: WebSocket, conversation_id: int, user
             
             try:
                 message_data = json.loads(data)
+                msg_type = message_data.get("type", "message")
+                
+                # Handle typing indicator — just relay, don't save
+                if msg_type == "typing":
+                    typing_broadcast = {
+                        "type": "typing",
+                        "sender_id": user_data["user_id"],
+                        "sender_username": user_data["username"]
+                    }
+                    await dm_manager.broadcast(conversation_id, typing_broadcast)
+                    continue
+                
                 content = message_data.get("content", "")
                 
                 if content.strip():

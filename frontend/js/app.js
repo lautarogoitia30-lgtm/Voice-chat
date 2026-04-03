@@ -3141,6 +3141,15 @@ function connectDMWebSocket(conversationId) {
                 if (msg.type === 'dm_message') {
                     appendDMMessage(msg);
                     updateConversationLastMessage(msg.conversation_id, msg.content);
+                    // Hide typing indicator when a real message arrives
+                    if (msg.sender_id !== state.currentUser?.user_id) {
+                        hideTypingIndicator();
+                    }
+                } else if (msg.type === 'typing') {
+                    // Show typing indicator (ignore own typing)
+                    if (msg.sender_id !== state.currentUser?.user_id) {
+                        showTypingIndicator(msg.sender_username);
+                    }
                 }
             } catch (e) {
                 console.error('[DM-WS] Error parsing message:', e);
@@ -3276,6 +3285,44 @@ function updateDMBadge() {
     }
 }
 
+// ==================== TYPING INDICATOR ====================
+
+let typingTimeout = null;
+let lastTypingSent = 0;
+
+// Send typing event (throttled — max once per 2 seconds)
+function sendTypingEvent() {
+    const now = Date.now();
+    if (now - lastTypingSent < 2000) return;
+    if (!state.dmWebSocket || state.dmWebSocket.readyState !== WebSocket.OPEN) return;
+    
+    lastTypingSent = now;
+    state.dmWebSocket.send(JSON.stringify({ type: 'typing' }));
+}
+
+// Show typing indicator
+function showTypingIndicator(username) {
+    const indicator = document.getElementById('dm-typing-indicator');
+    const usernameEl = document.getElementById('dm-typing-username');
+    if (!indicator || !usernameEl) return;
+    
+    usernameEl.textContent = username;
+    indicator.classList.remove('hidden');
+    
+    // Auto-hide after 3 seconds
+    clearTimeout(typingTimeout);
+    typingTimeout = setTimeout(() => {
+        hideTypingIndicator();
+    }, 3000);
+}
+
+// Hide typing indicator
+function hideTypingIndicator() {
+    const indicator = document.getElementById('dm-typing-indicator');
+    if (indicator) indicator.classList.add('hidden');
+    clearTimeout(typingTimeout);
+}
+
 // Format DM timestamp
 function formatDMTimestamp(unixTimestamp) {
     const date = new Date(unixTimestamp * 1000);
@@ -3339,6 +3386,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 sendDMMessage();
+                hideTypingIndicator(); // Hide typing when sending
+            }
+        });
+        // Send typing event when user types
+        dmInput.addEventListener('input', () => {
+            if (dmInput.value.trim()) {
+                sendTypingEvent();
             }
         });
     }

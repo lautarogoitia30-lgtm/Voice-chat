@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VoiceSpace</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link rel="stylesheet" href="css/styles.css?v=19">
+    <link rel="stylesheet" href="css/styles.css?v=20">
 </head>
 <body class="h-screen overflow-hidden">
     
@@ -175,6 +175,12 @@
                     <p style="font-size: 48px;">💬</p>
                     <p>Seleccioná una conversación para empezar a chatear</p>
                 </div>
+            </div>
+            
+            <!-- Typing Indicator -->
+            <div id="dm-typing-indicator" class="dm-typing-indicator hidden">
+                <span class="dm-typing-dots"><span>.</span><span>.</span><span>.</span></span>
+                <span id="dm-typing-username"></span> está escribiendo...
             </div>
             
             <!-- DM Message Input -->
@@ -419,6 +425,6 @@
     <script src="js/api.js?v=11"></script>
     <script src="js/websocket.js?v=10"></script>
     <script src="js/livekit.js?v=19"></script>
-    <script src="js/app.js?v=36"></script>
+    <script src="js/app.js?v=37"></script>
 </body>
 </html>

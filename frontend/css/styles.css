@@ -1337,6 +1337,41 @@ body {
     margin-left: auto;
 }
 
+/* Typing indicator */
+.dm-typing-indicator {
+    padding: 4px 16px 8px;
+    font-size: 12px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.dm-typing-indicator.hidden {
+    display: none;
+}
+
+.dm-typing-dots span {
+    animation: typingBounce 1.4s infinite;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--accent);
+    line-height: 1;
+}
+
+.dm-typing-dots span:nth-child(2) {
+    animation-delay: 0.2s;
+}
+
+.dm-typing-dots span:nth-child(3) {
+    animation-delay: 0.4s;
+}
+
+@keyframes typingBounce {
+    0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
+    30% { opacity: 1; transform: translateY(-3px); }
+}
+
 /* DM Empty State */
 .dm-empty-state {
     display: flex;
