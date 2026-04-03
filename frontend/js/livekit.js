@@ -1,11 +1,11 @@
 /**
  * LiveKit client for voice chat.
  * Handles room connections, microphone publishing, and participant tracking.
- * VERSION 10 - FIX DOUBLE-CLICK BUG (was calling handler twice: onclick + addEventListener)
+ * VERSION 11 - AUDIO QUALITY: Krisp noise cancellation + high bitrate Opus + NS/EC/AGC defaults
  */
 
 // DEBUG: Make sure this is the latest version
-console.log('=== LIVEKIT CLIENT v10 LOADED ===');
+console.log('=== LIVEKIT CLIENT v11 LOADED ===');
 
 class LiveKitClient {
     constructor() {
@@ -15,6 +15,8 @@ class LiveKitClient {
         this.audioElements = []; // Store all audio elements for control
         this._isMuted = false;
         this._pendingVolume = null;
+        this._krispProcessor = null; // Krisp noise filter processor
+        this._krispSupported = null; // null = unknown, true/false after check
         // State flags to prevent race conditions between connect/disconnect
         this._connecting = false;
         this._disconnecting = false;
@@ -90,12 +92,29 @@ class LiveKitClient {
             
             const { Room, RoomEvent, Track } = livekit;
             this._Track = Track; // Store Track class for later use (e.g. source tagging)
+            this._RoomEvent = RoomEvent; // Store for Krisp setup
             console.log('Room class:', Room);
             
             this.room = new Room({
                 adaptiveStream: true,
                 dynacast: true,
                 autoSubscribe: true,
+                // Audio capture defaults — high quality with noise/echo suppression
+                audioCaptureDefaults: {
+                    noiseSuppression: true,
+                    echoCancellation: true,
+                    autoGainControl: true,
+                    channelCount: 1,       // Mono for voice (saves bandwidth, better processing)
+                    sampleRate: 48000,     // 48kHz — Opus native sample rate
+                },
+                // Publish defaults — high bitrate Opus for crystal clear voice
+                publishDefaults: {
+                    audioPreset: {
+                        maxBitrate: 64_000, // 64kbps Opus (default is ~32kbps, Discord uses ~64kbps)
+                    },
+                    dtx: true,             // Discontinuous transmission — saves bandwidth when silent
+                    red: true,             // Redundant encoding — better packet loss recovery
+                },
             });
             
             console.log('Room created:', this.room);
@@ -238,6 +257,10 @@ class LiveKitClient {
                 })
                 .on(RoomEvent.LocalTrackPublished, (publication, participant) => {
                     console.log('[TRACK-EVENT] 📤 LocalTrackPublished! source:', publication.source, 'trackSid:', publication.trackSid, 'kind:', publication.kind);
+                    // Apply Krisp noise filter to microphone tracks
+                    if (publication.source === Track.Source.Microphone) {
+                        this._applyKrisp(publication);
+                    }
                 })
                 .on(RoomEvent.LocalTrackUnpublished, (publication, participant) => {
                     console.log('[TRACK-EVENT] 📥 LocalTrackUnpublished! source:', publication.source, 'trackSid:', publication.trackSid);
@@ -321,18 +344,20 @@ class LiveKitClient {
             // Wait for room engine to be fully ready
             await new Promise(resolve => setTimeout(resolve, 500));
             
-            // Get user settings
+            // Get user settings — noise suppression and echo cancellation ON by default
             const inputDevice = localStorage.getItem('voice_chat_input_device');
-            const noiseSuppression = localStorage.getItem('voice_chat_noise_suppression') === 'true';
-            const echoCancellation = localStorage.getItem('voice_chat_echo_cancellation') !== 'false';
+            const noiseSuppression = localStorage.getItem('voice_chat_noise_suppression') !== 'false'; // ON by default
+            const echoCancellation = localStorage.getItem('voice_chat_echo_cancellation') !== 'false'; // ON by default
             
             console.log('[AUDIO] Publishing mic natively. Device:', inputDevice, 'NS:', noiseSuppression, 'EC:', echoCancellation);
             
-            // Build audio capture options
+            // Build audio capture options — optimized for voice
             const opts = {
                 echoCancellation: echoCancellation,
                 noiseSuppression: noiseSuppression,
                 autoGainControl: true,
+                channelCount: 1,
+                sampleRate: 48000,
             };
             
             if (inputDevice) {
@@ -402,13 +427,15 @@ class LiveKitClient {
             } else {
                 // Re-enable with user's preferred audio settings
                 const inputDevice = localStorage.getItem('voice_chat_input_device');
-                const noiseSuppression = localStorage.getItem('voice_chat_noise_suppression') === 'true';
-                const echoCancellation = localStorage.getItem('voice_chat_echo_cancellation') !== 'false';
+                const noiseSuppression = localStorage.getItem('voice_chat_noise_suppression') !== 'false'; // ON by default
+                const echoCancellation = localStorage.getItem('voice_chat_echo_cancellation') !== 'false'; // ON by default
                 
                 const opts = {
                     echoCancellation: echoCancellation,
                     noiseSuppression: noiseSuppression,
                     autoGainControl: true,
+                    channelCount: 1,
+                    sampleRate: 48000,
                 };
                 if (inputDevice) opts.deviceId = inputDevice;
                 
@@ -613,6 +640,50 @@ class LiveKitClient {
      */
     isConnected() {
         return this.room !== null;
+    }
+    
+    /**
+     * Apply Krisp AI noise cancellation to a published audio track.
+     * Krisp runs locally in the browser — no audio sent to external servers.
+     * Falls back gracefully if Krisp is not supported or fails to load.
+     */
+    async _applyKrisp(publication) {
+        try {
+            // Only apply once
+            if (this._krispProcessor) {
+                console.log('[KRISP] Already applied, skipping');
+                return;
+            }
+            
+            // Dynamic import of Krisp noise filter
+            console.log('[KRISP] Loading Krisp noise filter...');
+            const krispModule = await import('https://cdn.jsdelivr.net/npm/@livekit/krisp-noise-filter@0.2/+esm');
+            
+            // Check browser support
+            if (krispModule.isKrispNoiseFilterSupported && !krispModule.isKrispNoiseFilterSupported()) {
+                console.warn('[KRISP] Not supported on this browser — using browser-native noise suppression');
+                this._krispSupported = false;
+                return;
+            }
+            
+            // Create and apply the processor
+            this._krispProcessor = krispModule.KrispNoiseFilter();
+            
+            if (publication.track && publication.track.setProcessor) {
+                await publication.track.setProcessor(this._krispProcessor);
+                await this._krispProcessor.setEnabled(true);
+                this._krispSupported = true;
+                console.log('[KRISP] ✅ Krisp AI noise cancellation ACTIVE — teclado, ventilador, ruido ambiente filtrado');
+            } else {
+                console.warn('[KRISP] Track does not support setProcessor');
+                this._krispSupported = false;
+            }
+        } catch (e) {
+            console.warn('[KRISP] Failed to apply Krisp:', e.message);
+            console.warn('[KRISP] Falling back to browser-native noise suppression');
+            this._krispSupported = false;
+            this._krispProcessor = null;
+        }
     }
 }
 
