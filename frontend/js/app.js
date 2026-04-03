@@ -1702,10 +1702,6 @@ async function handleToggleScreenShare() {
 // When a remote participant starts sharing their screen
 function handleRemoteScreenShareStarted(track, publication, participant) {
     console.log('[SCREEN-UI] Remote screen share started from:', participant.name || participant.identity);
-    // Log publication dimensions from SFU
-    if (publication && publication.dimensions) {
-        console.log('[SCREEN-UI] SFU dimensions:', publication.dimensions.width, 'x', publication.dimensions.height);
-    }
     showScreenShareView(track, publication, participant);
 }
 
@@ -1745,7 +1741,6 @@ async function showScreenShareView(track, publication, participant) {
     // Get target resolution from publication (SFU knows the source dimensions)
     const targetWidth = publication?.dimensions?.width || 1920;
     const targetHeight = publication?.dimensions?.height || 1080;
-    console.log('[SCREEN-UI] Target resolution from SFU:', targetWidth, 'x', targetHeight);
     
     // CRITICAL: Show the screen share view FIRST (before attaching track)
     screenShareView.classList.remove('hidden');
@@ -1771,11 +1766,9 @@ async function showScreenShareView(track, publication, participant) {
     
     // Attach the track — adaptiveStream sees 2560x1440 and requests max quality
     track.attach(videoElement);
-    console.log('[SCREEN-UI] Attached track to hidden element at', targetWidth, 'x', targetHeight);
     
     // When the stream arrives, make it visible and scale to fit
     videoElement.addEventListener('loadedmetadata', () => {
-        console.log('[SCREEN-UI] Stream received — dimensions:', videoElement.videoWidth, 'x', videoElement.videoHeight);
         // Make visible — scale to fit container
         videoElement.style.cssText = '';
         videoElement.className = 'screen-share-video';

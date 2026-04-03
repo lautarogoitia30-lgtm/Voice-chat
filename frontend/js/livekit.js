@@ -232,12 +232,6 @@ class LiveKitClient {
                     if (track.kind === 'video') {
                         console.log('[LIVEKIT] 🖥️ Video track received from:', participant.name || participant.identity, 'source:', track.source);
                         
-                        // Log track dimensions for diagnostics
-                        // For remote tracks, use publication.dimensions (set by SFU)
-                        if (publication && publication.dimensions) {
-                            console.log('[LIVEKIT] 🖥️ Publication dimensions:', publication.dimensions.width, 'x', publication.dimensions.height);
-                        }
-                        
                         this._screenShareParticipant = participant.identity;
                         
                         // Notify UI about screen share started
