@@ -1,7 +1,7 @@
 /**
  * LiveKit client for voice chat.
  * Handles room connections, microphone publishing, participant tracking, and screen sharing.
- * VERSION 12 - SCREEN SHARE: Share screen + system audio, Discord-style expanded view
+ * VERSION 12.1 - SCREEN SHARE QUALITY: 3Mbps bitrate, manual track publishing, no simulcast
  */
 
 // DEBUG: Make sure this is the latest version
@@ -118,6 +118,12 @@ class LiveKitClient {
                     },
                     dtx: true,             // Discontinuous transmission — saves bandwidth when silent
                     red: true,             // Redundant encoding — better packet loss recovery
+                    // Screen share encoding — 3 Mbps for crisp text/UI
+                    screenShareEncoding: {
+                        maxBitrate: 3_000_000,
+                        maxFramerate: 30,
+                    },
+                    screenShareSimulcastLayers: [], // No simulcast — single high quality stream
                 },
             });
             
@@ -712,20 +718,44 @@ class LiveKitClient {
         }
         
         try {
-            // Use LiveKit's native screen share API — handles getDisplayMedia internally
-            // { audio: true } captures system audio on Chromium browsers
-            await this.localParticipant.setScreenShareEnabled(true, {
-                audio: true,           // Capture system audio (tab/window/desktop audio)
-                video: {
-                    displaySurface: 'monitor', // Prefer full screen capture
-                },
+            // Import LiveKit for ScreenSharePresets and createLocalScreenTracks
+            const livekit = await import('https://cdn.jsdelivr.net/npm/livekit-client@2/+esm');
+            const { createLocalScreenTracks, ScreenSharePresets, Track } = livekit;
+            
+            // Create screen share tracks with HIGH QUALITY settings
+            // Using createLocalScreenTracks gives us full control over encoding
+            const screenTracks = await createLocalScreenTracks({
+                audio: true,           // Capture system audio (Chromium only)
+                resolution: ScreenSharePresets.h1080fps30.resolution,
                 contentHint: 'detail', // Optimize for screen content (text, UI)
-                resolution: {
-                    width: 1920,
-                    height: 1080,
-                    frameRate: 30,
-                },
             });
+            
+            // Publish each track with explicit high-bitrate encoding
+            for (const track of screenTracks) {
+                if (track.kind === 'video') {
+                    await this.localParticipant.publishTrack(track, {
+                        source: Track.Source.ScreenShare,
+                        // HIGH QUALITY encoding — 3 Mbps max, 1.5 Mbps target
+                        videoEncoding: {
+                            maxBitrate: 3_000_000,  // 3 Mbps (default is ~1 Mbps, way too low)
+                            maxFramerate: 30,
+                        },
+                        // Disable simulcast for screen share — single high quality stream
+                        simulcast: false,
+                        // Scalability: single layer, max quality
+                        scalabilityMode: 'L1T1',
+                    });
+                    console.log('[SCREEN] Video track published at 3 Mbps / 30fps');
+                } else {
+                    // Audio track from screen share
+                    await this.localParticipant.publishTrack(track, {
+                        source: Track.Source.ScreenShareAudio,
+                        // High quality audio for system sound
+                        audioBitrate: 128_000, // 128kbps for system audio
+                    });
+                    console.log('[SCREEN] Audio track published at 128kbps');
+                }
+            }
             
             console.log('[SCREEN] ✅ Screen share started successfully!');
             // State is updated by LocalTrackPublished event handler
@@ -743,6 +773,7 @@ class LiveKitClient {
     
     /**
      * Stop screen sharing.
+     * Unpublishes all screen share tracks (video + audio).
      */
     async stopScreenShare() {
         console.log('[SCREEN] ===== STOP SCREEN SHARE =====');
@@ -753,7 +784,19 @@ class LiveKitClient {
         }
         
         try {
-            await this.localParticipant.setScreenShareEnabled(false);
+            // Find and unpublish all screen share tracks manually
+            const Track = this._Track;
+            if (Track && this.localParticipant.trackPublications) {
+                for (const [sid, pub] of this.localParticipant.trackPublications) {
+                    if (pub.source === Track.Source.ScreenShare || pub.source === Track.Source.ScreenShareAudio) {
+                        console.log('[SCREEN] Unpublishing track:', sid, 'source:', pub.source);
+                        if (pub.track) {
+                            await this.localParticipant.unpublishTrack(pub.track);
+                            pub.track.stop();
+                        }
+                    }
+                }
+            }
             this._isScreenSharing = false;
             console.log('[SCREEN] ✅ Screen share stopped');
         } catch (error) {
