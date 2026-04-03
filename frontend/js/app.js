@@ -3261,6 +3261,9 @@ function handleDMNotification(msg) {
     if (state.isDMMode) {
         renderDMConversations(state.dmConversations);
     }
+    
+    // Play notification sound
+    playDMNotificationSound();
 }
 
 // Recalculate total unread count
@@ -3321,6 +3324,46 @@ function hideTypingIndicator() {
     const indicator = document.getElementById('dm-typing-indicator');
     if (indicator) indicator.classList.add('hidden');
     clearTimeout(typingTimeout);
+}
+
+// ==================== DM NOTIFICATION SOUND ====================
+
+// Play a short notification sound using Web Audio API (no external file needed)
+function playDMNotificationSound() {
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        // First tone — pleasant "pop"
+        const osc1 = ctx.createOscillator();
+        const gain1 = ctx.createGain();
+        osc1.type = 'sine';
+        osc1.frequency.setValueAtTime(880, ctx.currentTime); // A5
+        osc1.frequency.setValueAtTime(1047, ctx.currentTime + 0.08); // C6
+        gain1.gain.setValueAtTime(0.15, ctx.currentTime);
+        gain1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+        osc1.connect(gain1);
+        gain1.connect(ctx.destination);
+        osc1.start(ctx.currentTime);
+        osc1.stop(ctx.currentTime + 0.25);
+        
+        // Second tone — slightly higher for that "ding" feel
+        const osc2 = ctx.createOscillator();
+        const gain2 = ctx.createGain();
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(1319, ctx.currentTime + 0.1); // E6
+        gain2.gain.setValueAtTime(0, ctx.currentTime);
+        gain2.gain.setValueAtTime(0.12, ctx.currentTime + 0.1);
+        gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+        osc2.connect(gain2);
+        gain2.connect(ctx.destination);
+        osc2.start(ctx.currentTime + 0.1);
+        osc2.stop(ctx.currentTime + 0.35);
+        
+        // Cleanup
+        setTimeout(() => ctx.close(), 500);
+    } catch (e) {
+        console.log('[DM] Could not play notification sound:', e.message);
+    }
 }
 
 // Format DM timestamp
