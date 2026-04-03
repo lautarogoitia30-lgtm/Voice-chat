@@ -100,7 +100,7 @@ class LiveKitClient {
             console.log('Room class:', Room);
             
             this.room = new Room({
-                adaptiveStream: true,
+                adaptiveStream: false,     // DISABLED — always receive max quality for screen share
                 dynacast: true,
                 autoSubscribe: true,
                 // Audio capture defaults — high quality with noise/echo suppression
