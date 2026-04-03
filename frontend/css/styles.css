@@ -1005,6 +1005,18 @@ body {
     border-bottom-color: var(--accent);
 }
 
+.settings-tab-btn.logout-btn {
+    color: #ef4444;
+    margin-left: auto;
+}
+
+.settings-tab-btn.logout-btn:hover {
+    color: #fff;
+    background: #ef4444;
+    border-radius: 6px;
+    border-bottom-color: transparent;
+}
+
 .settings-content {
     flex: 1;
     overflow-y: auto;

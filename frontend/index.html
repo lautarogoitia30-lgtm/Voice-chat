@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VoiceSpace</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link rel="stylesheet" href="css/styles.css?v=20">
+    <link rel="stylesheet" href="css/styles.css?v=21">
 </head>
 <body class="h-screen overflow-hidden">
     
@@ -334,6 +334,8 @@
                 <button class="settings-tab-btn" onclick="switchSettingsTab('audio')">🎙️ Audio</button>
                 <button class="settings-tab-btn" onclick="switchSettingsTab('privacy')">🔒 Privacidad</button>
                 <button class="settings-tab-btn" onclick="switchSettingsTab('appearance')">🎨 Apariencia</button>
+                <div style="flex-grow: 1;"></div>
+                <button class="settings-tab-btn logout-btn" onclick="handleLogout()">🚪 Cerrar Sesión</button>
             </div>
             
             <div class="settings-content">
@@ -425,6 +427,6 @@
     <script src="js/api.js?v=11"></script>
     <script src="js/websocket.js?v=10"></script>
     <script src="js/livekit.js?v=20"></script>
-    <script src="js/app.js?v=38"></script>
+    <script src="js/app.js?v=39"></script>
 </body>
 </html>
