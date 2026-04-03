@@ -1706,7 +1706,7 @@ function handleRemoteScreenShareStarted(track, publication, participant) {
     if (publication && publication.dimensions) {
         console.log('[SCREEN-UI] SFU dimensions:', publication.dimensions.width, 'x', publication.dimensions.height);
     }
-    showScreenShareView(track, participant);
+    showScreenShareView(track, publication, participant);
 }
 
 // When a remote participant stops sharing their screen
