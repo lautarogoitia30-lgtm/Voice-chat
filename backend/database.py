@@ -66,20 +66,45 @@ async def init_db():
         
         # Migration: add 'role' column to group_members if it doesn't exist
         from sqlalchemy import text
-        result = await conn.execute(text("PRAGMA table_info(group_members)"))
-        columns = [row[1] for row in result]
-        if "role" not in columns:
-            print("[MIGRATION] Adding 'role' column to group_members table...")
-            await conn.execute(text("ALTER TABLE group_members ADD COLUMN role VARCHAR(20) DEFAULT 'member' NOT NULL"))
-            # Set existing group owners to "owner" role
-            await conn.execute(text("""
-                UPDATE group_members SET role = 'owner' 
-                WHERE user_id IN (
-                    SELECT g.owner_id FROM groups g 
-                    WHERE g.id = group_members.group_id
-                ) AND role = 'member'
-            """))
-            print("[MIGRATION] Role column added and owners set.")
+        
+        is_postgres = DATABASE_URL.startswith("postgresql")
+        
+        try:
+            if is_postgres:
+                # PostgreSQL: check information_schema
+                result = await conn.execute(text("""
+                    SELECT column_name FROM information_schema.columns 
+                    WHERE table_name = 'group_members' AND column_name = 'role'
+                """))
+                column_exists = result.fetchone() is not None
+            else:
+                # SQLite: use PRAGMA
+                result = await conn.execute(text("PRAGMA table_info(group_members)"))
+                columns = [row[1] for row in result]
+                column_exists = "role" in columns
+            
+            if not column_exists:
+                print("[MIGRATION] Adding 'role' column to group_members table...")
+                if is_postgres:
+                    await conn.execute(text("ALTER TABLE group_members ADD COLUMN role VARCHAR(20) DEFAULT 'member'"))
+                else:
+                    await conn.execute(text("ALTER TABLE group_members ADD COLUMN role VARCHAR(20) DEFAULT 'member' NOT NULL"))
+                
+                # Set existing group owners to "owner" role
+                await conn.execute(text("""
+                    UPDATE group_members SET role = 'owner' 
+                    WHERE user_id IN (
+                        SELECT g.owner_id FROM groups g 
+                        WHERE g.id = group_members.group_id
+                    ) AND (role = 'member' OR role IS NULL)
+                """))
+                # Set any remaining NULLs to 'member'
+                await conn.execute(text("UPDATE group_members SET role = 'member' WHERE role IS NULL"))
+                print("[MIGRATION] Role column added and owners set.")
+            else:
+                print("[MIGRATION] Role column already exists, skipping.")
+        except Exception as e:
+            print(f"[MIGRATION] Warning during role migration: {e}")
 
 
 async def close_db():
