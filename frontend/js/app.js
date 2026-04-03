@@ -1748,38 +1748,48 @@ async function showScreenShareView(track, publication, participant) {
     console.log('[SCREEN-UI] Target resolution from SFU:', targetWidth, 'x', targetHeight);
     
     // CRITICAL: Show the screen share view FIRST (before attaching track)
-    // This ensures adaptiveStream sees the correct container dimensions
-    // and doesn't default to low-res because the element was 0x0
     screenShareView.classList.remove('hidden');
     if (normalView) normalView.classList.add('hidden');
     
-    // Wait one frame for the DOM to layout and compute dimensions
+    // Wait one frame for the DOM to layout
     await new Promise(resolve => requestAnimationFrame(resolve));
     
     // Clear previous video
     videoContainer.innerHTML = '';
     
-    // CRITICAL: Set the container to the target resolution
-    // This tells LiveKit's adaptiveStream to request the full quality stream
-    videoContainer.style.width = targetWidth + 'px';
-    videoContainer.style.height = targetHeight + 'px';
-    videoContainer.style.maxWidth = '100%';
-    videoContainer.style.maxHeight = '100%';
+    // === ADAPTIVESTREAM BYPASS: Hidden high-quality element ===
+    // LiveKit's adaptiveStream uses ResizeObserver to measure video element size.
+    // If the visible element is constrained to 1366px, it requests 768p from the SFU.
+    // Solution: create a HIDDEN video element at full resolution (2560x1440).
+    // adaptiveStream measures THIS element and requests the high quality stream.
+    // The visible element mirrors the stream and scales to fit.
+    const hiddenEl = document.createElement('video');
+    hiddenEl.style.cssText = `position:absolute;width:${targetWidth}px;height:${targetHeight}px;visibility:hidden;pointer-events:none;opacity:0;`;
+    hiddenEl.autoplay = true;
+    hiddenEl.playsInline = true;
+    hiddenEl.muted = true;
+    videoContainer.appendChild(hiddenEl);
     
-    // Attach the video track to a <video> element
-    const videoElement = track.attach();
+    // Attach the track to the HIDDEN element — adaptiveStream measures this at full res
+    track.attach(hiddenEl);
+    console.log('[SCREEN-UI] Attached track to hidden element at', targetWidth, 'x', targetHeight);
+    
+    // Create the VISIBLE element that mirrors the stream
+    const videoElement = document.createElement('video');
     videoElement.className = 'screen-share-video';
     videoElement.autoplay = true;
     videoElement.playsInline = true;
-    videoElement.muted = true; // Video element muted (audio is handled separately by LiveKit)
-    // CRITICAL: Set FIXED pixel dimensions to trick adaptiveStream into requesting max quality
-    // If we use percentages, adaptiveStream sees the container's computed size (e.g. 1366px)
-    // and downscales. With fixed pixel dimensions matching the source, it requests full quality.
-    videoElement.style.width = targetWidth + 'px';
-    videoElement.style.height = targetHeight + 'px';
-    videoElement.style.maxWidth = '100%';
-    videoElement.style.maxHeight = '100%';
+    videoElement.muted = true;
+    videoElement.style.width = '100%';
+    videoElement.style.height = '100%';
     videoElement.style.objectFit = 'contain';
+    videoContainer.appendChild(videoElement);
+    
+    // Mirror the stream from hidden to visible element
+    hiddenEl.addEventListener('loadedmetadata', () => {
+        videoElement.srcObject = hiddenEl.srcObject;
+        console.log('[SCREEN-UI] Stream mirrored — visible video dimensions:', videoElement.videoWidth, 'x', videoElement.videoHeight);
+    });
     
     // Double-click for browser fullscreen
     videoElement.addEventListener('dblclick', () => {
@@ -1790,32 +1800,9 @@ async function showScreenShareView(track, publication, participant) {
         }
     });
     
-    videoContainer.appendChild(videoElement);
-    
-    // Log dimensions AFTER the video starts playing (not before — remote tracks need time)
-    videoElement.addEventListener('loadedmetadata', () => {
-        console.log('[SCREEN-UI] Video loaded — actual dimensions:', videoElement.videoWidth, 'x', videoElement.videoHeight);
-        // Also log the track dimensions now that it's playing
-        const s = track.mediaStreamTrack?.getSettings();
-        console.log('[SCREEN-UI] Track settings after play:', s?.width, 'x', s?.height);
-    });
-    
-    // Force LiveKit to re-evaluate the video element size for adaptiveStream
-    // Wait a bit for the DOM to settle, then trigger a re-evaluation
-    setTimeout(() => {
-        // Check video dimensions after a delay
-        if (videoElement.videoWidth > 0) {
-            console.log('[SCREEN-UI] Video dimensions at 500ms:', videoElement.videoWidth, 'x', videoElement.videoHeight);
-        }
-    }, 500);
-    
     // Set who is sharing
     const displayName = participant.name || participant.identity || 'Alguien';
     if (usernameLabel) usernameLabel.textContent = displayName;
-    
-    // Show screen share view, hide normal voice view
-    screenShareView.classList.remove('hidden');
-    if (normalView) normalView.classList.add('hidden');
     
     // Build participant thumbnails in the bottom bar
     buildScreenShareThumbnails(participant.identity);
