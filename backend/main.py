@@ -55,9 +55,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Serve static files (JS, CSS)
+# Serve static files (JS, CSS, Images)
 app.mount("/js", StaticFiles(directory=str(FRONTEND_DIR / "js")), name="js")
 app.mount("/css", StaticFiles(directory=str(FRONTEND_DIR / "css")), name="css")
+app.mount("/images", StaticFiles(directory=str(FRONTEND_DIR / "images")), name="images")
 
 # Serve uploaded files (avatars and files)
 UPLOADS_DIR = BASE_DIR / "uploads"
