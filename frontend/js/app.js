@@ -1154,12 +1154,24 @@ function startParticipantsUpdateInterval() {
             updateParticipantsList();
         }
     }, 3000);
+    
+    // Heartbeat: re-join every 2 minutes to refresh joined_at (prevents stale cleanup)
+    if (window.voiceHeartbeatInterval) clearInterval(window.voiceHeartbeatInterval);
+    window.voiceHeartbeatInterval = setInterval(() => {
+        if (state.isInVoice && state.selectedChannel) {
+            API.channels.joinVoice(state.selectedChannel.id).catch(() => {});
+        }
+    }, 120000); // 2 minutes
 }
 
 function stopParticipantsUpdateInterval() {
     if (participantsUpdateInterval) {
         clearInterval(participantsUpdateInterval);
         participantsUpdateInterval = null;
+    }
+    if (window.voiceHeartbeatInterval) {
+        clearInterval(window.voiceHeartbeatInterval);
+        window.voiceHeartbeatInterval = null;
     }
 }
 
@@ -1764,6 +1776,25 @@ new MutationObserver(() => {
 // Prevent form submission from reloading the page
 window.addEventListener('beforeunload', function(e) {
     console.log('Page about to unload');
+    // Clean up voice participant from database
+    if (state.isInVoice && state.selectedChannel) {
+        // Use sendBeacon for reliable delivery on page close
+        const token = localStorage.getItem('token');
+        if (token) {
+            const url = API_BASE + '/channels/' + state.selectedChannel.id + '/voice/leave';
+            navigator.sendBeacon(url, '');
+            // sendBeacon doesn't support auth headers, so also try fetch with keepalive
+            fetch(url, {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer ' + token },
+                keepalive: true
+            }).catch(() => {});
+        }
+    }
+    // Disconnect LiveKit
+    if (window.livekitClient && window.livekitClient.disconnect) {
+        window.livekitClient.disconnect();
+    }
 });
 
 // Initialize on page load

@@ -3,7 +3,7 @@ Channel routes: /channels, /groups/{id}/channels
 """
 from fastapi import APIRouter, HTTPException, Depends, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, delete
 from typing import List
 from pydantic import BaseModel
 
@@ -222,6 +222,9 @@ async def join_voice_channel(
     existing = result.scalar_one_or_none()
     
     if existing:
+        # Update joined_at to refresh the stale timer
+        existing.joined_at = int(time.time())
+        await db.commit()
         return {"message": "Already in voice channel"}
     
     # Add to voice participants
@@ -319,6 +322,18 @@ async def get_voice_participants(
     
     if not membership:
         raise HTTPException(status_code=403, detail="You are not a member of this group")
+    
+    # Auto-cleanup stale participants (joined more than 5 minutes ago)
+    stale_threshold = int(time.time()) - 300  # 5 minutes
+    await db.execute(
+        delete(VoiceParticipant).where(
+            and_(
+                VoiceParticipant.channel_id == channel_id,
+                VoiceParticipant.joined_at < stale_threshold
+            )
+        )
+    )
+    await db.commit()
     
     # Get voice participants
     from backend.models import User
