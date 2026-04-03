@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VoiceSpace</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link rel="stylesheet" href="css/styles.css?v=15">
+    <link rel="stylesheet" href="css/styles.css?v=16">
 </head>
 <body class="h-screen overflow-hidden">
     
@@ -87,9 +87,6 @@
                 <button id="create-channel-btn" class="btn btn-secondary w-full hidden" onclick="showCreateChannelModal()">
                     ➕ Nuevo Canal
                 </button>
-                <button id="invite-user-btn" class="btn btn-primary w-full hidden" onclick="showInviteUserModal()">
-                    👥 Invitar Usuario
-                </button>
             </div>
             
             <!-- Voice participants section -->
@@ -100,6 +97,13 @@
                 <div id="members-list" class="members-list">
                     <!-- Members will be inserted here -->
                 </div>
+            </div>
+            
+            <!-- Invite user button pinned to bottom -->
+            <div class="sidebar-bottom-action">
+                <button id="invite-user-btn" class="btn btn-primary w-full hidden" onclick="showInviteUserModal()">
+                    👥 Invitar Usuario
+                </button>
             </div>
         </div>
         

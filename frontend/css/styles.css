@@ -360,6 +360,14 @@ body {
     border-top: 1px solid var(--border);
 }
 
+/* Invite button pinned to bottom of sidebar */
+.sidebar-bottom-action {
+    margin-top: auto;
+    padding: 12px 8px;
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
 /* Members section */
 .members-section {
     border-top: 1px solid var(--border);
