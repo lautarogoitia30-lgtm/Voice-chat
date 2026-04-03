@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VoiceSpace</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link rel="stylesheet" href="css/styles.css?v=17">
+    <link rel="stylesheet" href="css/styles.css?v=18">
 </head>
 <body class="h-screen overflow-hidden">
     
@@ -136,6 +136,53 @@
                 </div>
             </div>
         </div>
+        
+        <!-- DM SIDEBAR (hidden by default, replaces channels-sidebar in DM mode) -->
+        <div id="dm-sidebar" class="dm-sidebar hidden">
+            <div class="dm-sidebar-header">
+                <span class="dm-sidebar-title">Mensajes Directos</span>
+                <button class="dm-new-btn" onclick="showNewDMModal()" title="Nuevo mensaje">➕</button>
+            </div>
+            <div class="dm-search-area">
+                <input type="text" id="dm-search-input" class="dm-search-input" placeholder="Buscar conversación..." oninput="filterDMConversations(this.value)">
+            </div>
+            <div id="dm-conversations-list" class="dm-conversations-list">
+                <!-- Conversations will be inserted here -->
+                <div class="dm-empty-state">
+                    <p>💬</p>
+                    <p>No tenés mensajes directos todavía</p>
+                    <button class="btn btn-primary" onclick="showNewDMModal()" style="margin-top: 12px;">Iniciar conversación</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- DM CHAT AREA (hidden by default, replaces main-content in DM mode) -->
+        <div id="dm-chat-area" class="dm-chat-area hidden">
+            <!-- DM Chat Header -->
+            <div class="dm-chat-header" id="dm-chat-header">
+                <div class="dm-chat-user-avatar" id="dm-chat-avatar">
+                    <span id="dm-chat-avatar-initial">?</span>
+                </div>
+                <div class="dm-chat-user-info">
+                    <span class="dm-chat-username" id="dm-chat-username">Seleccioná una conversación</span>
+                    <span class="dm-chat-status">🟢 Online</span>
+                </div>
+            </div>
+            
+            <!-- DM Messages -->
+            <div class="dm-messages-container" id="dm-messages-list">
+                <div class="dm-chat-empty-state">
+                    <p style="font-size: 48px;">💬</p>
+                    <p>Seleccioná una conversación para empezar a chatear</p>
+                </div>
+            </div>
+            
+            <!-- DM Message Input -->
+            <div class="dm-input-area" id="dm-input-area" style="display: none;">
+                <input type="text" id="dm-message-input" class="dm-message-input" placeholder="Escribí un mensaje...">
+                <button type="button" class="btn-send" onclick="sendDMMessage()">📤</button>
+            </div>
+        </div>
         </div>
         
         <!-- BOTTOM BAR: User + Message + Voice Controls -->
@@ -256,6 +303,21 @@
         </div>
     </div>
     
+    <!-- New DM Modal -->
+    <div id="new-dm-modal" class="modal-backdrop hidden">
+        <div class="modal">
+            <h3>Nuevo Mensaje Directo</h3>
+            <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px;">Ingresá el nombre de usuario para empezar a chatear</p>
+            <form id="new-dm-form" onsubmit="handleNewDMSubmit(event)">
+                <input type="text" id="new-dm-username" placeholder="Nombre de usuario" required>
+                <div class="modal-buttons">
+                    <button type="button" class="btn btn-secondary" onclick="hideNewDMModal()">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Empezar chat</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
     <!-- Settings Modal -->
     <div id="settings-modal" class="modal-backdrop hidden" onclick="if(event.target === this) hideSettingsModal()">
         <div class="settings-modal">
@@ -354,9 +416,9 @@
     </div>
     
     <!-- Scripts -->
-    <script src="js/api.js?v=10"></script>
+    <script src="js/api.js?v=11"></script>
     <script src="js/websocket.js?v=10"></script>
     <script src="js/livekit.js?v=19"></script>
-    <script src="js/app.js?v=33"></script>
+    <script src="js/app.js?v=35"></script>
 </body>
 </html>

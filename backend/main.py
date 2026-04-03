@@ -16,8 +16,8 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend.database import init_db, close_db
-from backend.routes import auth, groups, channels, livekit, users, files
-from backend.websocket import websocket_endpoint
+from backend.routes import auth, groups, channels, livekit, users, files, dm
+from backend.websocket import websocket_endpoint, dm_websocket_endpoint
 
 # Paths
 BASE_DIR = Path(__file__).parent.parent
@@ -78,6 +78,7 @@ app.include_router(groups.router, prefix="/groups", tags=["Groups"])
 app.include_router(channels.router, prefix="/channels", tags=["Channels"])
 app.include_router(livekit.router, prefix="/livekit", tags=["LiveKit"])
 app.include_router(files.router, prefix="/files", tags=["Files"])
+app.include_router(dm.router, prefix="/dm", tags=["Direct Messages"])
 
 # Serve frontend index.html
 FRONTEND_PATH = Path(__file__).parent.parent / "frontend" / "index.html"
@@ -117,3 +118,25 @@ async def chat_websocket(websocket: WebSocket, channel_id: int, token: str = "")
     
     # Pass user_data to the endpoint
     await websocket_endpoint(websocket, channel_id, user_data)
+
+
+# WebSocket endpoint for DMs (REQUIRED JWT auth)
+@app.websocket("/ws/dm/{conversation_id}")
+async def dm_websocket(websocket: WebSocket, conversation_id: int, token: str = ""):
+    """WebSocket endpoint for real-time DM chat with JWT auth required."""
+    if not token or token == "null" or token == "undefined":
+        await websocket.close(code=4001, reason="Authentication required")
+        return
+    
+    user_data = None
+    try:
+        from backend.auth import verify_jwt_token
+        user_data = verify_jwt_token(token)
+        print(f"DM WebSocket auth: User {user_data['username']} (ID: {user_data['user_id']}) connecting to conversation {conversation_id}")
+    except Exception as e:
+        print(f"DM WebSocket auth failed: {e}")
+        await websocket.close(code=4001, reason="Invalid token")
+        return
+    
+    # Pass user_data to the DM endpoint
+    await dm_websocket_endpoint(websocket, conversation_id, user_data)

@@ -482,6 +482,10 @@ function renderMembers(members) {
 // Select group
 async function selectGroup(group) {
     console.log('selectGroup called with:', group);
+    
+    // Switch back from DM mode to server mode
+    hideDMView();
+    
     state.selectedGroup = group;
     state.selectedChannel = null;
     const elements = getElements();
@@ -2765,6 +2769,461 @@ function shouldNotifyForMessage(message, currentUsername) {
     
     return false;
 }
+
+// ==================== DIRECT MESSAGES ====================
+
+// DM state
+state.isDMMode = false;
+state.dmConversations = [];
+state.selectedDMConversation = null;
+state.dmWebSocket = null;
+
+// Show DM view (called when clicking 💬 button)
+function showDMView() {
+    console.log('[DM] showDMView called');
+    state.isDMMode = true;
+    
+    // Deselect servers
+    document.querySelectorAll('.server-btn').forEach(btn => btn.classList.remove('active'));
+    document.querySelector('.dm-btn').classList.add('active');
+    
+    // Hide server views
+    document.querySelector('.channels-sidebar').classList.add('hidden');
+    document.querySelector('.main-content').classList.add('hidden');
+    
+    // Hide bottom message area (DM has its own input)
+    const bottomMsg = document.getElementById('bottom-message-area');
+    if (bottomMsg) bottomMsg.classList.add('hidden');
+    
+    // Show DM views
+    document.getElementById('dm-sidebar').classList.remove('hidden');
+    document.getElementById('dm-chat-area').classList.remove('hidden');
+    
+    // Load conversations
+    loadDMConversations();
+}
+
+// Hide DM view (called when clicking a server button)
+function hideDMView() {
+    if (!state.isDMMode) return;
+    console.log('[DM] hideDMView called');
+    state.isDMMode = false;
+    state.selectedDMConversation = null;
+    
+    // Disconnect DM WebSocket
+    disconnectDMWebSocket();
+    
+    // Remove active from DM button
+    document.querySelector('.dm-btn').classList.remove('active');
+    
+    // Hide DM views
+    document.getElementById('dm-sidebar').classList.add('hidden');
+    document.getElementById('dm-chat-area').classList.add('hidden');
+    
+    // Show server views
+    document.querySelector('.channels-sidebar').classList.remove('hidden');
+    document.querySelector('.main-content').classList.remove('hidden');
+}
+
+// Load DM conversations from API
+async function loadDMConversations() {
+    try {
+        console.log('[DM] Loading conversations...');
+        const conversations = await API.dm.listConversations();
+        console.log('[DM] Conversations loaded:', conversations);
+        state.dmConversations = conversations;
+        renderDMConversations(conversations);
+    } catch (error) {
+        console.error('[DM] Failed to load conversations:', error);
+    }
+}
+
+// Render DM conversations in sidebar
+function renderDMConversations(conversations) {
+    const list = document.getElementById('dm-conversations-list');
+    if (!list) return;
+    
+    list.innerHTML = '';
+    
+    if (!conversations || conversations.length === 0) {
+        list.innerHTML = `
+            <div class="dm-empty-state">
+                <p>💬</p>
+                <p>No tenés mensajes directos todavía</p>
+                <button class="btn btn-primary" onclick="showNewDMModal()" style="margin-top: 12px;">Iniciar conversación</button>
+            </div>
+        `;
+        return;
+    }
+    
+    conversations.forEach(conv => {
+        const item = document.createElement('div');
+        item.className = 'dm-conversation-item' + (state.selectedDMConversation?.id === conv.id ? ' active' : '');
+        item.onclick = () => selectDMConversation(conv);
+        
+        const initial = conv.other_username.charAt(0).toUpperCase();
+        let avatarHtml = '';
+        if (conv.other_avatar_url) {
+            const avatarSrc = conv.other_avatar_url.startsWith('http') ? conv.other_avatar_url : API_BASE + conv.other_avatar_url;
+            avatarHtml = `<img src="${avatarSrc}" alt="${conv.other_username}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"><div class="dm-conversation-avatar" style="display:none">${initial}</div>`;
+        } else {
+            avatarHtml = '';
+        }
+        
+        const timeStr = conv.last_message_at ? formatDMTimestamp(conv.last_message_at) : '';
+        const lastMsg = conv.last_message || 'Sin mensajes todavía';
+        
+        item.innerHTML = `
+            <div class="dm-conversation-avatar">${avatarHtml || initial}</div>
+            <div class="dm-conversation-info">
+                <div class="dm-conversation-top">
+                    <span class="dm-conversation-name">${conv.other_username}</span>
+                    <span class="dm-conversation-time">${timeStr}</span>
+                </div>
+                <div class="dm-conversation-last-msg">${lastMsg}</div>
+            </div>
+        `;
+        
+        list.appendChild(item);
+    });
+}
+
+// Filter DM conversations (search)
+function filterDMConversations(query) {
+    const q = query.toLowerCase().trim();
+    if (!q) {
+        renderDMConversations(state.dmConversations);
+        return;
+    }
+    const filtered = state.dmConversations.filter(c => 
+        c.other_username.toLowerCase().includes(q)
+    );
+    renderDMConversations(filtered);
+}
+
+// Select a DM conversation
+async function selectDMConversation(conv) {
+    console.log('[DM] Selecting conversation:', conv);
+    state.selectedDMConversation = conv;
+    
+    // Update sidebar active state
+    document.querySelectorAll('.dm-conversation-item').forEach(item => item.classList.remove('active'));
+    // Re-render to update active state
+    renderDMConversations(state.dmConversations);
+    
+    // Update chat header
+    const avatarEl = document.getElementById('dm-chat-avatar');
+    const usernameEl = document.getElementById('dm-chat-username');
+    const initialEl = document.getElementById('dm-chat-avatar-initial');
+    
+    if (usernameEl) usernameEl.textContent = conv.other_username;
+    if (initialEl) initialEl.textContent = conv.other_username.charAt(0).toUpperCase();
+    
+    // Set avatar image if available
+    if (avatarEl && conv.other_avatar_url) {
+        const avatarSrc = conv.other_avatar_url.startsWith('http') ? conv.other_avatar_url : API_BASE + conv.other_avatar_url;
+        avatarEl.innerHTML = `<img src="${avatarSrc}" alt="${conv.other_username}" onerror="this.style.display='none'; this.parentElement.innerHTML='<span>${conv.other_username.charAt(0).toUpperCase()}</span>';">`;
+    } else if (avatarEl) {
+        avatarEl.innerHTML = `<span>${conv.other_username.charAt(0).toUpperCase()}</span>`;
+    }
+    
+    // Show input area
+    const inputArea = document.getElementById('dm-input-area');
+    if (inputArea) inputArea.style.display = 'flex';
+    
+    // Load messages
+    await loadDMMessages(conv.id);
+    
+    // Connect DM WebSocket for real-time
+    connectDMWebSocket(conv.id);
+    
+    // Focus input
+    const input = document.getElementById('dm-message-input');
+    if (input) input.focus();
+}
+
+// Load DM messages
+async function loadDMMessages(conversationId) {
+    try {
+        console.log('[DM] Loading messages for conversation:', conversationId);
+        const messages = await API.dm.getMessages(conversationId);
+        console.log('[DM] Messages loaded:', messages.length);
+        renderDMMessages(messages);
+    } catch (error) {
+        console.error('[DM] Failed to load messages:', error);
+    }
+}
+
+// Render DM messages
+function renderDMMessages(messages) {
+    const container = document.getElementById('dm-messages-list');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    
+    if (!messages || messages.length === 0) {
+        container.innerHTML = `
+            <div class="dm-chat-empty-state">
+                <p style="font-size: 48px;">👋</p>
+                <p>Esta es la primera vez que hablás con este usuario. ¡Mandá un mensaje!</p>
+            </div>
+        `;
+        return;
+    }
+    
+    const currentUserId = state.currentUser?.user_id;
+    
+    messages.forEach(msg => {
+        const div = document.createElement('div');
+        const isOwn = msg.sender_id === currentUserId;
+        div.className = 'dm-message' + (isOwn ? ' own-message' : '');
+        
+        const initial = msg.sender_username.charAt(0).toUpperCase();
+        let avatarHtml = '';
+        if (msg.sender_avatar_url) {
+            const avatarSrc = msg.sender_avatar_url.startsWith('http') ? msg.sender_avatar_url : API_BASE + msg.sender_avatar_url;
+            avatarHtml = `<img src="${avatarSrc}" alt="${msg.sender_username}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"><div class="dm-message-avatar" style="display:none">${initial}</div>`;
+        }
+        
+        const timeStr = formatDMTimestamp(msg.created_at);
+        
+        div.innerHTML = `
+            <div class="dm-message-avatar">${avatarHtml || initial}</div>
+            <div class="dm-message-content">
+                <div class="dm-message-header">
+                    <span class="dm-message-author">${msg.sender_username}</span>
+                    <span class="dm-message-time">${timeStr}</span>
+                </div>
+                <div class="dm-message-text">${escapeHtml(msg.content)}</div>
+            </div>
+        `;
+        
+        container.appendChild(div);
+    });
+    
+    // Scroll to bottom
+    container.scrollTop = container.scrollHeight;
+}
+
+// Append a single DM message (for real-time)
+function appendDMMessage(msg) {
+    const container = document.getElementById('dm-messages-list');
+    if (!container) return;
+    
+    // Remove empty state if present
+    const emptyState = container.querySelector('.dm-chat-empty-state');
+    if (emptyState) emptyState.remove();
+    
+    const currentUserId = state.currentUser?.user_id;
+    const isOwn = msg.sender_id === currentUserId;
+    
+    const div = document.createElement('div');
+    div.className = 'dm-message' + (isOwn ? ' own-message' : '');
+    
+    const initial = msg.sender_username.charAt(0).toUpperCase();
+    let avatarHtml = '';
+    if (msg.sender_avatar_url) {
+        const avatarSrc = msg.sender_avatar_url.startsWith('http') ? msg.sender_avatar_url : API_BASE + msg.sender_avatar_url;
+        avatarHtml = `<img src="${avatarSrc}" alt="${msg.sender_username}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"><div class="dm-message-avatar" style="display:none">${initial}</div>`;
+    }
+    
+    const timeStr = formatDMTimestamp(msg.created_at);
+    
+    div.innerHTML = `
+        <div class="dm-message-avatar">${avatarHtml || initial}</div>
+        <div class="dm-message-content">
+            <div class="dm-message-header">
+                <span class="dm-message-author">${msg.sender_username}</span>
+                <span class="dm-message-time">${timeStr}</span>
+            </div>
+            <div class="dm-message-text">${escapeHtml(msg.content)}</div>
+        </div>
+    `;
+    
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+}
+
+// Escape HTML to prevent XSS
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Send DM message
+async function sendDMMessage() {
+    const input = document.getElementById('dm-message-input');
+    if (!input) return;
+    
+    const content = input.value.trim();
+    if (!content) return;
+    
+    if (!state.selectedDMConversation) return;
+    
+    // Clear input immediately
+    input.value = '';
+    
+    // If WebSocket is connected, send through it
+    if (state.dmWebSocket && state.dmWebSocket.readyState === WebSocket.OPEN) {
+        state.dmWebSocket.send(JSON.stringify({ content: content }));
+        return;
+    }
+    
+    // Fallback: send via REST API
+    try {
+        const msg = await API.dm.sendMessage(state.selectedDMConversation.id, content);
+        appendDMMessage(msg);
+        
+        // Update last message in conversation list
+        updateConversationLastMessage(state.selectedDMConversation.id, content);
+    } catch (error) {
+        console.error('[DM] Failed to send message:', error);
+        alert('Error al enviar mensaje: ' + error.message);
+        // Put content back
+        input.value = content;
+    }
+}
+
+// Update conversation last message in sidebar
+function updateConversationLastMessage(convId, content) {
+    const conv = state.dmConversations.find(c => c.id === convId);
+    if (conv) {
+        conv.last_message = content;
+        conv.last_message_at = Math.floor(Date.now() / 1000);
+        renderDMConversations(state.dmConversations);
+    }
+}
+
+// DM WebSocket connection
+function connectDMWebSocket(conversationId) {
+    disconnectDMWebSocket();
+    
+    const token = API.getAuthToken();
+    if (!token) return;
+    
+    // Build WebSocket URL
+    const wsBase = API_BASE.replace('https://', 'wss://').replace('http://', 'ws://');
+    const wsUrl = `${wsBase}/ws/dm/${conversationId}?token=${token}`;
+    
+    console.log('[DM-WS] Connecting to:', wsUrl);
+    
+    try {
+        state.dmWebSocket = new WebSocket(wsUrl);
+        
+        state.dmWebSocket.onopen = () => {
+            console.log('[DM-WS] Connected to conversation', conversationId);
+        };
+        
+        state.dmWebSocket.onmessage = (event) => {
+            try {
+                const msg = JSON.parse(event.data);
+                console.log('[DM-WS] Message received:', msg);
+                
+                if (msg.type === 'dm_message') {
+                    appendDMMessage(msg);
+                    updateConversationLastMessage(msg.conversation_id, msg.content);
+                }
+            } catch (e) {
+                console.error('[DM-WS] Error parsing message:', e);
+            }
+        };
+        
+        state.dmWebSocket.onclose = (event) => {
+            console.log('[DM-WS] Disconnected:', event.code, event.reason);
+        };
+        
+        state.dmWebSocket.onerror = (error) => {
+            console.error('[DM-WS] Error:', error);
+        };
+    } catch (e) {
+        console.error('[DM-WS] Failed to connect:', e);
+    }
+}
+
+function disconnectDMWebSocket() {
+    if (state.dmWebSocket) {
+        state.dmWebSocket.close();
+        state.dmWebSocket = null;
+    }
+}
+
+// Format DM timestamp
+function formatDMTimestamp(unixTimestamp) {
+    const date = new Date(unixTimestamp * 1000);
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterday = new Date(today.getTime() - 86400000);
+    const msgDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    
+    const timeStr = date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+    
+    if (msgDate.getTime() === today.getTime()) {
+        return timeStr;
+    } else if (msgDate.getTime() === yesterday.getTime()) {
+        return 'Ayer ' + timeStr;
+    } else {
+        return date.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' }) + ' ' + timeStr;
+    }
+}
+
+// New DM Modal
+function showNewDMModal() {
+    document.getElementById('new-dm-modal').classList.remove('hidden');
+    document.getElementById('new-dm-username').value = '';
+    document.getElementById('new-dm-username').focus();
+}
+
+function hideNewDMModal() {
+    document.getElementById('new-dm-modal').classList.add('hidden');
+}
+
+async function handleNewDMSubmit(event) {
+    event.preventDefault();
+    
+    const username = document.getElementById('new-dm-username').value.trim();
+    if (!username) return;
+    
+    try {
+        console.log('[DM] Starting conversation with:', username);
+        const conv = await API.dm.startConversation(username);
+        console.log('[DM] Conversation created/found:', conv);
+        
+        hideNewDMModal();
+        
+        // Reload conversations and select the new one
+        await loadDMConversations();
+        selectDMConversation(conv);
+    } catch (error) {
+        console.error('[DM] Failed to start conversation:', error);
+        alert('Error: ' + error.message);
+    }
+}
+
+// Wire up DM button
+document.querySelector('.dm-btn')?.addEventListener('click', showDMView);
+
+// Wire up DM message input (Enter key)
+document.addEventListener('DOMContentLoaded', () => {
+    const dmInput = document.getElementById('dm-message-input');
+    if (dmInput) {
+        dmInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendDMMessage();
+            }
+        });
+    }
+});
+
+// Make DM functions global
+window.showDMView = showDMView;
+window.hideDMView = hideDMView;
+window.showNewDMModal = showNewDMModal;
+window.hideNewDMModal = hideNewDMModal;
+window.handleNewDMSubmit = handleNewDMSubmit;
+window.sendDMMessage = sendDMMessage;
+window.filterDMConversations = filterDMConversations;
 
 // ==================== INIT APPEARANCE ====================
 

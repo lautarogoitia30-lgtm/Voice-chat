@@ -1,8 +1,8 @@
 """
 Database models using SQLAlchemy.
-Contains: User, Group, Channel, GroupMember
+Contains: User, Group, Channel, GroupMember, VoiceParticipant, DMConversation, DirectMessage
 """
-from sqlalchemy import Column, Integer, String, ForeignKey, Enum
+from sqlalchemy import Column, Integer, String, ForeignKey, Enum, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 import enum
 
@@ -85,3 +85,38 @@ class VoiceParticipant(Base):
     # Relationships
     user = relationship("User")
     channel = relationship("Channel")
+
+
+class DMConversation(Base):
+    """Direct message conversation between two users."""
+    __tablename__ = "dm_conversations"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user1_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user2_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(Integer, nullable=False)  # timestamp
+    
+    # Ensure user1_id < user2_id to avoid duplicate conversations
+    __table_args__ = (
+        UniqueConstraint('user1_id', 'user2_id', name='uq_dm_users'),
+    )
+
+    # Relationships
+    user1 = relationship("User", foreign_keys=[user1_id])
+    user2 = relationship("User", foreign_keys=[user2_id])
+    messages = relationship("DirectMessage", back_populates="conversation", lazy="selectin", order_by="DirectMessage.created_at")
+
+
+class DirectMessage(Base):
+    """A single message in a DM conversation."""
+    __tablename__ = "direct_messages"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    conversation_id = Column(Integer, ForeignKey("dm_conversations.id"), nullable=False)
+    sender_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    content = Column(Text, nullable=False)
+    created_at = Column(Integer, nullable=False)  # timestamp
+
+    # Relationships
+    conversation = relationship("DMConversation", back_populates="messages")
+    sender = relationship("User")

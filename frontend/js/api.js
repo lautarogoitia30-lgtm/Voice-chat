@@ -418,6 +418,67 @@ const usersAPI = {
     },
 };
 
+/**
+ * API: Direct Messages
+ */
+const dmAPI = {
+    /**
+     * Get all DM conversations for current user
+     */
+    async listConversations() {
+        const response = await apiRequest('/dm/conversations');
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to fetch conversations');
+        }
+        return response.json();
+    },
+
+    /**
+     * Start a new DM conversation (or return existing)
+     */
+    async startConversation(username) {
+        const response = await apiRequest('/dm/conversations', {
+            method: 'POST',
+            body: JSON.stringify({ username }),
+        });
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to start conversation');
+        }
+        return response.json();
+    },
+
+    /**
+     * Get messages from a DM conversation
+     */
+    async getMessages(conversationId, limit = 50, before = null) {
+        let url = `/dm/conversations/${conversationId}/messages?limit=${limit}`;
+        if (before) url += `&before=${before}`;
+        const response = await apiRequest(url);
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to fetch messages');
+        }
+        return response.json();
+    },
+
+    /**
+     * Send a message in a DM conversation
+     */
+    async sendMessage(conversationId, content) {
+        const response = await apiRequest(`/dm/conversations/${conversationId}/messages`, {
+            method: 'POST',
+            body: JSON.stringify({ content }),
+        });
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to send message');
+        }
+        return response.json();
+    },
+};
+
 // Export for use in other scripts
 window.API = {
     auth: authAPI,
@@ -425,6 +486,7 @@ window.API = {
     channels: channelsAPI,
     livekit: livekitAPI,
     users: usersAPI,
+    dm: dmAPI,
     setAuthToken,
     clearAuthToken,
     getAuthToken,

@@ -1,11 +1,12 @@
 """
-WebSocket handler for real-time text chat.
-Manages connections and broadcasts messages to channels.
+WebSocket handler for real-time text chat and DMs.
+Manages connections and broadcasts messages to channels and DM conversations.
 """
 from fastapi import WebSocket, WebSocketDisconnect
 from typing import Optional
 from typing import List, Dict
 import json
+import time
 from datetime import datetime
 
 
@@ -67,8 +68,58 @@ class ConnectionManager:
             self.disconnect(channel_id, ws)
 
 
-# Global connection manager
+class DMConnectionManager:
+    """
+    Manages WebSocket connections for DM conversations.
+    Groups connections by conversation_id for targeted messaging.
+    """
+    
+    def __init__(self):
+        # {conversation_id: [WebSocket connections]}
+        self.active_connections: Dict[int, List[WebSocket]] = {}
+    
+    async def connect(self, conversation_id: int, websocket: WebSocket):
+        """Accept a new WebSocket connection for a DM conversation."""
+        await websocket.accept()
+        
+        if conversation_id not in self.active_connections:
+            self.active_connections[conversation_id] = []
+        
+        self.active_connections[conversation_id].append(websocket)
+        print(f"DM WebSocket connected to conversation {conversation_id}")
+    
+    def disconnect(self, conversation_id: int, websocket: WebSocket):
+        """Remove a WebSocket connection from a DM conversation."""
+        if conversation_id in self.active_connections:
+            if websocket in self.active_connections[conversation_id]:
+                self.active_connections[conversation_id].remove(websocket)
+            
+            if not self.active_connections[conversation_id]:
+                del self.active_connections[conversation_id]
+        
+        print(f"DM WebSocket disconnected from conversation {conversation_id}")
+    
+    async def broadcast(self, conversation_id: int, message: dict):
+        """Broadcast a message to all connections in a DM conversation."""
+        if conversation_id not in self.active_connections:
+            return
+        
+        disconnected = []
+        
+        for connection in self.active_connections[conversation_id]:
+            try:
+                await connection.send_json(message)
+            except Exception as e:
+                print(f"Error broadcasting DM: {e}")
+                disconnected.append(connection)
+        
+        for ws in disconnected:
+            self.disconnect(conversation_id, ws)
+
+
+# Global connection managers
 manager = ConnectionManager()
+dm_manager = DMConnectionManager()
 
 
 async def websocket_endpoint(websocket: WebSocket, channel_id: int, user_data: Optional[dict] = None):
@@ -121,3 +172,93 @@ async def websocket_endpoint(websocket: WebSocket, channel_id: int, user_data: O
             "content": "User disconnected",
             "sender_username": "System"
         })
+
+
+async def dm_websocket_endpoint(websocket: WebSocket, conversation_id: int, user_data: Optional[dict] = None):
+    """
+    WebSocket endpoint for DM conversations.
+    
+    Client sends: {"content": "message text"}
+    Server broadcasts: {"conversation_id": ..., "sender_id": ..., "sender_username": ..., "content": ..., "created_at": ...}
+    Also saves messages to database.
+    """
+    if not user_data:
+        await websocket.close(code=4001, reason="Authentication required")
+        return
+    
+    # Verify user is part of this conversation
+    from backend.database import async_session_maker
+    from backend.models import DMConversation, DirectMessage, User
+    from sqlalchemy import select, and_, or_
+    
+    async with async_session_maker() as db:
+        result = await db.execute(
+            select(DMConversation).where(
+                and_(
+                    DMConversation.id == conversation_id,
+                    or_(
+                        DMConversation.user1_id == user_data["user_id"],
+                        DMConversation.user2_id == user_data["user_id"]
+                    )
+                )
+            )
+        )
+        conv = result.scalar_one_or_none()
+        
+        if not conv:
+            await websocket.close(code=4003, reason="Not authorized for this conversation")
+            return
+    
+    await dm_manager.connect(conversation_id, websocket)
+    
+    try:
+        while True:
+            data = await websocket.receive_text()
+            
+            try:
+                message_data = json.loads(data)
+                content = message_data.get("content", "")
+                
+                if content.strip():
+                    sender_id = user_data["user_id"]
+                    sender_username = user_data["username"]
+                    created_at = int(time.time())
+                    
+                    # Save message to database
+                    msg_id = None
+                    async with async_session_maker() as db:
+                        msg = DirectMessage(
+                            conversation_id=conversation_id,
+                            sender_id=sender_id,
+                            content=content.strip(),
+                            created_at=created_at
+                        )
+                        db.add(msg)
+                        await db.commit()
+                        await db.refresh(msg)
+                        msg_id = msg.id
+                        
+                        # Get sender avatar
+                        result = await db.execute(select(User).where(User.id == sender_id))
+                        sender = result.scalar_one_or_none()
+                        sender_avatar = sender.avatar_url if sender else None
+                    
+                    # Broadcast to all in conversation
+                    broadcast_message = {
+                        "type": "dm_message",
+                        "id": msg_id,
+                        "conversation_id": conversation_id,
+                        "sender_id": sender_id,
+                        "sender_username": sender_username,
+                        "sender_avatar_url": sender_avatar,
+                        "content": content.strip(),
+                        "created_at": created_at
+                    }
+                    
+                    await dm_manager.broadcast(conversation_id, broadcast_message)
+                    
+            except json.JSONDecodeError:
+                print(f"Invalid JSON in DM: {data}")
+                
+    except WebSocketDisconnect:
+        dm_manager.disconnect(conversation_id, websocket)
