@@ -778,7 +778,6 @@ function handleUserVolumeChange(userId, value, sliderEl) {
         console.warn('[DEBUG-VOL] livekitClient or setUserVolume missing!');
     }
 }
-}
 
 // Select channel
 async function selectChannel(channel) {
