@@ -843,39 +843,14 @@ class LiveKitClient {
         // Fallback: DOM volume
         this.audioElements.forEach(audio => {
             if (String(audio.participantId) === targetId) {
-                audio.element.volume = Math.min(1, gain);
-                audio.element.muted = (gain === 0);
-            }
-        });
-    }
-        
-        // Save preference
-        localStorage.setItem(`voice_chat_user_vol_${userId}`, safeVolume);
-        
-        if (!this.room) return;
-        
-        const targetId = String(userId);
-        let updated = 0;
-        
-        this.room.remoteParticipants.forEach((participant) => {
-            if (String(participant.identity) === targetId) {
-                participant.trackPublications.forEach((pub) => {
-                    if (pub.kind === 'audio' && pub.source === 'microphone') {
-                        if (pub.setVolume) {
-                            pub.setVolume(gain);
-                            updated++;
-                            console.log(`[VOL-USER] Set track volume for ${targetId} to ${safeVolume}% (gain: ${gain.toFixed(2)}x)`);
-                        }
-                    }
-                });
-            }
-        });
-        
-        // Fallback: DOM volume
-        this.audioElements.forEach(audio => {
-            if (String(audio.participantId) === targetId) {
-                audio.element.volume = Math.min(1, gain);
-                audio.element.muted = (gain === 0);
+                // If gain is 0, force mute to ensure absolute silence
+                if (gain === 0) {
+                    audio.element.muted = true;
+                    audio.element.volume = 0;
+                } else {
+                    audio.element.muted = false;
+                    audio.element.volume = Math.min(1, gain);
+                }
             }
         });
     }
