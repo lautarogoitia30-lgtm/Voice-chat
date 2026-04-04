@@ -1231,6 +1231,8 @@ async function handleJoinVoice() {
                 const savedMicVol = localStorage.getItem('voice_chat_mic_volume');
                 if (savedMicVol && parseInt(savedMicVol) !== 100 && window.livekitClient.setMicVolume) {
                     console.log('[JOIN] Applying saved mic volume:', savedMicVol + '%');
+                    // Small delay to ensure track is fully published
+                    await new Promise(r => setTimeout(r, 300));
                     window.livekitClient.setMicVolume(parseInt(savedMicVol));
                 }
             } else {
@@ -2425,6 +2427,7 @@ async function deleteChannel() {
 // Make loadGroups global
 window.loadGroups = loadGroups;
 window.handleLogout = handleLogout;
+window.refreshApp = refreshApp;
 window.showEditGroupModal = showEditGroupModal;
 window.hideEditGroupModal = hideEditGroupModal;
 window.deleteGroup = deleteGroup;
@@ -2480,6 +2483,16 @@ function showSettingsModal() {
 // Hide Settings Modal
 function hideSettingsModal() {
     document.getElementById('settings-modal').classList.add('hidden');
+}
+
+// Refresh App — force reload from server (bypasses cache)
+function refreshApp() {
+    if (confirm('¿Querés actualizar la app? Se recargará la página.')) {
+        // Clear all cached scripts
+        caches.keys().then(names => names.forEach(name => caches.delete(name)));
+        // Force reload bypassing cache
+        window.location.reload(true);
+    }
 }
 
 // Handle Logout
