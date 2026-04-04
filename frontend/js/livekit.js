@@ -800,19 +800,25 @@ class LiveKitClient {
     
     /**
      * Set volume for a specific user (per-user volume control).
-     * Uses LiveKit's internal setVolume API to allow boosting up to 200%.
+     * Uses LiveKit's internal setVolume API with an exponential curve for noticeable boost.
      * @param {string} userId - The participant identity (user_id)
-     * @param {number} volume - 0 to 200
+     * @param {number} volume - 0 to 300
      */
     setUserVolume(userId, volume) {
-        const safeVolume = Math.min(200, Math.max(0, volume));
-        const gain = safeVolume / 100;
+        const safeVolume = Math.min(300, Math.max(0, volume));
+        
+        // Exponential curve: 100%=1x, 200%=3x, 300%=6x
+        let gain;
+        if (safeVolume <= 100) {
+            gain = safeVolume / 100;
+        } else {
+            const boost = (safeVolume - 100) / 100;
+            gain = 1 + (Math.pow(3, boost) - 1);
+        }
         
         // Save preference
         localStorage.setItem(`voice_chat_user_vol_${userId}`, safeVolume);
         
-        // Use LiveKit API to set volume on the track publication
-        // This bypasses the HTMLAudioElement 1.0 cap and uses WebAudio gain internally
         if (!this.room) return;
         
         const targetId = String(userId);
@@ -821,24 +827,21 @@ class LiveKitClient {
         this.room.remoteParticipants.forEach((participant) => {
             if (String(participant.identity) === targetId) {
                 participant.trackPublications.forEach((pub) => {
-                    // Find the microphone audio track
                     if (pub.kind === 'audio' && pub.source === 'microphone') {
                         if (pub.setVolume) {
-                            pub.setVolume(gain); // 1.0 = 100%, 2.0 = 200%
+                            pub.setVolume(gain);
                             updated++;
-                            console.log(`[VOL-USER] Set track volume for ${targetId} to ${safeVolume}%`);
-                        } else {
-                            console.warn('[VOL-USER] setVolume API not available on this track');
+                            console.log(`[VOL-USER] Set track volume for ${targetId} to ${safeVolume}% (gain: ${gain.toFixed(2)}x)`);
                         }
                     }
                 });
             }
         });
         
-        // Fallback: Also update DOM volume for older tracks or if API fails
+        // Fallback: DOM volume
         this.audioElements.forEach(audio => {
             if (String(audio.participantId) === targetId) {
-                audio.element.volume = Math.min(1, gain); // DOM caps at 1.0
+                audio.element.volume = Math.min(1, gain);
                 audio.element.muted = (gain === 0);
             }
         });

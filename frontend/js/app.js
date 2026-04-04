@@ -752,7 +752,7 @@ async function loadChannelVoiceParticipants(channelId) {
                 </div>
                 <div class="voice-participant-volume">
                     <span class="vol-label">${userVol}%</span>
-                    <input type="range" class="user-volume-slider" min="0" max="200" value="${userVol}" 
+                    <input type="range" class="user-volume-slider" min="0" max="300" value="${userVol}" 
                         data-user-id="${userId}" 
                         oninput="handleUserVolumeChange('${userId}', this.value, this)">
                 </div>
