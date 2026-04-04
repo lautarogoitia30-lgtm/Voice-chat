@@ -1787,6 +1787,61 @@ body {
     color: var(--text-primary);
 }
 
+/* Volume control in screen share header */
+.screen-share-volume {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.volume-icon {
+    font-size: 16px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.volume-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--bg-tertiary);
+    outline: none;
+    cursor: pointer;
+}
+
+.volume-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    transition: transform 0.15s;
+}
+
+.volume-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+}
+
+.volume-slider::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    border: none;
+}
+
+.volume-value {
+    font-size: 11px;
+    color: var(--text-muted);
+    min-width: 32px;
+    text-align: center;
+}
+
 /* Main video area — the shared screen */
 .screen-share-main {
     flex: 1;
@@ -1811,11 +1866,14 @@ body {
 .screen-share-video {
     max-width: 100%;
     max-height: 100%;
-    width: 100%;
-    height: 100%;
+    width: auto;
+    height: auto;
     object-fit: contain;
     border-radius: 0;
     cursor: pointer;
+    /* Prevent blurry upscaling */
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
 }
 
 /* Hint text for double-click fullscreen */

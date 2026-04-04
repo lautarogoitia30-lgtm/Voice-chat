@@ -1793,6 +1793,71 @@ async function showScreenShareView(track, publication, participant) {
     // Build participant thumbnails in the bottom bar
     buildScreenShareThumbnails(participant.identity);
     
+    // === Volume slider for screen share audio ===
+    const volumeSlider = document.getElementById('screen-share-volume');
+    const volumeValue = document.getElementById('volume-value');
+    const volumeIcon = document.getElementById('volume-icon');
+    
+    // Restore saved volume or default to 100%
+    const savedVolume = localStorage.getItem('voicespace-screen-volume');
+    const volume = savedVolume !== null ? parseInt(savedVolume) : 100;
+    if (volumeSlider) volumeSlider.value = volume;
+    if (volumeValue) volumeValue.textContent = volume + '%';
+    if (volumeIcon) volumeIcon.textContent = volume === 0 ? '🔇' : volume < 50 ? '🔉' : '🔊';
+    
+    // Apply volume to screen share audio tracks
+    function applyScreenShareVolume(vol) {
+        // Find audio elements from screen share in #voice-container
+        const voiceContainer = document.getElementById('voice-container');
+        if (voiceContainer) {
+            const audioElements = voiceContainer.querySelectorAll('audio');
+            audioElements.forEach(audio => {
+                // Screen share audio tracks have a different source than microphone
+                // We apply volume to all audio in the container (simplest approach)
+                audio.volume = vol / 100;
+            });
+        }
+    }
+    
+    // Apply initial volume
+    applyScreenShareVolume(volume);
+    
+    // Listen for volume changes
+    if (volumeSlider) {
+        volumeSlider.addEventListener('input', () => {
+            const vol = parseInt(volumeSlider.value);
+            if (volumeValue) volumeValue.textContent = vol + '%';
+            if (volumeIcon) volumeIcon.textContent = vol === 0 ? '🔇' : vol < 50 ? '🔉' : '🔊';
+            localStorage.setItem('voicespace-screen-volume', vol);
+            applyScreenShareVolume(vol);
+        });
+    }
+    
+    // Click icon to toggle mute
+    if (volumeIcon) {
+        volumeIcon.addEventListener('click', () => {
+            if (!volumeSlider) return;
+            const currentVol = parseInt(volumeSlider.value);
+            if (currentVol > 0) {
+                // Save current volume before muting
+                localStorage.setItem('voicespace-screen-volume-prev', currentVol);
+                volumeSlider.value = 0;
+                if (volumeValue) volumeValue.textContent = '0%';
+                volumeIcon.textContent = '🔇';
+                applyScreenShareVolume(0);
+            } else {
+                // Restore previous volume
+                const prev = localStorage.getItem('voicespace-screen-volume-prev');
+                const restoreVol = prev ? parseInt(prev) : 100;
+                volumeSlider.value = restoreVol;
+                if (volumeValue) volumeValue.textContent = restoreVol + '%';
+                volumeIcon.textContent = restoreVol < 50 ? '🔉' : '🔊';
+                localStorage.setItem('voicespace-screen-volume', restoreVol);
+                applyScreenShareVolume(restoreVol);
+            }
+        });
+    }
+    
     console.log('[SCREEN-UI] Screen share view shown for:', displayName);
 }
 
