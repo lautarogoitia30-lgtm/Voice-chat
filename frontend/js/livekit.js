@@ -410,7 +410,7 @@ class LiveKitClient {
             const opts = {
                 echoCancellation: echoCancellation,
                 noiseSuppression: noiseSuppression,
-                autoGainControl: true,
+                autoGainControl: false,      // OFF by default — user controls volume manually via slider
                 channelCount: 1,
                 sampleRate: 48000,
             };
@@ -437,12 +437,29 @@ class LiveKitClient {
     
     /**
      * Set microphone volume using Web Audio API GainNode.
-     * Replaces the published track with a gain-processed version on first call.
-     * Subsequent calls just adjust the gain value (no track replacement).
+     * For volume=0: simply mutes the track (no gain chain needed).
+     * For volume>0: creates a gain chain on first call, then adjusts gain.
      * @param {number} volume - 0 to 100
      */
     async setMicVolume(volume) {
         console.log('[VOLUME] setMicVolume called:', volume);
+        
+        // Special case: volume 0 = mute the track directly
+        if (volume === 0) {
+            if (this._micGainNode) {
+                this._micGainNode.gain.value = 0;
+            } else {
+                // No gain chain yet — mute the track directly
+                const pub = this.localParticipant?.getTrackPublication(this._Track?.Source?.Microphone);
+                if (pub && pub.track && pub.track.mediaStreamTrack) {
+                    pub.track.mediaStreamTrack.enabled = false;
+                    console.log('[VOLUME] Track muted directly (no gain chain)');
+                }
+            }
+            this._micVolume = 0;
+            return;
+        }
+        
         const gain = volume / 100;
         
         // If gain chain already exists, just update the value
@@ -453,7 +470,7 @@ class LiveKitClient {
             return;
         }
         
-        // First time: set up the Web Audio gain chain
+        // First time with volume > 0: set up the Web Audio gain chain
         try {
             const pub = this.localParticipant.getTrackPublication(this._Track?.Source?.Microphone);
             if (!pub || !pub.track) {
@@ -482,15 +499,25 @@ class LiveKitClient {
             });
             
             // Replace: unpublish old, publish new
+            console.log('[VOLUME] Unpublishing original track...');
             await this.localParticipant.unpublishTrack(pub.track);
+            console.log('[VOLUME] Publishing processed track...');
             await this.localParticipant.publishTrack(processedTrack, {
                 source: this._Track.Source.Microphone,
             });
+            console.log('[VOLUME] ✅ Gain chain created, volume:', volume + '%');
             
             this._micVolume = volume;
-            console.log('[VOLUME] ✅ Gain chain created, volume:', volume + '%');
         } catch (e) {
             console.error('[VOLUME] Failed to set up mic gain:', e);
+            // Fallback: just mute if volume is very low
+            if (volume < 10) {
+                const pub = this.localParticipant?.getTrackPublication(this._Track?.Source?.Microphone);
+                if (pub && pub.track && pub.track.mediaStreamTrack) {
+                    pub.track.mediaStreamTrack.enabled = false;
+                    console.log('[VOLUME] Fallback: track muted due to error');
+                }
+            }
         }
     }
     
