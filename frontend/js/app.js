@@ -752,7 +752,7 @@ async function loadChannelVoiceParticipants(channelId) {
                 </div>
                 <div class="voice-participant-volume">
                     <span class="vol-label">${userVol}%</span>
-                    <input type="range" class="user-volume-slider" min="0" max="200" value="${userVol}" 
+                    <input type="range" class="user-volume-slider" min="0" max="100" value="${userVol}" 
                         data-user-id="${userId}" 
                         oninput="handleUserVolumeChange('${userId}', this.value, this)">
                 </div>
@@ -766,16 +766,12 @@ async function loadChannelVoiceParticipants(channelId) {
 
 // Handle per-user volume change
 function handleUserVolumeChange(userId, value, sliderEl) {
-    console.log('[DEBUG-VOL] Slider moved for user', userId, 'to', value);
     const label = sliderEl.parentElement.querySelector('.vol-label');
     if (label) label.textContent = value + '%';
     
     // Apply via LiveKit
     if (window.livekitClient && window.livekitClient.setUserVolume) {
-        console.log('[DEBUG-VOL] Calling setUserVolume...');
         window.livekitClient.setUserVolume(userId, parseInt(value));
-    } else {
-        console.warn('[DEBUG-VOL] livekitClient or setUserVolume missing!');
     }
 }
 
