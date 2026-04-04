@@ -800,6 +800,7 @@ class LiveKitClient {
     
     /**
      * Set volume for a specific user (per-user volume control like Discord).
+     * Uses Web Audio API GainNode for volumes > 100% (browser native caps at 1.0).
      * @param {string} userId - The participant identity (user_id)
      * @param {number} volume - 0 to 200 (100 is default)
      */
@@ -809,24 +810,55 @@ class LiveKitClient {
         // Save preference
         localStorage.setItem(`voice_chat_user_vol_${userId}`, volume);
         
-        // Apply to all matching audio elements
         const gain = Math.min(2.0, volume / 100); // Cap at 2.0 (200%)
         let updated = 0;
         
-        this.audioElements.forEach(audio => {
-            if (audio.participantId === userId) {
-                audio.element.volume = gain;
-                updated++;
+        // Find all audio elements for this user
+        const allAudios = [
+            ...this.audioElements.filter(a => a.participantId === userId).map(a => a.element),
+            ...Array.from(document.querySelectorAll(`audio[data-user-id="${userId}"]`))
+        ];
+        
+        // Deduplicate
+        const uniqueAudios = [...new Set(allAudios)];
+        
+        uniqueAudios.forEach(audioEl => {
+            if (volume <= 100) {
+                // Simple volume — browser native works fine
+                audioEl.volume = gain;
+                // Disconnect any existing gain node
+                if (audioEl._userVolSource) {
+                    try { audioEl._userVolSource.disconnect(); } catch(e) {}
+                    audioEl._userVolSource = null;
+                }
+                if (audioEl._userVolGain) {
+                    try { audioEl._userVolGain.disconnect(); } catch(e) {}
+                    audioEl._userVolGain = null;
+                }
+            } else {
+                // Volume > 100% — need Web Audio API gain node
+                if (!audioEl._userVolAudioCtx) {
+                    audioEl._userVolAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                
+                if (!audioEl._userVolSource) {
+                    audioEl._userVolSource = audioEl._userVolAudioCtx.createMediaElementSource(audioEl);
+                }
+                
+                if (!audioEl._userVolGain) {
+                    audioEl._userVolGain = audioEl._userVolAudioCtx.createGain();
+                    audioEl._userVolSource.connect(audioEl._userVolGain);
+                    audioEl._userVolGain.connect(audioEl._userVolAudioCtx.destination);
+                }
+                
+                // Set audio element to max native volume, let gain node handle the boost
+                audioEl.volume = 1.0;
+                audioEl._userVolGain.gain.value = gain;
             }
+            updated++;
         });
         
-        // Also update any audio elements in DOM with data-user-id
-        const domAudios = document.querySelectorAll(`audio[data-user-id="${userId}"]`);
-        domAudios.forEach(a => {
-            a.volume = gain;
-        });
-        
-        console.log('[VOL-USER] Updated', updated, 'audio element(s) for user', userId);
+        console.log('[VOL-USER] Updated', updated, 'audio element(s) for user', userId, 'gain:', gain);
     }
     
     /**
