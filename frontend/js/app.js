@@ -1275,6 +1275,14 @@ async function handleJoinVoice() {
                     await new Promise(r => setTimeout(r, 300));
                     window.livekitClient.setMicVolume(parseInt(savedMicVol));
                 }
+                
+                // Apply saved auto-gain setting
+                const autoGainEnabled = localStorage.getItem('voice_chat_auto_gain') === 'true';
+                if (autoGainEnabled && window.livekitClient.setAutoGain) {
+                    console.log('[JOIN] Applying saved auto-gain setting');
+                    await new Promise(r => setTimeout(r, 500));
+                    window.livekitClient.setAutoGain(true);
+                }
             } else {
                 console.warn('[JOIN] Room not connected yet, skipping publishMicrophone');
             }
@@ -2506,7 +2514,15 @@ function showSettingsModal() {
     // Load user profile data
     loadProfileSettings();
     
-    // Load audio devices
+// Handle auto-gain change
+function handleAutoGainChange(enabled) {
+    localStorage.setItem('voice_chat_auto_gain', enabled ? 'true' : 'false');
+    if (window.livekitClient && window.livekitClient.setAutoGain) {
+        window.livekitClient.setAutoGain(enabled);
+    }
+}
+
+// Load audio devices
     loadAudioDevices();
     
     // Load audio settings from localStorage
@@ -2835,6 +2851,14 @@ async function toggleMicTest() {
     }
 }
 
+// Handle auto-gain change
+function handleAutoGainChange(enabled) {
+    localStorage.setItem('voice_chat_auto_gain', enabled ? 'true' : 'false');
+    if (window.livekitClient && window.livekitClient.setAutoGain) {
+        window.livekitClient.setAutoGain(enabled);
+    }
+}
+
 // Load audio devices
 async function loadAudioDevices() {
     try {
@@ -2894,6 +2918,11 @@ async function loadAudioDevices() {
         
         // Check Krisp status
         checkKrispStatus();
+        
+        // Load auto-gain checkbox state
+        const autoGainCheckbox = document.getElementById('settings-auto-gain');
+        const savedAutoGain = localStorage.getItem('voice_chat_auto_gain') === 'true';
+        if (autoGainCheckbox) autoGainCheckbox.checked = savedAutoGain;
         
     } catch (error) {
         console.error('Error loading audio devices:', error);

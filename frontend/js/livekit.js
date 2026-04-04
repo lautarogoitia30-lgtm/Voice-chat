@@ -28,6 +28,9 @@ class LiveKitClient {
         this._micGainNode = null;
         this._micAudioContext = null;
         this._micVolume = 100;
+        // Auto-gain (dynamic compressor for quiet mics)
+        this._autoGainEnabled = false;
+        this._autoGainProcessor = null;
     }
     
     /**
@@ -445,6 +448,58 @@ class LiveKitClient {
             console.error('[AUDIO] Error name:', error.name);
             console.error('[AUDIO] Error message:', error.message);
             alert('Error al acceder al micrófono: ' + error.message);
+        }
+    }
+    
+    /**
+     * Enable or disable auto-gain (dynamic compressor) for the microphone.
+     * Uses Web Audio DynamicsCompressorNode to boost quiet voices and limit loud ones.
+     */
+    async setAutoGain(enabled) {
+        this._autoGainEnabled = enabled;
+        console.log('[AUTO-GAIN] Changed to:', enabled);
+        
+        if (!this.localParticipant) {
+            console.warn('[AUTO-GAIN] No local participant yet');
+            return;
+        }
+        
+        const pub = this.localParticipant.getTrackPublication(this._Track?.Source?.Microphone);
+        if (!pub || !pub.audioTrack) {
+            console.warn('[AUTO-GAIN] No microphone track published yet');
+            return;
+        }
+        
+        try {
+            if (enabled) {
+                // Create a DynamicsCompressorNode processor
+                // This boosts quiet sounds and limits loud ones automatically
+                const processor = {
+                    createProcessor: (context) => {
+                        const compressor = context.createDynamicsCompressor();
+                        // Aggressive settings for quiet mics:
+                        compressor.threshold.value = -50;    // Start compressing at -50dB
+                        compressor.knee.value = 40;          // Smooth transition
+                        compressor.ratio.value = 12;         // High ratio = strong compression = louder output
+                        compressor.attack.value = 0;         // Instant response
+                        compressor.release.value = 0.25;     // Quick release
+                        return compressor;
+                    }
+                };
+                
+                await pub.audioTrack.setProcessor(processor);
+                this._autoGainProcessor = processor;
+                console.log('[AUTO-GAIN] ✅ Dynamic compressor activated — quiet voices boosted!');
+            } else {
+                // Remove processor
+                if (pub.audioTrack) {
+                    await pub.audioTrack.setProcessor(null);
+                }
+                this._autoGainProcessor = null;
+                console.log('[AUTO-GAIN] Disabled');
+            }
+        } catch (e) {
+            console.error('[AUTO-GAIN] Failed:', e.message);
         }
     }
     
