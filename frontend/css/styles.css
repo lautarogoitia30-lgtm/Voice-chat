@@ -1849,6 +1849,17 @@ body {
     text-align: center;
 }
 
+/* Mic volume in settings */
+.mic-volume-control {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.mic-volume-slider {
+    flex: 1;
+}
+
 /* Main video area — the shared screen */
 .screen-share-main {
     flex: 1;

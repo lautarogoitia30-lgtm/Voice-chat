@@ -1226,6 +1226,13 @@ async function handleJoinVoice() {
                 console.log('[JOIN] Publishing microphone...');
                 await window.livekitClient.publishMicrophone();
                 console.log('[JOIN] Microphone published!');
+                
+                // Apply saved mic volume if not 100%
+                const savedMicVol = localStorage.getItem('voice_chat_mic_volume');
+                if (savedMicVol && parseInt(savedMicVol) !== 100 && window.livekitClient.setMicVolume) {
+                    console.log('[JOIN] Applying saved mic volume:', savedMicVol + '%');
+                    window.livekitClient.setMicVolume(parseInt(savedMicVol));
+                }
             } else {
                 console.warn('[JOIN] Room not connected yet, skipping publishMicrophone');
             }
@@ -2721,6 +2728,30 @@ async function loadAudioDevices() {
         
         if (savedInput) inputSelect.value = savedInput;
         if (savedOutput) outputSelect.value = savedOutput;
+        
+        // Load mic volume slider
+        const micSlider = document.getElementById('mic-volume-slider');
+        const micValue = document.getElementById('mic-volume-value');
+        const micIcon = document.getElementById('mic-volume-icon');
+        const savedMicVol = localStorage.getItem('voice_chat_mic_volume');
+        const micVol = savedMicVol !== null ? parseInt(savedMicVol) : 100;
+        if (micSlider) micSlider.value = micVol;
+        if (micValue) micValue.textContent = micVol + '%';
+        if (micIcon) micIcon.textContent = micVol === 0 ? '🔇' : micVol < 50 ? '🎙️' : '🎤';
+        
+        // Wire up slider events
+        if (micSlider) {
+            micSlider.addEventListener('input', () => {
+                const vol = parseInt(micSlider.value);
+                if (micValue) micValue.textContent = vol + '%';
+                if (micIcon) micIcon.textContent = vol === 0 ? '🔇' : vol < 50 ? '🎙️' : '🎤';
+                localStorage.setItem('voice_chat_mic_volume', vol);
+                // Apply in real-time if in voice
+                if (window.livekitClient && window.livekitClient.setMicVolume) {
+                    window.livekitClient.setMicVolume(vol);
+                }
+            });
+        }
         
     } catch (error) {
         console.error('Error loading audio devices:', error);

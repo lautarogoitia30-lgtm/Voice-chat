@@ -436,9 +436,73 @@ class LiveKitClient {
     }
     
     /**
-     * Update input volume dynamically
-     * With native LiveKit, volume control is limited — we store preference
-     * and can apply via Web Audio if needed in the future
+     * Set microphone volume using Web Audio API GainNode.
+     * Replaces the published track with a gain-processed version on first call.
+     * Subsequent calls just adjust the gain value (no track replacement).
+     * @param {number} volume - 0 to 100
+     */
+    async setMicVolume(volume) {
+        console.log('[VOLUME] setMicVolume called:', volume);
+        const gain = volume / 100;
+        
+        // If gain chain already exists, just update the value
+        if (this._micGainNode) {
+            this._micGainNode.gain.value = gain;
+            this._micVolume = volume;
+            console.log('[VOLUME] Gain updated to:', gain);
+            return;
+        }
+        
+        // First time: set up the Web Audio gain chain
+        try {
+            const pub = this.localParticipant.getTrackPublication(this._Track?.Source?.Microphone);
+            if (!pub || !pub.track) {
+                console.warn('[VOLUME] No microphone track published yet');
+                return;
+            }
+            
+            const originalTrack = pub.track.mediaStreamTrack;
+            
+            // Create audio context and gain node
+            this._micAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+            this._micGainNode = this._micAudioContext.createGain();
+            this._micGainNode.gain.value = gain;
+            
+            // Route original track through gain node
+            const source = this._micAudioContext.createMediaStreamSource(new MediaStream([originalTrack]));
+            source.connect(this._micGainNode);
+            
+            const dest = this._micAudioContext.createMediaStreamDestination();
+            this._micGainNode.connect(dest);
+            
+            // Create new LiveKit track from processed stream
+            const livekit = await import('https://cdn.jsdelivr.net/npm/livekit-client@2/+esm');
+            const processedTrack = new livekit.LocalAudioTrack(dest.stream.getAudioTracks()[0], {
+                source: this._Track.Source.Microphone,
+            });
+            
+            // Replace: unpublish old, publish new
+            await this.localParticipant.unpublishTrack(pub.track);
+            await this.localParticipant.publishTrack(processedTrack, {
+                source: this._Track.Source.Microphone,
+            });
+            
+            this._micVolume = volume;
+            console.log('[VOLUME] ✅ Gain chain created, volume:', volume + '%');
+        } catch (e) {
+            console.error('[VOLUME] Failed to set up mic gain:', e);
+        }
+    }
+    
+    /**
+     * Get current mic volume
+     */
+    getMicVolume() {
+        return this._micVolume ?? 100;
+    }
+    
+    /**
+     * Update input volume dynamically (legacy — stores preference only)
      */
     setInputVolume(volume) {
         console.log('[AUDIO] setInputVolume called with:', volume);

@@ -406,6 +406,15 @@
                     </div>
                     
                     <div class="settings-section">
+                        <label>Volumen del micrófono</label>
+                        <div class="mic-volume-control">
+                            <span class="volume-icon" id="mic-volume-icon" title="Volumen del micrófono">🎤</span>
+                            <input type="range" id="mic-volume-slider" class="volume-slider mic-volume-slider" min="0" max="100" value="100" title="Volumen del micrófono">
+                            <span class="volume-value" id="mic-volume-value">100%</span>
+                        </div>
+                    </div>
+                    
+                    <div class="settings-section">
                         <label>Dispositivo de salida</label>
                         <select id="settings-output-device" onchange="handleOutputDeviceChange(this.value)">
                             <option value="">Cargando dispositivos...</option>
@@ -456,7 +465,7 @@
     <!-- Scripts -->
     <script src="js/api.js?v=13"></script>
     <script src="js/websocket.js?v=10"></script>
-    <script src="js/livekit.js?v=26"></script>
-    <script src="js/app.js?v=51"></script>
+    <script src="js/livekit.js?v=27"></script>
+    <script src="js/app.js?v=52"></script>
 </body>
 </html>
