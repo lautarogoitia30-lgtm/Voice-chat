@@ -2728,65 +2728,81 @@ let micTestAnalyser = null;
 let micTestActive = false;
 let micTestAnimFrame = null;
 
-// Toggle microphone test
+// Toggle microphone test (Record & Playback)
 async function toggleMicTest() {
     const btn = document.getElementById('mic-test-btn');
     const meterFill = document.getElementById('mic-test-meter-fill');
     const status = document.getElementById('mic-test-status');
     
-    if (micTestActive) {
-        // Stop test
-        micTestActive = false;
-        if (micTestAnimFrame) cancelAnimationFrame(micTestAnimFrame);
-        if (micTestStream) {
-            micTestStream.getTracks().forEach(t => t.stop());
-            micTestStream = null;
-        }
-        if (btn) {
-            btn.textContent = '🎤 Probar micrófono';
-            btn.classList.remove('active');
-        }
+    if (micTestActive) return; // Prevent double clicks
+    
+    try {
+        btn.disabled = true;
+        btn.textContent = '⏳ Grabando...';
+        status.textContent = 'Hablá ahora...';
         if (meterFill) meterFill.style.width = '0%';
-        if (status) status.textContent = '';
-        console.log('[MIC-TEST] Stopped');
-    } else {
-        // Start test
-        try {
-            micTestStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            const source = audioContext.createMediaStreamSource(micTestStream);
-            micTestAnalyser = audioContext.createAnalyser();
-            micTestAnalyser.fftSize = 256;
-            source.connect(micTestAnalyser);
+        
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const mediaRecorder = new MediaRecorder(stream);
+        const chunks = [];
+        
+        mediaRecorder.ondataavailable = (e) => {
+            if (e.data.size > 0) chunks.push(e.data);
+        };
+        
+        mediaRecorder.onstop = () => {
+            const blob = new Blob(chunks, { type: 'audio/webm' });
+            const url = URL.createObjectURL(blob);
+            const audio = new Audio(url);
             
-            micTestActive = true;
-            if (btn) {
-                btn.textContent = '⏹️ Detener prueba';
-                btn.classList.add('active');
-            }
-            if (status) status.textContent = 'Escuchando...';
+            status.textContent = '🔊 Reproduciendo...';
+            audio.play();
             
-            const dataArray = new Uint8Array(micTestAnalyser.frequencyBinCount);
-            
-            const updateMeter = () => {
-                if (!micTestActive) return;
-                micTestAnalyser.getByteFrequencyData(dataArray);
-                let sum = 0;
-                for (let i = 0; i < dataArray.length; i++) {
-                    sum += dataArray[i];
-                }
-                const avg = sum / dataArray.length;
-                const pct = Math.min(100, (avg / 128) * 100);
-                if (meterFill) meterFill.style.width = pct + '%';
-                micTestAnimFrame = requestAnimationFrame(updateMeter);
+            audio.onended = () => {
+                btn.disabled = false;
+                btn.textContent = '🎤 Probar micrófono';
+                status.textContent = '¿Te escuchaste?';
+                stream.getTracks().forEach(t => t.stop());
+                URL.revokeObjectURL(url);
+                if (meterFill) meterFill.style.width = '0%';
             };
-            updateMeter();
-            
-            console.log('[MIC-TEST] Started');
-        } catch (e) {
-            console.error('[MIC-TEST] Failed:', e);
-            if (status) status.textContent = 'Error: ' + e.message;
-        }
+        };
+        
+        mediaRecorder.start();
+        micTestActive = true;
+        
+        // Visual meter while recording
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const source = audioContext.createMediaStreamSource(stream);
+        const analyser = audioContext.createAnalyser();
+        analyser.fftSize = 256;
+        source.connect(analyser);
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        
+        const updateMeter = () => {
+            if (!micTestActive) return;
+            analyser.getByteFrequencyData(dataArray);
+            let sum = 0;
+            for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+            const avg = sum / dataArray.length;
+            if (meterFill) meterFill.style.width = Math.min(100, (avg / 128) * 100) + '%';
+            requestAnimationFrame(updateMeter);
+        };
+        updateMeter();
+        
+        // Auto stop after 4 seconds
+        setTimeout(() => {
+            if (micTestActive && mediaRecorder.state === 'recording') {
+                mediaRecorder.stop();
+                micTestActive = false;
+            }
+        }, 4000);
+        
+    } catch (e) {
+        console.error('[MIC-TEST] Error:', e);
+        btn.disabled = false;
+        btn.textContent = '🎤 Probar micrófono';
+        status.textContent = 'Error: ' + e.message;
     }
 }
 
