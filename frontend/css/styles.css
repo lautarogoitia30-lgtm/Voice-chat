@@ -1756,6 +1756,7 @@ body {
     border-bottom: 1px solid var(--border);
     min-height: 40px;
     flex-shrink: 0;
+    gap: 12px;
 }
 
 .screen-share-label {
@@ -1765,6 +1766,11 @@ body {
     display: flex;
     align-items: center;
     gap: 6px;
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .screen-share-close-btn {
@@ -1792,6 +1798,7 @@ body {
     display: flex;
     align-items: center;
     gap: 8px;
+    flex-shrink: 0;
 }
 
 .volume-icon {
