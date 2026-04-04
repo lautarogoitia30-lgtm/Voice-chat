@@ -727,9 +727,15 @@ async function loadChannelVoiceParticipants(channelId) {
             const isCurrentUser = p.user_id === state.currentUser?.user_id;
             const initial = p.username.charAt(0).toUpperCase();
             const nameDisplay = isCurrentUser ? p.username + ' (vos)' : p.username;
+            const userId = String(p.user_id);
+            
+            // Get saved volume for this user (default 100%)
+            const savedVol = localStorage.getItem(`voice_chat_user_vol_${userId}`);
+            const userVol = savedVol !== null ? parseInt(savedVol) : 100;
             
             const item = document.createElement('div');
             item.className = 'voice-participant-item';
+            item.dataset.userId = userId;
             
             let avatarHtml = '';
             if (p.avatar_url) {
@@ -739,11 +745,33 @@ async function loadChannelVoiceParticipants(channelId) {
                 avatarHtml = `<div class="voice-participant-avatar">${initial}</div>`;
             }
             
-            item.innerHTML = `${avatarHtml}<span class="voice-participant-name">${nameDisplay}</span>`;
+            item.innerHTML = `
+                <div class="voice-participant-row">
+                    ${avatarHtml}
+                    <span class="voice-participant-name">${nameDisplay}</span>
+                </div>
+                <div class="voice-participant-volume">
+                    <span class="vol-label">${userVol}%</span>
+                    <input type="range" class="user-volume-slider" min="0" max="200" value="${userVol}" 
+                        data-user-id="${userId}" 
+                        oninput="handleUserVolumeChange('${userId}', this.value, this)">
+                </div>
+            `;
             container.appendChild(item);
         });
     } catch (e) {
         console.log('[VOICE] Error loading participants for channel', channelId, e);
+    }
+}
+
+// Handle per-user volume change
+function handleUserVolumeChange(userId, value, sliderEl) {
+    const label = sliderEl.parentElement.querySelector('.vol-label');
+    if (label) label.textContent = value + '%';
+    
+    // Apply via LiveKit
+    if (window.livekitClient && window.livekitClient.setUserVolume) {
+        window.livekitClient.setUserVolume(userId, parseInt(value));
     }
 }
 
@@ -2441,6 +2469,7 @@ window.loadGroups = loadGroups;
 window.handleLogout = handleLogout;
 window.refreshApp = refreshApp;
 window.toggleMicTest = toggleMicTest;
+window.handleUserVolumeChange = handleUserVolumeChange;
 window.showEditGroupModal = showEditGroupModal;
 window.hideEditGroupModal = hideEditGroupModal;
 window.deleteGroup = deleteGroup;

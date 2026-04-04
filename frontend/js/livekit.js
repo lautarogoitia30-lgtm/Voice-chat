@@ -216,8 +216,17 @@ class LiveKitClient {
                             audioElement.playsInline = true;
                             audioElement.muted = false;
                             audioElement.volume = 1.0;
+                            // Tag with user identity for per-user volume control
+                            audioElement.dataset.userId = participant.identity;
 
                             container.appendChild(audioElement);
+
+                            // Apply saved per-user volume if exists
+                            const savedVol = localStorage.getItem(`voice_chat_user_vol_${participant.identity}`);
+                            if (savedVol) {
+                                audioElement.volume = parseInt(savedVol) / 100;
+                                console.log('[LIVEKIT] Applied saved volume for', participant.identity, ':', savedVol + '%');
+                            }
 
                             // Store reference to control later
                             this.audioElements.push({
@@ -787,6 +796,37 @@ class LiveKitClient {
         } catch (e) {
             console.warn('Could not set deafen:', e);
         }
+    }
+    
+    /**
+     * Set volume for a specific user (per-user volume control like Discord).
+     * @param {string} userId - The participant identity (user_id)
+     * @param {number} volume - 0 to 200 (100 is default)
+     */
+    setUserVolume(userId, volume) {
+        console.log('[VOL-USER] Setting volume for user', userId, 'to', volume + '%');
+        
+        // Save preference
+        localStorage.setItem(`voice_chat_user_vol_${userId}`, volume);
+        
+        // Apply to all matching audio elements
+        const gain = Math.min(2.0, volume / 100); // Cap at 2.0 (200%)
+        let updated = 0;
+        
+        this.audioElements.forEach(audio => {
+            if (audio.participantId === userId) {
+                audio.element.volume = gain;
+                updated++;
+            }
+        });
+        
+        // Also update any audio elements in DOM with data-user-id
+        const domAudios = document.querySelectorAll(`audio[data-user-id="${userId}"]`);
+        domAudios.forEach(a => {
+            a.volume = gain;
+        });
+        
+        console.log('[VOL-USER] Updated', updated, 'audio element(s) for user', userId);
     }
     
     /**
