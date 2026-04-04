@@ -24,27 +24,10 @@ class LiveKitClient {
         this._isScreenSharing = false;
         this._screenShareParticipant = null; // identity of who is sharing
         this._screenVideoElements = []; // Store screen share video elements
-        // Mic volume / noise gate
+        // Mic volume
         this._micGainNode = null;
         this._micAudioContext = null;
         this._micVolume = 100;
-        this._noiseGate = null; // Noise gate analyser + processor
-        this._noiseGateThreshold = -45; // dB — below this, audio is muted (blocks background noise)
-        this._noiseGateActive = false;
-        // Mic volume / noise gate
-        this._micGainNode = null;
-        this._micAudioContext = null;
-        this._micVolume = 100;
-        this._noiseGate = null; // Noise gate analyser + processor
-        this._noiseGateThreshold = -45; // dB — below this, audio is muted (blocks background noise)
-        this._noiseGateActive = false;
-        // Mic volume / noise gate
-        this._micGainNode = null;
-        this._micAudioContext = null;
-        this._micVolume = 100;
-        this._noiseGate = null; // Noise gate analyser + processor
-        this._noiseGateThreshold = -45; // dB — below this, audio is muted (blocks background noise)
-        this._noiseGateActive = false;
     }
     
     /**
@@ -447,11 +430,6 @@ class LiveKitClient {
             console.log('[AUDIO] Microphone published via native LiveKit API!');
             console.log('[AUDIO] audioTrackPublications:', this.localParticipant.audioTrackPublications?.size);
             
-            // Start noise gate if Krisp is not active (blocks background noise)
-            if (!this._krispSupported) {
-                this._startNoiseGate();
-            }
-            
             console.log('=== MICROPHONE READY (NATIVE) ===');
         } catch (error) {
             console.error('[AUDIO] Error publishing microphone:', error);
@@ -492,10 +470,6 @@ class LiveKitClient {
         if (this._micGainNode) {
             this._micGainNode.gain.value = gain;
             this._micVolume = volume;
-            // Also update noise gate gain if active
-            if (this._noiseGate?.gateGain) {
-                this._noiseGate.gateGain.gain.value = gain;
-            }
             console.log('[VOLUME] Gain updated to:', gain);
             return;
         }
@@ -573,110 +547,6 @@ class LiveKitClient {
      */
     getMicVolume() {
         return this._micVolume ?? 100;
-    }
-    
-    /**
-     * Start noise gate — mutes mic when audio level is below threshold.
-     * Blocks background noise (fan, keyboard, etc.) when you're not speaking.
-     * Works as a fallback when Krisp is not available (e.g., Tauri/WebView2).
-     * Directly toggles track.enabled for reliable gating.
-     */
-    _startNoiseGate() {
-        if (this._noiseGateActive) {
-            console.log('[NOISE-GATE] Already active, skipping');
-            return;
-        }
-        
-        try {
-            const pub = this.localParticipant?.getTrackPublication(this._Track?.Source?.Microphone);
-            if (!pub || !pub.track || !pub.track.mediaStreamTrack) {
-                console.warn('[NOISE-GATE] No microphone track available');
-                return;
-            }
-            
-            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            const analyser = audioContext.createAnalyser();
-            analyser.fftSize = 2048;
-            analyser.smoothingTimeConstant = 0.3;
-            
-            const source = audioContext.createMediaStreamSource(
-                new MediaStream([pub.track.mediaStreamTrack])
-            );
-            source.connect(analyser);
-            
-            const dataArray = new Uint8Array(analyser.frequencyBinCount);
-            const threshold = this._noiseGateThreshold; // dB
-            let isGated = false;
-            let openFrames = 0;
-            const holdFrames = 5; // Keep open for 5 frames after voice stops (~80ms)
-            
-            const checkLevel = () => {
-                if (!this._noiseGateActive) return;
-                
-                analyser.getByteFrequencyData(dataArray);
-                
-                // Calculate RMS level in dB
-                let sum = 0;
-                for (let i = 0; i < dataArray.length; i++) {
-                    sum += dataArray[i] * dataArray[i];
-                }
-                const rms = Math.sqrt(sum / dataArray.length);
-                const db = rms > 0 ? 20 * Math.log10(rms / 255) : -100;
-                
-                // Get the published track
-                const currentPub = this.localParticipant?.getTrackPublication(this._Track?.Source?.Microphone);
-                if (!currentPub || !currentPub.track || !currentPub.track.mediaStreamTrack) {
-                    requestAnimationFrame(checkLevel);
-                    return;
-                }
-                const track = currentPub.track.mediaStreamTrack;
-                
-                if (db > threshold) {
-                    // Voice detected — open gate
-                    openFrames++;
-                    if (openFrames >= 1 && isGated) {
-                        track.enabled = true;
-                        isGated = false;
-                    }
-                } else {
-                    // Below threshold
-                    openFrames = 0;
-                    if (!isGated) {
-                        // Hold briefly to avoid chopping word endings
-                        isGated = true;
-                        setTimeout(() => {
-                            if (this._noiseGateActive && isGated) {
-                                track.enabled = false;
-                            }
-                        }, holdFrames * 16); // ~80ms hold
-                    }
-                }
-                
-                requestAnimationFrame(checkLevel);
-            };
-            
-            this._noiseGate = { audioContext, analyser, source, checkLevel };
-            this._noiseGateActive = true;
-            checkLevel();
-            
-            console.log('[NOISE-GATE] ✅ Active — threshold:', threshold, 'dB (blocks background noise)');
-        } catch (e) {
-            console.warn('[NOISE-GATE] Failed to start:', e.message);
-        }
-    }
-    
-    /**
-     * Stop the noise gate
-     */
-    _stopNoiseGate() {
-        if (this._noiseGate) {
-            this._noiseGateActive = false;
-            if (this._noiseGate.audioContext) {
-                this._noiseGate.audioContext.close();
-            }
-            this._noiseGate = null;
-            console.log('[NOISE-GATE] Stopped');
-        }
     }
     
     /**
@@ -793,11 +663,6 @@ class LiveKitClient {
             this._isScreenSharing = false; // Clear screen share state
             this._screenShareParticipant = null;
             this._screenVideoElements = [];
-            this._noiseGateActive = false; // Stop noise gate
-            if (this._noiseGate?.audioContext) {
-                this._noiseGate.audioContext.close();
-            }
-            this._noiseGate = null;
             this._disconnecting = false;
         }
         
