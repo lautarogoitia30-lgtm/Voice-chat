@@ -422,6 +422,25 @@
                         </select>
                     </div>
                     
+                    <div class="settings-section">
+                        <label>Supresión de ruido</label>
+                        <div id="krisp-status" class="krisp-status">
+                            <span class="krisp-spinner"></span>
+                            <span class="krisp-text">Verificando...</span>
+                        </div>
+                    </div>
+                    
+                    <div class="settings-section">
+                        <label>Probar micrófono</label>
+                        <div class="mic-test-control">
+                            <button type="button" class="btn btn-secondary mic-test-btn" id="mic-test-btn" onclick="toggleMicTest()">🎤 Probar micrófono</button>
+                            <div class="mic-test-meter">
+                                <div class="mic-test-meter-fill" id="mic-test-meter-fill"></div>
+                            </div>
+                            <span class="mic-test-status" id="mic-test-status"></span>
+                        </div>
+                    </div>
+                    
                     <div class="settings-buttons">
                         <button type="button" class="btn btn-primary" onclick="hideSettingsModal()">Cerrar</button>
                     </div>
@@ -467,6 +486,6 @@
     <script src="js/api.js?v=13"></script>
     <script src="js/websocket.js?v=10"></script>
     <script src="js/livekit.js?v=29"></script>
-    <script src="js/app.js?v=53"></script>
+    <script src="js/app.js?v=54"></script>
 </body>
 </html>

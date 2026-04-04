@@ -1224,8 +1224,20 @@ async function handleJoinVoice() {
         try {
             if (window.livekitClient.room && window.livekitClient.room.state === 'connected') {
                 console.log('[JOIN] Publishing microphone...');
-                await window.livekitClient.publishMicrophone();
-                console.log('[JOIN] Microphone published!');
+                try {
+                    await window.livekitClient.publishMicrophone();
+                    console.log('[JOIN] Microphone published!');
+                } catch (firstError) {
+                    console.warn('[JOIN] First mic publish failed, retrying in 1s:', firstError?.message);
+                    // Wait and retry — common in Tauri/WebView2 where audio subsystem needs warming up
+                    await new Promise(r => setTimeout(r, 1000));
+                    try {
+                        await window.livekitClient.publishMicrophone();
+                        console.log('[JOIN] Microphone published on retry!');
+                    } catch (retryError) {
+                        console.error('[JOIN] Mic publish failed on retry:', retryError?.message);
+                    }
+                }
                 
                 // Apply saved mic volume if not 100%
                 const savedMicVol = localStorage.getItem('voice_chat_mic_volume');
@@ -2428,6 +2440,7 @@ async function deleteChannel() {
 window.loadGroups = loadGroups;
 window.handleLogout = handleLogout;
 window.refreshApp = refreshApp;
+window.toggleMicTest = toggleMicTest;
 window.showEditGroupModal = showEditGroupModal;
 window.hideEditGroupModal = hideEditGroupModal;
 window.deleteGroup = deleteGroup;
@@ -2709,6 +2722,74 @@ async function handleAvatarUpload(input) {
 
 // ==================== AUDIO SETTINGS ====================
 
+// Mic test variables
+let micTestStream = null;
+let micTestAnalyser = null;
+let micTestActive = false;
+let micTestAnimFrame = null;
+
+// Toggle microphone test
+async function toggleMicTest() {
+    const btn = document.getElementById('mic-test-btn');
+    const meterFill = document.getElementById('mic-test-meter-fill');
+    const status = document.getElementById('mic-test-status');
+    
+    if (micTestActive) {
+        // Stop test
+        micTestActive = false;
+        if (micTestAnimFrame) cancelAnimationFrame(micTestAnimFrame);
+        if (micTestStream) {
+            micTestStream.getTracks().forEach(t => t.stop());
+            micTestStream = null;
+        }
+        if (btn) {
+            btn.textContent = '🎤 Probar micrófono';
+            btn.classList.remove('active');
+        }
+        if (meterFill) meterFill.style.width = '0%';
+        if (status) status.textContent = '';
+        console.log('[MIC-TEST] Stopped');
+    } else {
+        // Start test
+        try {
+            micTestStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const source = audioContext.createMediaStreamSource(micTestStream);
+            micTestAnalyser = audioContext.createAnalyser();
+            micTestAnalyser.fftSize = 256;
+            source.connect(micTestAnalyser);
+            
+            micTestActive = true;
+            if (btn) {
+                btn.textContent = '⏹️ Detener prueba';
+                btn.classList.add('active');
+            }
+            if (status) status.textContent = 'Escuchando...';
+            
+            const dataArray = new Uint8Array(micTestAnalyser.frequencyBinCount);
+            
+            const updateMeter = () => {
+                if (!micTestActive) return;
+                micTestAnalyser.getByteFrequencyData(dataArray);
+                let sum = 0;
+                for (let i = 0; i < dataArray.length; i++) {
+                    sum += dataArray[i];
+                }
+                const avg = sum / dataArray.length;
+                const pct = Math.min(100, (avg / 128) * 100);
+                if (meterFill) meterFill.style.width = pct + '%';
+                micTestAnimFrame = requestAnimationFrame(updateMeter);
+            };
+            updateMeter();
+            
+            console.log('[MIC-TEST] Started');
+        } catch (e) {
+            console.error('[MIC-TEST] Failed:', e);
+            if (status) status.textContent = 'Error: ' + e.message;
+        }
+    }
+}
+
 // Load audio devices
 async function loadAudioDevices() {
     try {
@@ -2766,10 +2847,38 @@ async function loadAudioDevices() {
             });
         }
         
+        // Check Krisp status
+        checkKrispStatus();
+        
     } catch (error) {
         console.error('Error loading audio devices:', error);
         document.getElementById('settings-input-device').innerHTML = '<option value="">Error al cargar dispositivos</option>';
         document.getElementById('settings-output-device').innerHTML = '<option value="">Error al cargar dispositivos</option>';
+    }
+}
+
+// Check and display Krisp noise cancellation status
+async function checkKrispStatus() {
+    const statusEl = document.getElementById('krisp-status');
+    if (!statusEl) return;
+    
+    statusEl.className = 'krisp-status checking';
+    statusEl.innerHTML = '<span class="krisp-spinner"></span><span class="krisp-text">Verificando...</span>';
+    
+    try {
+        // Try to load Krisp module
+        const krispModule = await import('https://cdn.jsdelivr.net/npm/@livekit/krisp-noise-filter@0.2/+esm');
+        
+        if (krispModule.isKrispNoiseFilterSupported && krispModule.isKrispNoiseFilterSupported()) {
+            statusEl.className = 'krisp-status active';
+            statusEl.innerHTML = '<span class="krisp-text">✅ Krisp AI — Activo (elimina ruido de teclado, ventilador, etc.)</span>';
+        } else {
+            statusEl.className = 'krisp-status inactive';
+            statusEl.innerHTML = '<span class="krisp-text">❌ Krisp no disponible — Usando supresión nativa del navegador</span>';
+        }
+    } catch (e) {
+        statusEl.className = 'krisp-status inactive';
+        statusEl.innerHTML = `<span class="krisp-text">❌ Error al cargar Krisp: ${e.message}</span>`;
     }
 }
 
