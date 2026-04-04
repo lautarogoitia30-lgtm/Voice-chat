@@ -980,9 +980,14 @@ class LiveKitClient {
      */
     async _applyKrisp(publication) {
         try {
-            // Only apply once
+            // If we already have a processor, apply it to this new track (e.g. after reconnect/mute/volume change)
             if (this._krispProcessor) {
-                console.log('[KRISP] Already applied, skipping');
+                console.log('[KRISP] Re-applying existing processor to new track...');
+                if (publication.track && publication.track.setProcessor) {
+                    await publication.track.setProcessor(this._krispProcessor);
+                    await this._krispProcessor.setEnabled(true);
+                    console.log('[KRISP] ✅ Re-applied Krisp to new track');
+                }
                 return;
             }
             
