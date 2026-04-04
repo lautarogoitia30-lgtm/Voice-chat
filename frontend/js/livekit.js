@@ -800,21 +800,54 @@ class LiveKitClient {
     
     /**
      * Set volume for a specific user (per-user volume control).
-     * Uses LiveKit's internal setVolume API with an exponential curve for noticeable boost.
+     * Uses LiveKit's internal setVolume API with a very aggressive exponential curve.
      * @param {string} userId - The participant identity (user_id)
      * @param {number} volume - 0 to 300
      */
     setUserVolume(userId, volume) {
         const safeVolume = Math.min(300, Math.max(0, volume));
         
-        // Exponential curve: 100%=1x, 200%=3x, 300%=6x
+        // Aggressive exponential curve (Power of 3)
+        // 100% -> 1x
+        // 200% -> 8x
+        // 300% -> 27x
         let gain;
         if (safeVolume <= 100) {
             gain = safeVolume / 100;
         } else {
-            const boost = (safeVolume - 100) / 100;
-            gain = 1 + (Math.pow(3, boost) - 1);
+            gain = Math.pow(safeVolume / 100, 3);
         }
+        
+        // Save preference
+        localStorage.setItem(`voice_chat_user_vol_${userId}`, safeVolume);
+        
+        if (!this.room) return;
+        
+        const targetId = String(userId);
+        let updated = 0;
+        
+        this.room.remoteParticipants.forEach((participant) => {
+            if (String(participant.identity) === targetId) {
+                participant.trackPublications.forEach((pub) => {
+                    if (pub.kind === 'audio' && pub.source === 'microphone') {
+                        if (pub.setVolume) {
+                            pub.setVolume(gain);
+                            updated++;
+                            console.log(`[VOL-USER] Set track volume for ${targetId} to ${safeVolume}% (gain: ${gain.toFixed(2)}x)`);
+                        }
+                    }
+                });
+            }
+        });
+        
+        // Fallback: DOM volume
+        this.audioElements.forEach(audio => {
+            if (String(audio.participantId) === targetId) {
+                audio.element.volume = Math.min(1, gain);
+                audio.element.muted = (gain === 0);
+            }
+        });
+    }
         
         // Save preference
         localStorage.setItem(`voice_chat_user_vol_${userId}`, safeVolume);
