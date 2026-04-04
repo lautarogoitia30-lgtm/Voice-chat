@@ -831,16 +831,6 @@ class LiveKitClient {
         
         console.log('[VOL-USER] Updated', updated, 'audio element(s) for user', userId, 'gain:', gain);
     }
-        });
-        
-        // Also update any audio elements in DOM with data-user-id
-        const domAudios = document.querySelectorAll(`audio[data-user-id="${userId}"]`);
-        domAudios.forEach(a => {
-            a.volume = gain;
-        });
-        
-        console.log('[VOL-USER] Updated', updated, 'audio element(s) for user', userId, 'gain:', gain);
-    }
     
     /**
      * Get participant info with display name
