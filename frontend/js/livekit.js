@@ -800,36 +800,48 @@ class LiveKitClient {
     
     /**
      * Set volume for a specific user (per-user volume control).
-     * Note: Capped at 100% because browsers block volume > 1.0 on audio elements
-     * managed by LiveKit.
+     * Uses LiveKit's internal setVolume API to allow boosting up to 200%.
      * @param {string} userId - The participant identity (user_id)
-     * @param {number} volume - 0 to 100
+     * @param {number} volume - 0 to 200
      */
     setUserVolume(userId, volume) {
-        // Cap volume at 100% to prevent browser errors
-        const safeVolume = Math.min(100, Math.max(0, volume));
+        const safeVolume = Math.min(200, Math.max(0, volume));
         const gain = safeVolume / 100;
         
         // Save preference
         localStorage.setItem(`voice_chat_user_vol_${userId}`, safeVolume);
         
+        // Use LiveKit API to set volume on the track publication
+        // This bypasses the HTMLAudioElement 1.0 cap and uses WebAudio gain internally
+        if (!this.room) return;
+        
+        const targetId = String(userId);
         let updated = 0;
         
-        // Apply to all matching audio elements
-        this.audioElements.forEach(audio => {
-            if (audio.participantId === userId) {
-                audio.element.volume = gain;
-                updated++;
+        this.room.remoteParticipants.forEach((participant) => {
+            if (String(participant.identity) === targetId) {
+                participant.trackPublications.forEach((pub) => {
+                    // Find the microphone audio track
+                    if (pub.kind === 'audio' && pub.source === 'microphone') {
+                        if (pub.setVolume) {
+                            pub.setVolume(gain); // 1.0 = 100%, 2.0 = 200%
+                            updated++;
+                            console.log(`[VOL-USER] Set track volume for ${targetId} to ${safeVolume}%`);
+                        } else {
+                            console.warn('[VOL-USER] setVolume API not available on this track');
+                        }
+                    }
+                });
             }
         });
         
-        // Also update any audio elements in DOM with data-user-id
-        const domAudios = document.querySelectorAll(`audio[data-user-id="${userId}"]`);
-        domAudios.forEach(a => {
-            a.volume = gain;
+        // Fallback: Also update DOM volume for older tracks or if API fails
+        this.audioElements.forEach(audio => {
+            if (String(audio.participantId) === targetId) {
+                audio.element.volume = Math.min(1, gain); // DOM caps at 1.0
+                audio.element.muted = (gain === 0);
+            }
         });
-        
-        console.log('[VOL-USER] Updated', updated, 'audio element(s) for user', userId, 'gain:', gain);
     }
     
     /**
