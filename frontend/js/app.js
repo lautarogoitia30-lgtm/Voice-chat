@@ -766,13 +766,18 @@ async function loadChannelVoiceParticipants(channelId) {
 
 // Handle per-user volume change
 function handleUserVolumeChange(userId, value, sliderEl) {
+    console.log('[DEBUG-VOL] Slider moved for user', userId, 'to', value);
     const label = sliderEl.parentElement.querySelector('.vol-label');
     if (label) label.textContent = value + '%';
     
     // Apply via LiveKit
     if (window.livekitClient && window.livekitClient.setUserVolume) {
+        console.log('[DEBUG-VOL] Calling setUserVolume...');
         window.livekitClient.setUserVolume(userId, parseInt(value));
+    } else {
+        console.warn('[DEBUG-VOL] livekitClient or setUserVolume missing!');
     }
+}
 }
 
 // Select channel
