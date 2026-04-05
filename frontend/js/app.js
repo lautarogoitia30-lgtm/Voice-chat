@@ -269,6 +269,10 @@ function setupEventListeners(elements) {
         console.log('Screen share button clicked');
         handleToggleScreenShare();
     });
+    document.getElementById('screen-share-settings-btn')?.addEventListener('click', () => {
+        console.log('Screen share settings button clicked');
+        toggleScreenShareSettings();
+    });
     document.getElementById('screen-share-close-btn')?.addEventListener('click', () => {
         console.log('Screen share close button clicked');
         hideScreenShareView();
@@ -1729,6 +1733,7 @@ function updateVoiceControlsUI() {
         }
         
         // Update screen share button style
+        const screenSettingsBtn = document.getElementById('screen-share-settings-btn');
         if (screenBtn) {
             if (window.livekitClient && window.livekitClient.isScreenSharing()) {
                 screenBtn.classList.add('active');
@@ -1739,6 +1744,11 @@ function updateVoiceControlsUI() {
                 screenBtn.innerHTML = '🖥️';
                 screenBtn.title = 'Compartir pantalla';
             }
+        }
+        
+        // Show settings button when in voice
+        if (screenSettingsBtn) {
+            screenSettingsBtn.classList.remove('hidden');
         }
         
         console.log('Voice controls updated - in voice mode');
@@ -1849,6 +1859,89 @@ function handleLocalScreenShareStopped() {
 function handleScreenQualityChange(quality) {
     localStorage.setItem('voice_chat_screen_quality', quality);
     console.log('[SCREEN-UI] Quality set to:', quality);
+    
+    // Update the dropdown in the header if it exists
+    const headerSelect = document.getElementById('screen-quality-select');
+    if (headerSelect) {
+        headerSelect.value = quality;
+    }
+    
+    // Update the settings modal select if it exists
+    const settingsSelect = document.getElementById('settings-screen-quality');
+    if (settingsSelect) {
+        settingsSelect.value = quality;
+    }
+}
+
+// Handle screen audio toggle
+function handleScreenAudioChange(enabled) {
+    localStorage.setItem('voice_chat_screen_audio', enabled ? 'true' : 'false');
+    console.log('[SCREEN-UI] Screen audio set to:', enabled);
+}
+
+// Show screen share settings modal
+function showScreenShareSettings() {
+    const modal = document.getElementById('screen-share-settings-modal');
+    const qualitySelect = document.getElementById('settings-screen-quality');
+    const audioCheckbox = document.getElementById('settings-screen-audio');
+    
+    // Restore saved settings
+    const savedQuality = localStorage.getItem('voice_chat_screen_quality') || '4k';
+    const savedAudio = localStorage.getItem('voice_chat_screen_audio') !== 'false';
+    
+    if (qualitySelect) qualitySelect.value = savedQuality;
+    if (audioCheckbox) audioCheckbox.checked = savedAudio;
+    
+    if (modal) {
+        modal.classList.remove('hidden');
+        if (qualitySelect) qualitySelect.focus();
+    }
+}
+
+// Hide screen share settings modal
+function hideScreenShareSettings() {
+    const modal = document.getElementById('screen-share-settings-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+// Toggle screen share settings modal
+function toggleScreenShareSettings() {
+    const modal = document.getElementById('screen-share-settings-modal');
+    if (modal && !modal.classList.contains('hidden')) {
+        hideScreenShareSettings();
+    } else {
+        showScreenShareSettings();
+    }
+}
+
+// Start screen share from settings modal
+async function startScreenShareFromSettings() {
+    hideScreenShareSettings();
+    
+    if (!window.livekitClient) {
+        showToast('Error: Cliente de voz no conectado', 'error');
+        return;
+    }
+    
+    try {
+        // Check if already sharing
+        if (window.livekitClient.isScreenSharing()) {
+            await window.livekitClient.stopScreenShare();
+            console.log('[SCREEN-UI] Screen share stopped');
+        }
+        
+        // Start sharing
+        const started = await window.livekitClient.startScreenShare();
+        if (started) {
+            console.log('[SCREEN-UI] Screen share started');
+        } else {
+            console.log('[SCREEN-UI] Screen share cancelled by user');
+        }
+        updateVoiceControlsUI();
+    } catch (error) {
+        console.error('[SCREEN-UI] Screen share error:', error);
+        showToast('Error al compartir pantalla: ' + error.message, 'error');
+    }
 }
 
 // Get screen share quality settings based on selection
@@ -4386,6 +4479,11 @@ window.handleNewDMSubmit = handleNewDMSubmit;
 window.sendDMMessage = sendDMMessage;
 window.filterDMConversations = filterDMConversations;
 window.handleScreenQualityChange = handleScreenQualityChange;
+window.handleScreenAudioChange = handleScreenAudioChange;
+window.showScreenShareSettings = showScreenShareSettings;
+window.hideScreenShareSettings = hideScreenShareSettings;
+window.toggleScreenShareSettings = toggleScreenShareSettings;
+window.startScreenShareFromSettings = startScreenShareFromSettings;
 
 // ==================== INIT APPEARANCE ====================
 

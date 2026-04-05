@@ -1017,9 +1017,13 @@ class LiveKitClient {
             // STEP 1: Get display media with quality constraints
             console.log('[SCREEN] Requesting displayMedia with quality:', quality);
             
+            // Check if user wants system audio
+            const screenAudioEnabled = localStorage.getItem('voice_chat_screen_audio') !== 'false';
+            console.log('[SCREEN] System audio enabled:', screenAudioEnabled);
+            
             const displayStream = await navigator.mediaDevices.getDisplayMedia({
                 video: videoConstraints,
-                audio: true, // System audio (Chromium only)
+                audio: screenAudioEnabled, // System audio (Chromium only)
             });
             
             console.log('[SCREEN] Display stream acquired');
