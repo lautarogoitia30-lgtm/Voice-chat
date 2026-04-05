@@ -2514,15 +2514,7 @@ function showSettingsModal() {
     // Load user profile data
     loadProfileSettings();
     
-// Handle auto-gain change
-function handleAutoGainChange(enabled) {
-    localStorage.setItem('voice_chat_auto_gain', enabled ? 'true' : 'false');
-    if (window.livekitClient && window.livekitClient.setAutoGain) {
-        window.livekitClient.setAutoGain(enabled);
-    }
-}
-
-// Load audio devices
+    // Load audio devices
     loadAudioDevices();
     
     // Load audio settings from localStorage
@@ -2537,6 +2529,16 @@ function handleAutoGainChange(enabled) {
     // Load privacy settings
     loadPrivacySettings();
 }
+
+// Handle auto-gain change
+function handleAutoGainChange(enabled) {
+    localStorage.setItem('voice_chat_auto_gain', enabled ? 'true' : 'false');
+    if (window.livekitClient && window.livekitClient.setAutoGain) {
+        window.livekitClient.setAutoGain(enabled);
+    }
+}
+
+// Load audio devices
 
 // Hide Settings Modal
 function hideSettingsModal() {
@@ -2635,14 +2637,30 @@ async function loadProfileSettings() {
         
         // Update UI (with null checks for elements that may not exist)
         const usernameEl = document.getElementById('settings-username');
-        const avatarUrlEl = document.getElementById('settings-avatar-url');
         const bioEl = document.getElementById('settings-bio');
         const usernameDisplayEl = document.getElementById('settings-username-display');
         
         if (usernameEl) usernameEl.value = user.username || '';
-        if (avatarUrlEl) avatarUrlEl.value = user.avatar_url || '';
         if (bioEl) bioEl.value = user.bio || '';
         if (usernameDisplayEl) usernameDisplayEl.textContent = user.username || 'Usuario';
+        
+        // Update avatar preview in upload component
+        const previewImg = document.getElementById('avatar-preview-img');
+        const previewInitial = document.getElementById('avatar-preview-initial');
+        if (user.avatar_url) {
+            const fullUrl = user.avatar_url.startsWith('http') ? user.avatar_url : 'https://voice-chat-production-a794.up.railway.app' + user.avatar_url;
+            if (previewImg) {
+                previewImg.src = fullUrl;
+                previewImg.style.display = 'block';
+            }
+            if (previewInitial) previewInitial.style.display = 'none';
+        } else if (previewInitial && user.username) {
+            previewInitial.textContent = user.username.charAt(0).toUpperCase();
+            previewInitial.style.display = 'block';
+            if (previewImg) {
+                previewImg.style.display = 'none';
+            }
+        }
         
         // Update avatar
         const avatarImg = document.getElementById('settings-avatar');
@@ -2662,8 +2680,16 @@ async function loadProfileSettings() {
 async function saveProfileSettings() {
     try {
         const username = document.getElementById('settings-username')?.value || '';
-        const avatar_url = document.getElementById('settings-avatar-url')?.value || '';
         const bio = document.getElementById('settings-bio')?.value || '';
+        
+        // Upload avatar file if one was selected
+        let avatar_url = state.currentUser?.avatar_url || '';
+        if (pendingAvatarFile) {
+            const uploadedUrl = await uploadAvatarFile(pendingAvatarFile);
+            if (uploadedUrl) {
+                avatar_url = uploadedUrl;
+            }
+        }
         
         const response = await fetch('https://voice-chat-production-a794.up.railway.app/users/me', {
             method: 'PUT',
@@ -2706,6 +2732,83 @@ async function saveProfileSettings() {
     } catch (error) {
         console.error('Error saving profile:', error);
         alert('Error al guardar el perfil');
+    }
+}
+
+// Handle avatar file select — preview and upload
+let pendingAvatarFile = null;
+let pendingAvatarUrl = null;
+
+function handleAvatarFileSelect(input) {
+    const file = input.files[0];
+    if (!file) return;
+    
+    // Validate
+    if (!file.type.startsWith('image/')) {
+        alert('Por favor seleccioná una imagen válida');
+        return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+        alert('La imagen no puede superar los 5MB');
+        return;
+    }
+    
+    pendingAvatarFile = file;
+    
+    // Show preview
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const previewImg = document.getElementById('avatar-preview-img');
+        const previewInitial = document.getElementById('avatar-preview-initial');
+        if (previewImg) {
+            previewImg.src = e.target.result;
+            previewImg.style.display = 'block';
+        }
+        if (previewInitial) previewInitial.style.display = 'none';
+    };
+    reader.readAsDataURL(file);
+}
+
+function clearAvatarUpload() {
+    pendingAvatarFile = null;
+    pendingAvatarUrl = null;
+    const previewImg = document.getElementById('avatar-preview-img');
+    const previewInitial = document.getElementById('avatar-preview-initial');
+    const fileInput = document.getElementById('avatar-file-input');
+    
+    if (previewImg) {
+        previewImg.src = '';
+        previewImg.style.display = 'none';
+    }
+    if (previewInitial) previewInitial.style.display = 'block';
+    if (fileInput) fileInput.value = '';
+}
+
+// Upload avatar file to server
+async function uploadAvatarFile(file) {
+    if (!file) return null;
+    
+    try {
+        const formData = new FormData();
+        formData.append('avatar', file);
+        
+        const token = localStorage.getItem('voice_chat_token');
+        const response = await fetch('https://voice-chat-production-a794.up.railway.app/users/me/avatar', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+            body: formData,
+        });
+        
+        if (!response.ok) {
+            console.warn('[AVATAR] Upload failed, falling back to local preview');
+            return null;
+        }
+        
+        const data = await response.json();
+        return data.avatar_url;
+    } catch (e) {
+        console.warn('[AVATAR] Upload error:', e.message);
+        return null;
     }
 }
 
