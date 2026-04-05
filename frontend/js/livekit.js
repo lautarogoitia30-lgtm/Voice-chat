@@ -989,14 +989,15 @@ class LiveKitClient {
             videoTrack.contentHint = 'detail';
             
             // STEP 2: Create LocalVideoTrack from the stream
+            // UPGRADED: Higher quality settings for better transmission
             const LocalVideoTrack = livekit.LocalVideoTrack;
             const localScreenTrack = new LocalVideoTrack(videoTrack, {
                 source: Track.Source.ScreenShare,
-                // Force high bitrate encoding
+                // Force high bitrate encoding - UPGRADED to 10 Mbps, 60 fps
                 simulcast: false,
                 videoEncoding: {
-                    maxBitrate: 5_000_000,  // 5 Mbps — very high quality
-                    maxFramerate: 30,
+                    maxBitrate: 10_000_000,  // 10 Mbps — ultra high quality
+                    maxFramerate: 60,        // 60 fps for smooth motion
                 },
                 scalabilityMode: 'L1T1', // Single layer, max quality
             });
@@ -1006,14 +1007,15 @@ class LiveKitClient {
                 source: Track.Source.ScreenShare,
                 simulcast: false,
                 videoEncoding: {
-                    maxBitrate: 5_000_000,
-                    maxFramerate: 30,
+                    maxBitrate: 10_000_000,  // 10 Mbps
+                    maxFramerate: 60,        // 60 fps
                 },
                 scalabilityMode: 'L1T1',
             });
-            console.log('[SCREEN] Video track published at 5 Mbps');
+            console.log('[SCREEN] Video track published at 10 Mbps, 60 fps');
             
             // STEP 4: Publish audio track if available
+            // UPGRADED: Higher audio quality
             const audioTracks = displayStream.getAudioTracks();
             if (audioTracks.length > 0) {
                 const LocalAudioTrack = livekit.LocalAudioTrack;
@@ -1022,9 +1024,9 @@ class LiveKitClient {
                 });
                 await this.localParticipant.publishTrack(localScreenAudio, {
                     source: Track.Source.ScreenShareAudio,
-                    audioBitrate: 128_000, // 128kbps
+                    audioBitrate: 256_000, // 256kbps — high quality audio
                 });
-                console.log('[SCREEN] Audio track published at 128kbps');
+                console.log('[SCREEN] Audio track published at 256kbps');
             }
             
             // Handle when user stops sharing via browser UI
