@@ -269,10 +269,6 @@ function setupEventListeners(elements) {
         console.log('Screen share button clicked');
         handleToggleScreenShare();
     });
-    document.getElementById('screen-share-settings-btn')?.addEventListener('click', () => {
-        console.log('Screen share settings button clicked');
-        toggleScreenShareSettings();
-    });
     document.getElementById('screen-share-close-btn')?.addEventListener('click', () => {
         console.log('Screen share close button clicked');
         hideScreenShareView();
@@ -1748,7 +1744,7 @@ function updateVoiceControlsUI() {
         
         // Show settings button when in voice
         if (screenSettingsBtn) {
-            screenSettingsBtn.classList.remove('hidden');
+            // screenSettingsBtn removed - no longer needed
         }
         
         console.log('Voice controls updated - in voice mode');
