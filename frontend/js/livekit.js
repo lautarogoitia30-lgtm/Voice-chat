@@ -964,14 +964,14 @@ class LiveKitClient {
             
             // STEP 1: Get display media manually with EXPLICIT high quality constraints
             // This bypasses createLocalScreenTracks which may not respect resolution properly
-            console.log('[SCREEN] Requesting displayMedia with high quality constraints...');
+            console.log('[SCREEN] Requesting displayMedia with ultra high quality constraints...');
             
             const displayStream = await navigator.mediaDevices.getDisplayMedia({
                 video: {
-                    // Force high resolution — these are the constraints sent to the browser
-                    width: { ideal: 2560, max: 3840 },  // Up to 4K, ideal 2560
-                    height: { ideal: 1440, max: 2160 }, // Up to 4K, ideal 1440p
-                    frameRate: { ideal: 30, max: 30 },
+                    // ULTRA: Force 4K resolution at 60fps
+                    width: { ideal: 3840, max: 3840 },  // 4K
+                    height: { ideal: 2160, max: 2160 }, // 4K
+                    frameRate: { ideal: 60, max: 60 },
                     displaySurface: 'monitor', // Prefer full screen
                 },
                 audio: true, // System audio (Chromium only)
@@ -989,14 +989,14 @@ class LiveKitClient {
             videoTrack.contentHint = 'detail';
             
             // STEP 2: Create LocalVideoTrack from the stream
-            // UPGRADED: Higher quality settings for better transmission
+            // ULTRA: Maximum quality settings
             const LocalVideoTrack = livekit.LocalVideoTrack;
             const localScreenTrack = new LocalVideoTrack(videoTrack, {
                 source: Track.Source.ScreenShare,
-                // Force high bitrate encoding - UPGRADED to 10 Mbps, 60 fps
+                // MAXIMUM bitrate + 60fps for ultra smooth transmission
                 simulcast: false,
                 videoEncoding: {
-                    maxBitrate: 10_000_000,  // 10 Mbps — ultra high quality
+                    maxBitrate: 20_000_000,  // 20 Mbps — maximum quality
                     maxFramerate: 60,        // 60 fps for smooth motion
                 },
                 scalabilityMode: 'L1T1', // Single layer, max quality
@@ -1007,15 +1007,15 @@ class LiveKitClient {
                 source: Track.Source.ScreenShare,
                 simulcast: false,
                 videoEncoding: {
-                    maxBitrate: 10_000_000,  // 10 Mbps
+                    maxBitrate: 20_000_000,  // 20 Mbps
                     maxFramerate: 60,        // 60 fps
                 },
                 scalabilityMode: 'L1T1',
             });
-            console.log('[SCREEN] Video track published at 10 Mbps, 60 fps');
+            console.log('[SCREEN] Video track published at 20 Mbps, 60 fps');
             
             // STEP 4: Publish audio track if available
-            // UPGRADED: Higher audio quality
+            // MAXIMUM quality audio
             const audioTracks = displayStream.getAudioTracks();
             if (audioTracks.length > 0) {
                 const LocalAudioTrack = livekit.LocalAudioTrack;
@@ -1024,9 +1024,9 @@ class LiveKitClient {
                 });
                 await this.localParticipant.publishTrack(localScreenAudio, {
                     source: Track.Source.ScreenShareAudio,
-                    audioBitrate: 256_000, // 256kbps — high quality audio
+                    audioBitrate: 512_000, // 512kbps — maximum quality audio
                 });
-                console.log('[SCREEN] Audio track published at 256kbps');
+                console.log('[SCREEN] Audio track published at 512kbps');
             }
             
             // Handle when user stops sharing via browser UI
