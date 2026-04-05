@@ -2740,8 +2740,11 @@ let pendingAvatarFile = null;
 let pendingAvatarUrl = null;
 
 function handleAvatarFileSelect(input) {
+    console.log('[AVATAR] File selected:', input.files);
     const file = input.files[0];
     if (!file) return;
+    
+    console.log('[AVATAR] File details:', file.name, file.type, file.size);
     
     // Validate
     if (!file.type.startsWith('image/')) {
@@ -2754,18 +2757,70 @@ function handleAvatarFileSelect(input) {
     }
     
     pendingAvatarFile = file;
+    console.log('[AVATAR] File accepted, showing preview...');
     
     // Show preview
     const reader = new FileReader();
     reader.onload = (e) => {
         const previewImg = document.getElementById('avatar-preview-img');
         const previewInitial = document.getElementById('avatar-preview-initial');
+        console.log('[AVATAR] Preview elements:', !!previewImg, !!previewInitial);
         if (previewImg) {
             previewImg.src = e.target.result;
             previewImg.style.display = 'block';
+            console.log('[AVATAR] Preview image set');
         }
         if (previewInitial) previewInitial.style.display = 'none';
     };
+    reader.onerror = (e) => console.error('[AVATAR] FileReader error:', e);
+    reader.readAsDataURL(file);
+}
+    if (file.size > 5 * 1024 * 1024) {
+        alert('La imagen no puede superar los 5MB');
+        return;
+    }
+    
+    pendingAvatarFile = file;
+    console.log('[AVATAR] File accepted, showing preview...');
+    
+    // Show preview
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const previewImg = document.getElementById('avatar-preview-img');
+        const previewInitial = document.getElementById('avatar-preview-initial');
+        console.log('[AVATAR] Preview elements:', !!previewImg, !!previewInitial);
+        if (previewImg) {
+            previewImg.src = e.target.result;
+            previewImg.style.display = 'block';
+            console.log('[AVATAR] Preview image set');
+        }
+        if (previewInitial) previewInitial.style.display = 'none';
+    };
+    reader.onerror = (e) => console.error('[AVATAR] FileReader error:', e);
+    reader.readAsDataURL(file);
+}
+    if (file.size > 5 * 1024 * 1024) {
+        alert('La imagen no puede superar los 5MB');
+        return;
+    }
+    
+    pendingAvatarFile = file;
+    console.log('[AVATAR] File accepted, showing preview...');
+    
+    // Show preview
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const previewImg = document.getElementById('avatar-preview-img');
+        const previewInitial = document.getElementById('avatar-preview-initial');
+        console.log('[AVATAR] Preview elements:', !!previewImg, !!previewInitial);
+        if (previewImg) {
+            previewImg.src = e.target.result;
+            previewImg.style.display = 'block';
+            console.log('[AVATAR] Preview image set');
+        }
+        if (previewInitial) previewInitial.style.display = 'none';
+    };
+    reader.onerror = (e) => console.error('[AVATAR] FileReader error:', e);
     reader.readAsDataURL(file);
 }
 
