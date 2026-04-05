@@ -320,10 +320,22 @@ function updateUserDisplay() {
         elements.userDisplayName.textContent = username;
     }
     
-    // Handle avatar
+    // Handle avatar with error handling
     const avatarImg = document.getElementById('user-avatar-img');
     const avatarInitial = document.getElementById('user-initial');
     const avatarUrl = state.currentUser.avatar_url;
+    
+    // Reset any previous error handlers
+    if (avatarImg) {
+        avatarImg.onerror = function() {
+            console.log('[AVATAR] Error loading avatar, showing initial');
+            this.style.display = 'none';
+            if (avatarInitial) {
+                avatarInitial.textContent = initial;
+                avatarInitial.style.display = 'block';
+            }
+        };
+    }
     
     if (avatarUrl && avatarImg) {
         const fullUrl = avatarUrl.startsWith('http') ? avatarUrl : 'https://voice-chat-production-a794.up.railway.app' + avatarUrl;
@@ -2660,6 +2672,19 @@ async function loadProfileSettings() {
         // Update avatar preview in upload component
         const previewImg = document.getElementById('avatar-preview-img');
         const previewInitial = document.getElementById('avatar-preview-initial');
+        
+        // Add error handling for preview image
+        if (previewImg) {
+            previewImg.onerror = function() {
+                console.log('[AVATAR] Preview error, showing initial');
+                this.style.display = 'none';
+                if (previewInitial && user.username) {
+                    previewInitial.textContent = user.username.charAt(0).toUpperCase();
+                    previewInitial.style.display = 'block';
+                }
+            };
+        }
+        
         if (user.avatar_url) {
             const fullUrl = user.avatar_url.startsWith('http') ? user.avatar_url : 'https://voice-chat-production-a794.up.railway.app' + user.avatar_url;
             if (previewImg) {
