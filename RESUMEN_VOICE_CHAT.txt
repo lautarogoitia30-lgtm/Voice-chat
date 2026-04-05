@@ -1,0 +1,96 @@
+====================================
+RESUMEN DEL PROYECTO VOICE-CHAT
+====================================
+
+的概念:
+--------
+Voice-Chat es una aplicación de chat de voz y texto tipo Discord,
+construida para aprender tecnologías modernas de desarrollo full-stack.
+
+STACK TECNOLÓGICO:
+------------------
+- Backend: FastAPI (Python) + WebSocket para texto
+- Voz: LiveKit (WebRTC gestionado)
+- Frontend: Vanilla JS + HTML + Tailwind CSS
+- Base de datos: SQLite
+
+FUNCIONALIDADES IMPLEMENTADAS:
+-------------------------------
+✅ Autenticación JWT (login/registro)
+   - Registro con username, email, password
+   - Login con JWT token
+   - bcrypt para hashear passwords
+
+✅ Grupos (Servers de Discord)
+   - Crear grupos nuevos
+   - Listar grupos del usuario
+   - Invitar usuarios a grupos (cualquier miembro puede invitar)
+
+✅ Canales
+   - Canales de voz
+   - Canales de texto
+
+✅ Chat de Voz (LiveKit)
+   - Conexión al room de voz
+   - Publicación de micrófono
+   - Mute (silenciar mic)
+   - Deafen (silenciar parlantes)
+   - Lista de participantes en tiempo real
+
+✅ Notificaciones
+   - Cuando alguien entra al canal de voz
+   - Cuando alguien sale del canal de voz
+   - Botón de refresh para ver grupos nuevos
+
+COSAS QUE FALTAN:
+-----------------
+🔲 Indicador de "hablando" (caja verde cuando alguien habla)
+🔲 Chat de texto integrado con canal de voz
+🔲 Sidebar de presencia (quién está online)
+🔲 Perfil de usuario / settings
+
+ESTRUCTURA DEL PROYECTO:
+------------------------
+Voice-Chat/
+├── backend/
+│   ├── main.py              # Entry point de FastAPI
+│   ├── auth.py              # JWT utilities (hash, verify, create token)
+│   ├── database.py          # SQLAlchemy setup
+│   ├── models.py            # Modelos (User, Group, Channel, GroupMember)
+│   ├── schemas.py           # Pydantic schemas
+│   ├── routes/
+│   │   ├── auth.py          # /auth/register, /auth/login
+│   │   ├── groups.py        # /groups CRUD, /groups/{id}/invite
+│   │   ├── channels.py      # /channels CRUD
+│   │   └── livekit.py       # /livekit/token
+│   └── websocket.py         # WebSocket para chat de texto
+│
+├── frontend/
+│   ├── index.html           # UI principal con Tailwind
+│   ├── css/styles.css       # Estilos custom
+│   └── js/
+│       ├── api.js           # Wrapper para fetch
+│       ├── app.js           # Lógica principal
+│       ├── livekit.js       # Cliente LiveKit
+│       └── websocket.js     # WebSocket cliente
+│
+├── .env                     # Variables de entorno
+├── requirements.txt         # Dependencias Python
+└── voice-chat.db            # Base de datos SQLite
+
+CMDs PARA ARRANCAR EL PROYECTO:
+--------------------------------
+1. Backend (en carpeta raíz):
+   uvicorn backend.main:app --reload --port 8000
+
+2. Frontend (abrir frontend/index.html en navegador)
+
+EQUIPO DE DESARROLLO:
+---------------------
+- Lautaro (vos) - Aprendiz
+- AI - Mentor y coding partner
+
+====================================
+FECHA: 28/3/2026
+PROGRESO: ~60% ( Voz funcionando, falta texto + UI )
+====================================

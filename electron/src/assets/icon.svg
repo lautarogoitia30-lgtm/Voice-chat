@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- Background circle - dark blue -->
+  <circle cx="128" cy="128" r="120" fill="#1a1a2e"/>
+  
+  <!-- Pink ring -->
+  <circle cx="128" cy="128" r="100" fill="none" stroke="#F472B6" stroke-width="12"/>
+  
+  <!-- Inner circle - lighter -->
+  <circle cx="128" cy="128" r="70" fill="#2d2d4a"/>
+  
+  <!-- Microphone icon -->
+  <g transform="translate(108, 88)">
+    <!-- Mic body -->
+    <rect x="20" y="0" width="20" height="40" rx="10" fill="#F472B6"/>
+    <!-- Mic stand -->
+    <path d="M30 35 L30 55 M15 55 L45 55" stroke="#F472B6" stroke-width="6" fill="none" stroke-linecap="round"/>
+    <!-- Sound waves -->
+    <path d="M10 10 Q0 20 10 30" stroke="#F472B6" stroke-width="4" fill="none" stroke-linecap="round"/>
+    <path d="M50 10 Q60 20 50 30" stroke="#F472B6" stroke-width="4" fill="none" stroke-linecap="round"/>
+  </g>
+</svg>
