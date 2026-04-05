@@ -1899,16 +1899,17 @@ async function showScreenShareView(track, publication, participant) {
     if (volumeValue) volumeValue.textContent = volume + '%';
     if (volumeIcon) volumeIcon.textContent = volume === 0 ? '🔇' : volume < 50 ? '🔉' : '🔊';
     
-    // Apply volume to screen share audio tracks
+    // Apply volume to screen share audio tracks ONLY
     function applyScreenShareVolume(vol) {
         // Find audio elements from screen share in #voice-container
         const voiceContainer = document.getElementById('voice-container');
         if (voiceContainer) {
             const audioElements = voiceContainer.querySelectorAll('audio');
             audioElements.forEach(audio => {
-                // Screen share audio tracks have a different source than microphone
-                // We apply volume to all audio in the container (simplest approach)
-                audio.volume = vol / 100;
+                // Only affect screen share audio, not voice audio
+                if (audio.dataset.isScreenShareAudio === 'true') {
+                    audio.volume = vol / 100;
+                }
             });
         }
     }

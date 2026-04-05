@@ -219,8 +219,14 @@ class LiveKitClient {
                             audioElement.playsInline = true;
                             audioElement.muted = false;
                             audioElement.volume = 1.0;
-                            // Tag with user identity for per-user volume control
+                            // Tag with user identity and track type for volume control
                             audioElement.dataset.userId = participant.identity;
+                            // Tag as screen share audio if it's from screen share
+                            if (track.source === 'screen_share_audio' || track.source === 'ScreenShareAudio') {
+                                audioElement.dataset.isScreenShareAudio = 'true';
+                            } else {
+                                audioElement.dataset.isScreenShareAudio = 'false';
+                            }
 
                             container.appendChild(audioElement);
 
