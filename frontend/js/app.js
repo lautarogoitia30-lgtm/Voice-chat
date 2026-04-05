@@ -1810,6 +1810,31 @@ function handleLocalScreenShareStarted() {
     console.log('[SCREEN-UI] Local screen share started');
     updateVoiceControlsUI();
     showToast('Compartiendo pantalla 🖥️', 'success');
+    
+    // Also show the screen share view so we can see quality selector
+    const screenShareView = document.getElementById('screen-share-view');
+    const usernameLabel = document.getElementById('screen-share-username');
+    const normalView = document.getElementById('voice-container');
+    const voiceChat = document.getElementById('voice-chat');
+    
+    if (screenShareView && usernameLabel && normalView && voiceChat) {
+        // Hide normal voice view, show screen share view
+        normalView.classList.add('hidden');
+        screenShareView.classList.remove('hidden');
+        
+        // Show we're sharing
+        usernameLabel.textContent = state.currentUser?.username || 'Vos';
+        
+        // Setup quality selector if not already done
+        const qualitySelect = document.getElementById('screen-quality-select');
+        if (qualitySelect) {
+            // Restore saved quality
+            const savedQuality = localStorage.getItem('voice_chat_screen_quality') || '4k';
+            qualitySelect.value = savedQuality;
+        }
+        
+        console.log('[SCREEN-UI] Showing local screen share view with quality selector');
+    }
 }
 
 // When WE stop sharing our screen
