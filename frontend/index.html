@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VoiceSpace</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link rel="stylesheet" href="css/styles.css?v=26">
+    <link rel="stylesheet" href="css/styles.css?v=27">
 </head>
 <body class="h-screen overflow-hidden">
     
@@ -128,6 +128,15 @@
                 <div id="screen-share-view" class="screen-share-view hidden">
                     <div class="screen-share-header">
                         <span class="screen-share-label">🖥️ <span id="screen-share-username">Alguien</span> está compartiendo pantalla</span>
+                        <div class="screen-share-quality">
+                            <label for="screen-quality-select" title="Calidad de transmisión">⚡</label>
+                            <select id="screen-quality-select" class="screen-quality-select" onchange="handleScreenQualityChange(this.value)">
+                                <option value="auto">Auto</option>
+                                <option value="1080p">1080p</option>
+                                <option value="1440p">1440p</option>
+                                <option value="4k" selected>4K</option>
+                            </select>
+                        </div>
                         <div class="screen-share-volume">
                             <span class="volume-icon" id="volume-icon" title="Volumen de la transmisión">🔊</span>
                             <input type="range" id="screen-share-volume" class="volume-slider" min="0" max="100" value="100" title="Volumen de la transmisión">
@@ -520,7 +529,7 @@
     <!-- Scripts -->
     <script src="js/api.js?v=12"></script>
     <script src="js/websocket.js?v=10"></script>
-    <script src="js/livekit.js?v=33"></script>
-    <script src="js/app.js?v=63"></script>
+    <script src="js/livekit.js?v=34"></script>
+    <script src="js/app.js?v=64"></script>
 </body>
 </html>

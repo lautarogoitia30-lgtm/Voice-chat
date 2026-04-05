@@ -1820,6 +1820,64 @@ function handleLocalScreenShareStopped() {
     showToast('Dejaste de compartir pantalla', 'info');
 }
 
+// Handle screen share quality change
+function handleScreenQualityChange(quality) {
+    localStorage.setItem('voice_chat_screen_quality', quality);
+    console.log('[SCREEN-UI] Quality set to:', quality);
+}
+
+// Get screen share quality settings based on selection
+function getScreenShareQualitySettings(quality) {
+    const settings = {
+        // Resolution constraints for getDisplayMedia
+        video: {
+            width: { ideal: 1920, max: 1920 },
+            height: { ideal: 1080, max: 1080 },
+            frameRate: { ideal: 30, max: 30 },
+            displaySurface: 'monitor',
+        },
+        // Encoding settings for LiveKit
+        encoding: {
+            maxBitrate: 5_000_000,
+            maxFramerate: 30,
+        },
+        audioBitrate: 128_000,
+    };
+    
+    switch(quality) {
+        case '1080p':
+            settings.video.width = { ideal: 1920, max: 1920 };
+            settings.video.height = { ideal: 1080, max: 1080 };
+            settings.video.frameRate = { ideal: 30, max: 30 };
+            settings.encoding.maxBitrate = 5_000_000;
+            settings.encoding.maxFramerate = 30;
+            settings.audioBitrate = 128000;
+            break;
+        case '1440p':
+            settings.video.width = { ideal: 2560, max: 2560 };
+            settings.video.height = { ideal: 1440, max: 1440 };
+            settings.video.frameRate = { ideal: 60, max: 60 };
+            settings.encoding.maxBitrate = 10_000_000;
+            settings.encoding.maxFramerate = 60;
+            settings.audioBitrate = 256000;
+            break;
+        case '4k':
+            settings.video.width = { ideal: 3840, max: 3840 };
+            settings.video.height = { ideal: 2160, max: 2160 };
+            settings.video.frameRate = { ideal: 60, max: 60 };
+            settings.encoding.maxBitrate = 20_000_000;
+            settings.encoding.maxFramerate = 60;
+            settings.audioBitrate = 512000;
+            break;
+        case 'auto':
+        default:
+            // Auto will use default settings
+            break;
+    }
+    
+    return settings;
+}
+
 // Show the expanded screen share view (Discord-style)
 async function showScreenShareView(track, publication, participant) {
     const screenShareView = document.getElementById('screen-share-view');
@@ -4302,6 +4360,7 @@ window.hideNewDMModal = hideNewDMModal;
 window.handleNewDMSubmit = handleNewDMSubmit;
 window.sendDMMessage = sendDMMessage;
 window.filterDMConversations = filterDMConversations;
+window.handleScreenQualityChange = handleScreenQualityChange;
 
 // ==================== INIT APPEARANCE ====================
 
