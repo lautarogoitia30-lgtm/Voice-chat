@@ -319,8 +319,21 @@ function updateUserDisplay() {
     if (elements.userDisplayName) {
         elements.userDisplayName.textContent = username;
     }
-    if (elements.userInitial) {
-        elements.userInitial.textContent = initial;
+    
+    // Handle avatar
+    const avatarImg = document.getElementById('user-avatar-img');
+    const avatarInitial = document.getElementById('user-initial');
+    const avatarUrl = state.currentUser.avatar_url;
+    
+    if (avatarUrl && avatarImg) {
+        const fullUrl = avatarUrl.startsWith('http') ? avatarUrl : 'https://voice-chat-production-a794.up.railway.app' + avatarUrl;
+        avatarImg.src = fullUrl;
+        avatarImg.style.display = 'block';
+        if (avatarInitial) avatarInitial.style.display = 'none';
+    } else if (avatarInitial) {
+        avatarInitial.textContent = initial;
+        avatarInitial.style.display = 'block';
+        if (avatarImg) avatarImg.style.display = 'none';
     }
 }
 
