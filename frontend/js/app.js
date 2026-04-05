@@ -166,11 +166,20 @@ function init() {
         const savedUsername = localStorage.getItem('voice_chat_username');
         const savedUserId = localStorage.getItem('voice_chat_user_id');
         const savedAvatarUrl = localStorage.getItem('voice_chat_avatar_url');
+        
+        // Validate saved avatar before using it
+        let validAvatarUrl = null;
+        if (savedAvatarUrl) {
+            const fullUrl = savedAvatarUrl.startsWith('http') ? savedAvatarUrl : 'https://voice-chat-production-a794.up.railway.app' + savedAvatarUrl;
+            // We'll validate on first load, if it fails it will be cleared
+            validAvatarUrl = savedAvatarUrl;
+        }
+        
         if (savedUsername && savedUserId) {
             state.currentUser = { 
                 username: savedUsername, 
                 user_id: parseInt(savedUserId, 10),
-                avatar_url: savedAvatarUrl || null
+                avatar_url: validAvatarUrl
             };
             console.log('Restored user from localStorage:', state.currentUser);
         }
@@ -323,13 +332,16 @@ function updateUserDisplay() {
     // Handle avatar with error handling
     const avatarImg = document.getElementById('user-avatar-img');
     const avatarInitial = document.getElementById('user-initial');
-    const avatarUrl = state.currentUser.avatar_url;
+    let avatarUrl = state.currentUser.avatar_url;
     
     // Reset any previous error handlers
     if (avatarImg) {
         avatarImg.onerror = function() {
-            console.log('[AVATAR] Error loading avatar, showing initial');
+            console.log('[AVATAR] Error loading avatar, showing initial and clearing corrupted URL');
             this.style.display = 'none';
+            // Clear corrupted avatar from state and localStorage
+            state.currentUser.avatar_url = null;
+            localStorage.removeItem('voice_chat_avatar_url');
             if (avatarInitial) {
                 avatarInitial.textContent = initial;
                 avatarInitial.style.display = 'block';
