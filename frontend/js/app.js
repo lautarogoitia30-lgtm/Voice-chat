@@ -2762,15 +2762,21 @@ function handleAvatarFileSelect(input) {
     // Show preview
     const reader = new FileReader();
     reader.onload = (e) => {
+        console.log('[AVATAR] FileReader loaded, result length:', e.target.result?.length);
+        const previewContainer = document.getElementById('avatar-preview');
         const previewImg = document.getElementById('avatar-preview-img');
         const previewInitial = document.getElementById('avatar-preview-initial');
-        console.log('[AVATAR] Preview elements:', !!previewImg, !!previewInitial);
+        console.log('[AVATAR] Elements - container:', !!previewContainer, 'img:', !!previewImg, 'initial:', !!previewInitial);
+        
         if (previewImg) {
             previewImg.src = e.target.result;
             previewImg.style.display = 'block';
-            console.log('[AVATAR] Preview image set');
+            console.log('[AVATAR] Preview src set to:', e.target.result.substring(0, 50) + '...');
+            console.log('[AVATAR] img style.display:', previewImg.style.display);
         }
-        if (previewInitial) previewInitial.style.display = 'none';
+        if (previewInitial) {
+            previewInitial.style.display = 'none';
+        }
     };
     reader.onerror = (e) => console.error('[AVATAR] FileReader error:', e);
     reader.readAsDataURL(file);
@@ -2797,7 +2803,7 @@ async function uploadAvatarFile(file) {
     
     try {
         const formData = new FormData();
-        formData.append('avatar', file);
+        formData.append('file', file);
         
         const token = localStorage.getItem('voice_chat_token');
         const response = await fetch('https://voice-chat-production-a794.up.railway.app/users/me/avatar', {
