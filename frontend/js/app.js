@@ -1704,7 +1704,14 @@ function updateVoiceControlsUI() {
         leaveBtn.classList.remove('hidden');
         muteBtn.classList.remove('hidden');
         deafBtn.classList.remove('hidden');
-        if (screenBtn) screenBtn.classList.remove('hidden');
+        // Hide the voice control screen share button (we use the user bar button instead)
+        if (screenBtn) screenBtn.classList.add('hidden');
+        
+        // Also hide user bar screen share button when NOT sharing
+        const userScreenBtn = document.getElementById('user-screen-share-btn');
+        if (userScreenBtn) {
+            userScreenBtn.classList.remove('hidden');
+        }
         
         // Update mute button style - using .active class
         if (state.isMuted) {
@@ -1755,6 +1762,12 @@ function updateVoiceControlsUI() {
         muteBtn.classList.add('hidden');
         deafBtn.classList.add('hidden');
         if (screenBtn) screenBtn.classList.add('hidden');
+        
+        // Also hide user bar screen share button when not in voice
+        const userScreenBtn = document.getElementById('user-screen-share-btn');
+        if (userScreenBtn) {
+            userScreenBtn.classList.add('hidden');
+        }
         
         console.log('Voice controls updated - not in voice mode');
     }
@@ -1816,6 +1829,12 @@ function handleLocalScreenShareStarted() {
     console.log('[SCREEN-UI] Local screen share started');
     updateVoiceControlsUI();
     showToast('Compartiendo pantalla 🖥️', 'success');
+    
+    // Hide the old screen share button in voice controls
+    const oldScreenBtn = document.getElementById('screen-share-btn');
+    if (oldScreenBtn) {
+        oldScreenBtn.classList.add('hidden');
+    }
     
     // Also show the screen share view so we can see quality selector
     const screenShareView = document.getElementById('screen-share-view');
