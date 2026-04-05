@@ -416,9 +416,9 @@ async function handleLoginSubmit(e, elements) {
         localStorage.setItem('voice_chat_username', loginUsername);
         localStorage.setItem('voice_chat_user_id', String(loginUserId));
         
-        // Fetch user profile to get avatar
+        // Fetch user profile to get avatar (with cache busting)
         try {
-            const profileResponse = await fetch('https://voice-chat-production-a794.up.railway.app/users/me', {
+            const profileResponse = await fetch('https://voice-chat-production-a794.up.railway.app/users/me?v=' + Date.now(), {
                 headers: { 'Authorization': 'Bearer ' + response.access_token }
             });
             if (profileResponse.ok) {
