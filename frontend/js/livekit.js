@@ -478,22 +478,47 @@ class LiveKitClient {
         
         try {
             if (enabled) {
-                // Instead of trying to inject a processor (which doesn't work reliably),
-                // we'll set the mic volume higher as a "pre-amp" effect
-                // This is a simpler and more reliable approach
-                console.log('[AUTO-GAIN] Setting higher mic volume as pre-amp...');
+                // Manual approach: create or update gain chain with higher boost
+                console.log('[AUTO-GAIN] Creating gain chain with 3x boost...');
                 
-                // Set mic volume to 200% (double) when auto-gain is on
-                // This boosts quiet voices significantly
-                if (this.setMicVolume) {
-                    await this.setMicVolume(200);
-                    console.log('[AUTO-GAIN] ✅ Mic volume set to 200% as pre-amp');
+                // Get existing or create new audio context
+                if (!this._micAudioContext) {
+                    this._micAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                
+                // If gain node already exists, just increase the gain
+                if (this._micGainNode) {
+                    this._micGainNode.gain.value = 3.0; // 3x boost!
+                    console.log('[AUTO-GAIN] ✅ Increased existing gain to 3x');
+                } else {
+                    // Create new gain chain
+                    const originalTrack = pub.track.mediaStreamTrack;
+                    
+                    this._micGainNode = this._micAudioContext.createGain();
+                    this._micGainNode.gain.value = 3.0; // 3x boost!
+                    
+                    const source = this._micAudioContext.createMediaStreamSource(new MediaStream([originalTrack]));
+                    source.connect(this._micGainNode);
+                    
+                    const dest = this._micAudioContext.createMediaStreamDestination();
+                    this._micGainNode.connect(dest);
+                    
+                    // Publish processed track
+                    const livekit = await import('https://cdn.jsdelivr.net/npm/livekit-client@2/+esm');
+                    const processedTrack = new livekit.LocalAudioTrack(dest.stream.getAudioTracks()[0], {
+                        source: this._Track.Source.Microphone,
+                    });
+                    
+                    await this.localParticipant.unpublishTrack(pub.track);
+                    await this.localParticipant.publishTrack(processedTrack);
+                    
+                    console.log('[AUTO-GAIN] ✅ Created new gain chain with 3x boost');
                 }
             } else {
-                // Reset to normal volume (100%)
-                if (this.setMicVolume) {
-                    await this.setMicVolume(100);
-                    console.log('[AUTO-GAIN] Mic volume reset to 100%');
+                // Reset to normal (no boost)
+                if (this._micGainNode) {
+                    this._micGainNode.gain.value = 1.0;
+                    console.log('[AUTO-GAIN] Reset gain to 1x');
                 }
             }
         } catch (e) {
