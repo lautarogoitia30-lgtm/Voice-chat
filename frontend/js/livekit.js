@@ -478,24 +478,24 @@ class LiveKitClient {
         
         try {
             if (enabled) {
-                // Create a DynamicsCompressorNode processor
-                // This boosts quiet sounds and limits loud ones automatically
+                // Create a GainNode processor to boost the signal
+                // This is simpler and more reliable than a full processor chain
                 const processor = {
                     createProcessor: (context) => {
-                        const compressor = context.createDynamicsCompressor();
-                        // Aggressive settings for quiet mics:
-                        compressor.threshold.value = -50;    // Start compressing at -50dB
-                        compressor.knee.value = 40;          // Smooth transition
-                        compressor.ratio.value = 12;         // High ratio = strong compression = louder output
-                        compressor.attack.value = 0;         // Instant response
-                        compressor.release.value = 0.25;     // Quick release
-                        return compressor;
+                        // Create a gain node as pre-amp
+                        const gainNode = context.createGain();
+                        
+                        // Much higher gain to boost quiet mics significantly
+                        // This is the key - we amplify the signal before anything else
+                        gainNode.gain.value = 10; // 10x boost = ~20dB pre-amp!
+                        
+                        return gainNode;
                     }
                 };
                 
                 await pub.audioTrack.setProcessor(processor);
                 this._autoGainProcessor = processor;
-                console.log('[AUTO-GAIN] ✅ Dynamic compressor activated — quiet voices boosted!');
+                console.log('[AUTO-GAIN] ✅ 10x pre-amp activated — quiet voices should be much louder!');
             } else {
                 // Remove processor
                 if (pub.audioTrack) {
