@@ -478,16 +478,23 @@ class LiveKitClient {
         
         try {
             if (enabled) {
-                // Create a GainNode processor to boost the signal
-                // This is simpler and more reliable than a full processor chain
+                // Try a different approach: wrap the audio track differently
+                // Using a script processor for more control
                 const processor = {
-                    createProcessor: (context) => {
+                    createProcessor: (context, sink, source) => {
+                        console.log('[AUTO-GAIN] Creating processor, context sampleRate:', context.sampleRate);
+                        
                         // Create a gain node as pre-amp
                         const gainNode = context.createGain();
                         
-                        // Much higher gain to boost quiet mics significantly
-                        // This is the key - we amplify the signal before anything else
-                        gainNode.gain.value = 10; // 10x boost = ~20dB pre-amp!
+                        // Even higher gain - 15x boost
+                        gainNode.gain.value = 15; // 15x boost!
+                        
+                        // Connect: source -> gain -> sink
+                        source.connect(gainNode);
+                        gainNode.connect(sink);
+                        
+                        console.log('[AUTO-GAIN] Connected: source -> gain(15x) -> sink');
                         
                         return gainNode;
                     }
@@ -495,7 +502,7 @@ class LiveKitClient {
                 
                 await pub.audioTrack.setProcessor(processor);
                 this._autoGainProcessor = processor;
-                console.log('[AUTO-GAIN] ✅ 10x pre-amp activated — quiet voices should be much louder!');
+                console.log('[AUTO-GAIN] ✅ 15x pre-amp activated!');
             } else {
                 // Remove processor
                 if (pub.audioTrack) {
