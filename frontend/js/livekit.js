@@ -488,14 +488,14 @@ class LiveKitClient {
                 
                 // If gain node already exists, just increase the gain
                 if (this._micGainNode) {
-                    this._micGainNode.gain.value = 3.0; // 3x boost!
-                    console.log('[AUTO-GAIN] ✅ Increased existing gain to 3x');
+                    this._micGainNode.gain.value = 10.0; // 10x boost - much higher!
+                    console.log('[AUTO-GAIN] ✅ Increased existing gain to 10x');
                 } else {
                     // Create new gain chain
                     const originalTrack = pub.track.mediaStreamTrack;
                     
                     this._micGainNode = this._micAudioContext.createGain();
-                    this._micGainNode.gain.value = 3.0; // 3x boost!
+                    this._micGainNode.gain.value = 10.0; // 10x boost!
                     
                     const source = this._micAudioContext.createMediaStreamSource(new MediaStream([originalTrack]));
                     source.connect(this._micGainNode);
