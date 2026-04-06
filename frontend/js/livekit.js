@@ -478,38 +478,23 @@ class LiveKitClient {
         
         try {
             if (enabled) {
-                // Try a different approach: wrap the audio track differently
-                // Using a script processor for more control
-                const processor = {
-                    createProcessor: (context, sink, source) => {
-                        console.log('[AUTO-GAIN] Creating processor, context sampleRate:', context.sampleRate);
-                        
-                        // Create a gain node as pre-amp
-                        const gainNode = context.createGain();
-                        
-                        // Even higher gain - 15x boost
-                        gainNode.gain.value = 15; // 15x boost!
-                        
-                        // Connect: source -> gain -> sink
-                        source.connect(gainNode);
-                        gainNode.connect(sink);
-                        
-                        console.log('[AUTO-GAIN] Connected: source -> gain(15x) -> sink');
-                        
-                        return gainNode;
-                    }
-                };
+                // Instead of trying to inject a processor (which doesn't work reliably),
+                // we'll set the mic volume higher as a "pre-amp" effect
+                // This is a simpler and more reliable approach
+                console.log('[AUTO-GAIN] Setting higher mic volume as pre-amp...');
                 
-                await pub.audioTrack.setProcessor(processor);
-                this._autoGainProcessor = processor;
-                console.log('[AUTO-GAIN] ✅ 15x pre-amp activated!');
-            } else {
-                // Remove processor
-                if (pub.audioTrack) {
-                    await pub.audioTrack.setProcessor(null);
+                // Set mic volume to 200% (double) when auto-gain is on
+                // This boosts quiet voices significantly
+                if (this.setMicVolume) {
+                    await this.setMicVolume(200);
+                    console.log('[AUTO-GAIN] ✅ Mic volume set to 200% as pre-amp');
                 }
-                this._autoGainProcessor = null;
-                console.log('[AUTO-GAIN] Disabled');
+            } else {
+                // Reset to normal volume (100%)
+                if (this.setMicVolume) {
+                    await this.setMicVolume(100);
+                    console.log('[AUTO-GAIN] Mic volume reset to 100%');
+                }
             }
         } catch (e) {
             console.error('[AUTO-GAIN] Failed:', e.message);
