@@ -118,10 +118,10 @@ class LiveKitClient {
                     channelCount: 1,       // Mono for voice (saves bandwidth, better processing)
                     sampleRate: 48000,     // 48kHz — Opus native sample rate
                 },
-                // Publish defaults — high bitrate Opus for crystal clear voice
+                // Publish defaults — ultra high bitrate Opus for maximum voice quality
                 publishDefaults: {
                     audioPreset: {
-                        maxBitrate: 64_000, // 64kbps Opus (default is ~32kbps, Discord uses ~64kbps)
+                        maxBitrate: 128_000, // 128kbps — maximum quality voice (default is ~32kbps)
                     },
                     dtx: true,             // Discontinuous transmission — saves bandwidth when silent
                     red: true,             // Redundant encoding — better packet loss recovery
