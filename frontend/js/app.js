@@ -803,8 +803,11 @@ async function loadChannelVoiceParticipants(channelId) {
 
 // Handle per-user volume change
 function handleUserVolumeChange(userId, value, sliderEl) {
-    const label = sliderEl.parentElement.querySelector('.vol-label');
-    if (label) label.textContent = value + '%';
+    // Update label if it exists
+    if (sliderEl && sliderEl.parentElement) {
+        const label = sliderEl.parentElement.querySelector('.vol-label');
+        if (label) label.textContent = value + '%';
+    }
     
     // Apply via LiveKit
     if (window.livekitClient && window.livekitClient.setUserVolume) {
