@@ -1,11 +1,28 @@
 /**
  * LiveKit client for voice chat.
  * Handles room connections, microphone publishing, participant tracking, and screen sharing.
- * VERSION 12.1 - SCREEN SHARE QUALITY: 3Mbps bitrate, manual track publishing, no simulcast
+ * VERSION 12.2 - GLOBAL VOLUME CLAMP TO PREVENT IndexSizeError
  */
 
 // DEBUG: Make sure this is the latest version
 console.log('=== LIVEKIT CLIENT v12 LOADED ===');
+
+// PATCH: Override HTMLMediaElement.volume setter globally to prevent IndexSizeError
+// LiveKit's internal setVolume can pass values > 1, which throws
+const originalVolumeDesc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'volume');
+if (originalVolumeDesc && originalVolumeDesc.set) {
+    const originalSetter = originalVolumeDesc.set;
+    Object.defineProperty(HTMLMediaElement.prototype, 'volume', {
+        get: originalVolumeDesc.get,
+        set: function(val) {
+            // Clamp to [0, 1] silently
+            const clamped = Math.max(0, Math.min(1, val));
+            originalSetter.call(this, clamped);
+        },
+        configurable: true
+    });
+    console.log('[LIVEKIT] ✅ Global volume clamp patched');
+}
 
 class LiveKitClient {
     constructor() {
@@ -196,23 +213,6 @@ class LiveKitClient {
                         console.log('[LIVEKIT] Attaching audio track from:', participant.name || participant.identity);
                         try {
                             const audioElement = track.attach();
-                            
-                            // Wrap audioElement.volume with a Proxy to clamp values to [0, 1]
-                            // LiveKit's internal setVolume can pass values > 1, causing IndexSizeError
-                            const originalVolumeDesc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'volume');
-                            if (originalVolumeDesc && originalVolumeDesc.set) {
-                                let clampedVolume = 1.0;
-                                Object.defineProperty(audioElement, 'volume', {
-                                    get: function() { return clampedVolume; },
-                                    set: function(val) {
-                                        // Clamp to [0, 1] to prevent IndexSizeError
-                                        clampedVolume = Math.max(0, Math.min(1, val));
-                                        console.log('[LIVEKIT VOL] Clamped volume from', val, 'to', clampedVolume);
-                                    },
-                                    configurable: true,
-                                    enumerable: true
-                                });
-                            }
                             
                             // Prefer placing audio elements inside a dedicated container so the DOM is tidy
                             let container = document.getElementById('voice-container');
