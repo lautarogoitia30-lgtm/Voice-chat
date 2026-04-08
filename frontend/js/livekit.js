@@ -196,6 +196,24 @@ class LiveKitClient {
                         console.log('[LIVEKIT] Attaching audio track from:', participant.name || participant.identity);
                         try {
                             const audioElement = track.attach();
+                            
+                            // Wrap audioElement.volume with a Proxy to clamp values to [0, 1]
+                            // LiveKit's internal setVolume can pass values > 1, causing IndexSizeError
+                            const originalVolumeDesc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'volume');
+                            if (originalVolumeDesc && originalVolumeDesc.set) {
+                                let clampedVolume = 1.0;
+                                Object.defineProperty(audioElement, 'volume', {
+                                    get: function() { return clampedVolume; },
+                                    set: function(val) {
+                                        // Clamp to [0, 1] to prevent IndexSizeError
+                                        clampedVolume = Math.max(0, Math.min(1, val));
+                                        console.log('[LIVEKIT VOL] Clamped volume from', val, 'to', clampedVolume);
+                                    },
+                                    configurable: true,
+                                    enumerable: true
+                                });
+                            }
+                            
                             // Prefer placing audio elements inside a dedicated container so the DOM is tidy
                             let container = document.getElementById('voice-container');
                             if (!container) {
