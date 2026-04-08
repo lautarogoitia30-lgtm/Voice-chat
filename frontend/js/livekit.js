@@ -233,7 +233,7 @@ class LiveKitClient {
                             // Apply saved per-user volume if exists
                             const savedVol = localStorage.getItem(`voice_chat_user_vol_${participant.identity}`);
                             if (savedVol) {
-                                audioElement.volume = parseInt(savedVol) / 100;
+                                audioElement.volume = Math.min(1, parseInt(savedVol) / 100);
                                 console.log('[LIVEKIT] Applied saved volume for', participant.identity, ':', savedVol + '%');
                             }
 
