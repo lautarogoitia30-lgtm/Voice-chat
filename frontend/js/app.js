@@ -1288,24 +1288,40 @@ async function handleJoinVoice() {
         console.log('[JOIN] Local participant identity:', room?.localParticipant?.identity);
         console.log('[JOIN] Local participant name:', room?.localParticipant?.name);
 
-        // Try to publish microphone, only if connected
+        // Try to publish microphone, only if connected - with multiple retries
         try {
             if (window.livekitClient.room && window.livekitClient.room.state === 'connected') {
                 console.log('[JOIN] Publishing microphone...');
-                try {
-                    await window.livekitClient.publishMicrophone();
-                    console.log('[JOIN] Microphone published!');
-                } catch (firstError) {
-                    console.warn('[JOIN] First mic publish failed, retrying in 1s:', firstError?.message);
-                    // Wait and retry — common in Tauri/WebView2 where audio subsystem needs warming up
-                    await new Promise(r => setTimeout(r, 1000));
+                
+                // Function to attempt mic publish with retry
+                const publishWithRetry = async (attempt = 1, maxAttempts = 4) => {
                     try {
                         await window.livekitClient.publishMicrophone();
-                        console.log('[JOIN] Microphone published on retry!');
-                    } catch (retryError) {
-                        console.error('[JOIN] Mic publish failed on retry:', retryError?.message);
+                        console.log('[JOIN] Microphone published! (attempt', attempt, ')');
+                        return true;
+                    } catch (error) {
+                        console.warn('[JOIN] Mic publish attempt', attempt, 'failed:', error?.message);
+                        
+                        if (attempt < maxAttempts) {
+                            // Wait before retry - longer delays for each attempt
+                            const waitTime = attempt * 800;
+                            console.log('[JOIN] Retrying in', waitTime, 'ms...');
+                            await new Promise(r => setTimeout(r, waitTime));
+                            return publishWithRetry(attempt + 1, maxAttempts);
+                        } else {
+                            console.error('[JOIN] All mic publish attempts failed');
+                            return false;
+                        }
                     }
-                }
+                };
+                
+                await publishWithRetry();
+            } else {
+                console.warn('[JOIN] Room not connected yet, skipping publishMicrophone');
+            }
+        } catch (micError) {
+            console.warn('[JOIN] Microphone access error:', micError?.message || micError);
+        }
                 
                 // Apply saved mic volume if not 100%
                 const savedMicVol = localStorage.getItem('voice_chat_mic_volume');

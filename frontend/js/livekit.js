@@ -464,10 +464,10 @@ class LiveKitClient {
             }
         }
         
+        // Wait for room to be fully connected with retry
+        await this._waitForRoomConnected();
+        
         try {
-            // Wait for room engine to be fully ready
-            await new Promise(resolve => setTimeout(resolve, 500));
-            
             // Get user settings — noise suppression and echo cancellation ON by default
             const inputDevice = localStorage.getItem('voice_chat_input_device');
             const noiseSuppression = localStorage.getItem('voice_chat_noise_suppression') !== 'false'; // ON by default
@@ -502,6 +502,27 @@ class LiveKitClient {
             console.error('[AUDIO] Error message:', error.message);
             alert('Error al acceder al micrófono: ' + error.message);
         }
+    }
+    
+    /**
+     * Wait for room to be fully connected, with retry logic
+     */
+    async _waitForRoomConnected(maxRetries = 5, delayMs = 500) {
+        for (let i = 0; i < maxRetries; i++) {
+            if (this.room && this.room.state === 'connected' && this.room.localParticipant) {
+                // Additional check: room engine should be ready
+                if (this.room.engine && this.room.engine.connectionState === 'connected') {
+                    console.log('[AUDIO] ✅ Room fully connected after', i + 1, 'checks');
+                    return true;
+                }
+            }
+            console.log('[AUDIO] ⏳ Waiting for room connection... attempt', i + 1, 'of', maxRetries);
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
+        
+        console.warn('[AUDIO] ⚠️ Room not fully connected after', maxRetries, 'attempts');
+        // Try anyway - maybe it will work
+        return this.room && this.room.state === 'connected';
     }
     
     /**
