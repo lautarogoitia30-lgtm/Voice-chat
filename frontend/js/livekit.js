@@ -48,6 +48,10 @@ class LiveKitClient {
         // Auto-gain (dynamic compressor for quiet mics)
         this._autoGainEnabled = false;
         this._autoGainProcessor = null;
+        
+        // Web Audio API for per-user volume boost (values > 100%)
+        this._audioContext = null;
+        this._userGainNodes = new Map(); // participantId -> GainNode
     }
     
     /**
@@ -247,11 +251,36 @@ class LiveKitClient {
                             }
 
                             container.appendChild(audioElement);
-
+                            
+                            // Create Web Audio API chain for volume boost (>100%)
+                            // LiveKit's setVolume only works for 0-100%, so we need Web Audio API for boost
+                            this._ensureAudioContext();
+                            if (this._audioContext && audioElement) {
+                                const participantId = String(participant.identity);
+                                
+                                // Create source from the audio element
+                                const source = this._audioContext.createMediaElementSource(audioElement);
+                                
+                                // Create gain node for this user
+                                const gainNode = this._audioContext.createGain();
+                                
+                                // Connect: source -> gainNode -> destination (speakers)
+                                source.connect(gainNode);
+                                gainNode.connect(this._audioContext.destination);
+                                
+                                // Store the gain node for volume control
+                                this._userGainNodes.set(participantId, gainNode);
+                                
+                                console.log('[LIVEKIT] 🎛️ Created Web Audio gain node for user:', participantId);
+                            }
+                            
                             // Apply saved per-user volume if exists
                             const savedVol = localStorage.getItem(`voice_chat_user_vol_${participant.identity}`);
                             if (savedVol) {
-                                audioElement.volume = Math.min(1, parseInt(savedVol) / 100);
+                                const vol = parseInt(savedVol);
+                                audioElement.volume = Math.min(1, vol / 100);
+                                // Apply saved volume via Web Audio API for boost > 100%
+                                this._applyUserVolumeGain(participant.identity, vol);
                                 console.log('[LIVEKIT] Applied saved volume for', participant.identity, ':', savedVol + '%');
                             }
 
@@ -949,6 +978,55 @@ class LiveKitClient {
                 }
             }
         });
+        
+        // NEW: Apply volume via Web Audio API gain node for real boost (>100%)
+        this._applyUserVolumeGain(targetId, safeVolume);
+    }
+    
+    /**
+     * Apply volume gain via Web Audio API (allows >100% boost)
+     */
+    _applyUserVolumeGain(userId, volumePercent) {
+        const gainNode = this._userGainNodes.get(String(userId));
+        if (!gainNode) {
+            console.log(`[VOL-WEB] No gain node found for user ${userId}, skipping Web Audio boost`);
+            return;
+        }
+        
+        // Convert percentage to gain (1.0 = 100%)
+        // 100% -> 1.0 gain
+        // 150% -> 1.5 gain
+        // 200% -> 2.0 gain
+        // 300% -> 3.0 gain
+        const gainValue = volumePercent / 100;
+        
+        try {
+            gainNode.gain.setValueAtTime(gainValue, this._audioContext.currentTime);
+            console.log(`[VOL-WEB] 🎛️ Set gain for user ${userId} to ${gainValue}x (${volumePercent}%)`);
+        } catch (e) {
+            console.warn('[VOL-WEB] Error setting gain:', e);
+        }
+    }
+    
+    /**
+     * Ensure AudioContext exists (lazy initialization)
+     */
+    _ensureAudioContext() {
+        if (!this._audioContext) {
+            try {
+                this._audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                console.log('[LIVEKIT] 🎛️ Web Audio API context created');
+            } catch (e) {
+                console.warn('[LIVEKIT] Web Audio API not supported:', e);
+            }
+        }
+        
+        // Resume context if suspended (needed after user interaction)
+        if (this._audioContext && this._audioContext.state === 'suspended') {
+            this._audioContext.resume().then(() => {
+                console.log('[LIVEKIT] 🎛️ AudioContext resumed');
+            });
+        }
     }
     
     /**
