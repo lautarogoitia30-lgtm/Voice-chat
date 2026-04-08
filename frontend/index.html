@@ -557,10 +557,30 @@
         </div>
     </div>
     
+    <!-- PATCH: Override HTMLMediaElement.volume BEFORE any library loads -->
+    <script>
+    (function() {
+        const originalVolumeDesc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'volume');
+        if (originalVolumeDesc && originalVolumeDesc.set) {
+            const originalSetter = originalVolumeDesc.set;
+            Object.defineProperty(HTMLMediaElement.prototype, 'volume', {
+                get: originalVolumeDesc.get,
+                set: function(val) {
+                    // Clamp to [0, 1] silently to prevent IndexSizeError
+                    const clamped = Math.max(0, Math.min(1, val));
+                    originalSetter.call(this, clamped);
+                },
+                configurable: true
+            });
+            console.log('[VOLUME-PATCH] ✅ HTMLMediaElement.volume patched globally');
+        }
+    })();
+    </script>
+    
     <!-- Scripts -->
     <script src="js/api.js?v=12"></script>
     <script src="js/websocket.js?v=10"></script>
-    <script src="js/livekit.js?v=43"></script></script>
+    <script src="js/livekit.js?v=43"></script>
     <script src="js/app.js?v=68"></script>
 </body>
 </html>
