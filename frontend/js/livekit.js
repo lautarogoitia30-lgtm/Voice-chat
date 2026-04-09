@@ -261,20 +261,29 @@ class LiveKitClient {
                                 // Create source from the audio element
                                 const source = this._audioContext.createMediaElementSource(audioElement);
                                 
-                                // Create gain node for this user
+                                // Create compressor for louder, more consistent audio (like Discord)
+                                const compressor = this._audioContext.createDynamicsCompressor();
+                                compressor.threshold.setValueAtTime(-24, this._audioContext.currentTime);
+                                compressor.knee.setValueAtTime(30, this._audioContext.currentTime);
+                                compressor.ratio.setValueAtTime(12, this._audioContext.currentTime);
+                                compressor.attack.setValueAtTime(0.003, this._audioContext.currentTime);
+                                compressor.release.setValueAtTime(0.25, this._audioContext.currentTime);
+                                
+                                // Create gain node for this user (for volume slider control)
                                 const gainNode = this._audioContext.createGain();
                                 
-                                // Set default gain to 1.0 (100%) - ensure max volume
-                                gainNode.gain.setValueAtTime(1.0, this._audioContext.currentTime);
+                                // Set default gain to 2.0 (200%) - ensure loud volume
+                                gainNode.gain.setValueAtTime(2.0, this._audioContext.currentTime);
                                 
-                                // Connect: source -> gainNode -> destination (speakers)
-                                source.connect(gainNode);
+                                // Connect: source -> compressor -> gainNode -> destination (speakers)
+                                source.connect(compressor);
+                                compressor.connect(gainNode);
                                 gainNode.connect(this._audioContext.destination);
                                 
                                 // Store the gain node for volume control
                                 this._userGainNodes.set(participantId, gainNode);
                                 
-                                console.log('[LIVEKIT] 🎛️ Created Web Audio gain node for user:', participantId, 'at 100%');
+                                console.log('[LIVEKIT] 🎛️ Created Web Audio chain with compressor for user:', participantId);
                             }
                             
                             // Clear any saved low volume values and use 200% default
