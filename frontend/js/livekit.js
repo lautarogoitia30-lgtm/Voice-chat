@@ -142,10 +142,10 @@ class LiveKitClient {
                 // Publish defaults — ultra high bitrate Opus for maximum voice quality
                 publishDefaults: {
                     audioPreset: {
-                        maxBitrate: 128_000, // 128kbps — maximum quality voice (default is ~32kbps)
+                        maxBitrate: 256_000, // 256kbps — high quality voice (up from 128kbps)
                     },
-                    dtx: true,             // Discontinuous transmission — saves bandwidth when silent
-                    red: true,             // Redundant encoding — better packet loss recovery
+                    dtx: false,            // Disable DTX for higher quality (uses more bandwidth)
+                    red: false,           // Disable redundant encoding for quality
                     // Screen share encoding — 3 Mbps for crisp text/UI
                     screenShareEncoding: {
                         maxBitrate: 3_000_000,
