@@ -252,56 +252,50 @@ class LiveKitClient {
 
                             container.appendChild(audioElement);
                             
-                            // Create Web Audio API chain for volume boost (>100%)
-                            // LiveKit's setVolume only works for 0-100%, so we need Web Audio API for boost
+                            // Create Web Audio API chain for audio processing
+                            // This processes the audio after it leaves the audio element
                             this._ensureAudioContext();
                             if (this._audioContext && audioElement) {
                                 const participantId = String(participant.identity);
                                 
-                                // Create source from the audio element
-                                const source = this._audioContext.createMediaElementSource(audioElement);
-                                
-                                // Create compressor for louder, more consistent audio (like Discord)
-                                const compressor = this._audioContext.createDynamicsCompressor();
-                                compressor.threshold.setValueAtTime(-24, this._audioContext.currentTime);
-                                compressor.knee.setValueAtTime(30, this._audioContext.currentTime);
-                                compressor.ratio.setValueAtTime(12, this._audioContext.currentTime);
-                                compressor.attack.setValueAtTime(0.003, this._audioContext.currentTime);
-                                compressor.release.setValueAtTime(0.25, this._audioContext.currentTime);
-                                
-                                // Create gain node for this user (for volume slider control)
-                                const gainNode = this._audioContext.createGain();
-                                
-                                // Set default gain to 2.0 (200%) - ensure loud volume
-                                gainNode.gain.setValueAtTime(2.0, this._audioContext.currentTime);
-                                
-                                // Connect: source -> compressor -> gainNode -> destination (speakers)
-                                source.connect(compressor);
-                                compressor.connect(gainNode);
-                                gainNode.connect(this._audioContext.destination);
-                                
-                                // Store the gain node for volume control
-                                this._userGainNodes.set(participantId, gainNode);
-                                
-                                console.log('[LIVEKIT] 🎛️ Created Web Audio chain with compressor for user:', participantId);
+                                try {
+                                    // Create source from the audio element
+                                    const source = this._audioContext.createMediaElementSource(audioElement);
+                                    
+                                    // Create a dynamics compressor for louder, more consistent audio
+                                    const compressor = this._audioContext.createDynamicsCompressor();
+                                    compressor.threshold.setValueAtTime(-30, this._audioContext.currentTime);
+                                    compressor.knee.setValueAtTime(20, this._audioContext.currentTime);
+                                    compressor.ratio.setValueAtTime(8, this._audioContext.currentTime);
+                                    compressor.attack.setValueAtTime(0.01, this._audioContext.currentTime);
+                                    compressor.release.setValueAtTime(0.2, this._audioContext.currentTime);
+                                    
+                                    // Create gain node for volume control
+                                    const gainNode = this._audioContext.createGain();
+                                    gainNode.gain.setValueAtTime(1.0, this._audioContext.currentTime);
+                                    
+                                    // Connect: source -> compressor -> gainNode -> speakers
+                                    source.connect(compressor);
+                                    compressor.connect(gainNode);
+                                    gainNode.connect(this._audioContext.destination);
+                                    
+                                    // Store the gain node for volume control
+                                    this._userGainNodes.set(participantId, gainNode);
+                                    
+                                    console.log('[LIVEKIT] 🎛️ Created Web Audio chain for user:', participantId);
+                                } catch (e) {
+                                    console.warn('[LIVEKIT] Web Audio chain error:', e);
+                                }
                             }
                             
-                            // Clear any saved low volume values and use 200% default
+                            // Set audio element to max volume (will be controlled by Web Audio chain)
+                            audioElement.volume = 1.0;
+                            
+                            // Clear any saved volume and use default
                             localStorage.removeItem(`voice_chat_user_vol_${participant.identity}`);
                             
-                            // Apply saved per-user volume if exists (and is > 0)
-                            const savedVol = localStorage.getItem(`voice_chat_user_vol_${participant.identity}`);
-                            if (savedVol && parseInt(savedVol) > 0) {
-                                const vol = parseInt(savedVol);
-                                audioElement.volume = Math.min(1, vol / 100);
-                                // Apply saved volume via Web Audio API for boost > 100%
-                                this._applyUserVolumeGain(participant.identity, vol);
-                                console.log('[LIVEKIT] Applied saved volume for', participant.identity, ':', savedVol + '%');
-                            } else {
-                                // No saved volume - use 200% default for much louder audio
-                                audioElement.volume = 1.0;
-                                this._applyUserVolumeGain(participant.identity, 200);
-                                console.log('[LIVEKIT] Using default 200% volume for', participant.identity);
+                            // Apply volume via Web Audio API (this will control both compressor and gain)
+                            this._applyUserVolumeGain(participant.identity, 100);
                             }
 
                             // Store reference to control later
