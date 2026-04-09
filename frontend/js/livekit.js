@@ -296,7 +296,6 @@ class LiveKitClient {
                             
                             // Apply volume via Web Audio API (this will control both compressor and gain)
                             this._applyUserVolumeGain(participant.identity, 100);
-                            }
 
                             // Store reference to control later
                             this.audioElements.push({
