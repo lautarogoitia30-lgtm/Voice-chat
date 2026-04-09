@@ -1006,7 +1006,7 @@ class LiveKitClient {
             }
         });
         
-        // Fallback: DOM volume
+        // Apply volume via audio element (DOM volume) - 0 to 1 range
         this.audioElements.forEach(audio => {
             if (String(audio.participantId) === targetId) {
                 // If gain is 0, force mute to ensure absolute silence
@@ -1015,12 +1015,18 @@ class LiveKitClient {
                     audio.element.volume = 0;
                 } else {
                     audio.element.muted = false;
-                    audio.element.volume = Math.min(1, gain);
+                    // For values <= 1, use direct volume
+                    if (gain <= 1) {
+                        audio.element.volume = gain;
+                    } else {
+                        // For values > 1, clamp to 1 and use GainNode for boost
+                        audio.element.volume = 1;
+                    }
                 }
             }
         });
         
-        // NEW: Apply volume via Web Audio API gain node for real boost (>100%)
+        // Apply boost via GainNode for values > 100%
         this._applyUserVolumeGain(targetId, safeVolume);
     }
     
