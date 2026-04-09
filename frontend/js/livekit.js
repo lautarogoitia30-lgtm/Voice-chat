@@ -277,7 +277,7 @@ class LiveKitClient {
                                 console.log('[LIVEKIT] 🎛️ Created Web Audio gain node for user:', participantId, 'at 100%');
                             }
                             
-                            // Clear any saved low volume values and use 150% default
+                            // Clear any saved low volume values and use 200% default
                             localStorage.removeItem(`voice_chat_user_vol_${participant.identity}`);
                             
                             // Apply saved per-user volume if exists (and is > 0)
@@ -289,10 +289,10 @@ class LiveKitClient {
                                 this._applyUserVolumeGain(participant.identity, vol);
                                 console.log('[LIVEKIT] Applied saved volume for', participant.identity, ':', savedVol + '%');
                             } else {
-                                // No saved volume - use 150% default for louder audio
+                                // No saved volume - use 200% default for much louder audio
                                 audioElement.volume = 1.0;
-                                this._applyUserVolumeGain(participant.identity, 150);
-                                console.log('[LIVEKIT] Using default 150% volume for', participant.identity);
+                                this._applyUserVolumeGain(participant.identity, 200);
+                                console.log('[LIVEKIT] Using default 200% volume for', participant.identity);
                             }
 
                             // Store reference to control later
