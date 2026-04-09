@@ -264,6 +264,9 @@ class LiveKitClient {
                                 // Create gain node for this user
                                 const gainNode = this._audioContext.createGain();
                                 
+                                // Set default gain to 1.0 (100%) - ensure max volume
+                                gainNode.gain.setValueAtTime(1.0, this._audioContext.currentTime);
+                                
                                 // Connect: source -> gainNode -> destination (speakers)
                                 source.connect(gainNode);
                                 gainNode.connect(this._audioContext.destination);
@@ -271,17 +274,22 @@ class LiveKitClient {
                                 // Store the gain node for volume control
                                 this._userGainNodes.set(participantId, gainNode);
                                 
-                                console.log('[LIVEKIT] 🎛️ Created Web Audio gain node for user:', participantId);
+                                console.log('[LIVEKIT] 🎛️ Created Web Audio gain node for user:', participantId, 'at 100%');
                             }
                             
-                            // Apply saved per-user volume if exists
+                            // Apply saved per-user volume if exists (and is > 0)
                             const savedVol = localStorage.getItem(`voice_chat_user_vol_${participant.identity}`);
-                            if (savedVol) {
+                            if (savedVol && parseInt(savedVol) > 0) {
                                 const vol = parseInt(savedVol);
                                 audioElement.volume = Math.min(1, vol / 100);
                                 // Apply saved volume via Web Audio API for boost > 100%
                                 this._applyUserVolumeGain(participant.identity, vol);
                                 console.log('[LIVEKIT] Applied saved volume for', participant.identity, ':', savedVol + '%');
+                            } else {
+                                // No saved volume - ensure 100% volume
+                                audioElement.volume = 1.0;
+                                this._applyUserVolumeGain(participant.identity, 100);
+                                console.log('[LIVEKIT] Using default 100% volume for', participant.identity);
                             }
 
                             // Store reference to control later
