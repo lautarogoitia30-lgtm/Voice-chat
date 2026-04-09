@@ -1322,28 +1322,22 @@ async function handleJoinVoice() {
         } catch (micError) {
             console.warn('[JOIN] Microphone access error:', micError?.message || micError);
         }
-                
-                // Apply saved mic volume if not 100%
-                const savedMicVol = localStorage.getItem('voice_chat_mic_volume');
-                if (savedMicVol && parseInt(savedMicVol) !== 100 && window.livekitClient.setMicVolume) {
-                    console.log('[JOIN] Applying saved mic volume:', savedMicVol + '%');
-                    // Small delay to ensure track is fully published
-                    await new Promise(r => setTimeout(r, 300));
-                    window.livekitClient.setMicVolume(parseInt(savedMicVol));
-                }
-                
-                // Apply saved auto-gain setting
-                const autoGainEnabled = localStorage.getItem('voice_chat_auto_gain') === 'true';
-                if (autoGainEnabled && window.livekitClient.setAutoGain) {
-                    console.log('[JOIN] Applying saved auto-gain setting');
-                    await new Promise(r => setTimeout(r, 500));
-                    window.livekitClient.setAutoGain(true);
-                }
-            } else {
-                console.warn('[JOIN] Room not connected yet, skipping publishMicrophone');
-            }
-        } catch (micError) {
-            console.warn('[JOIN] Microphone access error:', micError?.message || micError);
+
+        // Apply saved mic volume if not 100%
+        const savedMicVol = localStorage.getItem('voice_chat_mic_volume');
+        if (savedMicVol && parseInt(savedMicVol) !== 100 && window.livekitClient.setMicVolume) {
+            console.log('[JOIN] Applying saved mic volume:', savedMicVol + '%');
+            // Small delay to ensure track is fully published
+            await new Promise(r => setTimeout(r, 300));
+            window.livekitClient.setMicVolume(parseInt(savedMicVol));
+        }
+        
+        // Apply saved auto-gain setting
+        const autoGainEnabled = localStorage.getItem('voice_chat_auto_gain') === 'true';
+        if (autoGainEnabled && window.livekitClient.setAutoGain) {
+            console.log('[JOIN] Applying saved auto-gain setting');
+            await new Promise(r => setTimeout(r, 500));
+            window.livekitClient.setAutoGain(true);
         }
 
         // Update state
