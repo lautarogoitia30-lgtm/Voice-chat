@@ -1293,11 +1293,35 @@ async function handleJoinVoice() {
             if (window.livekitClient.room && window.livekitClient.room.state === 'connected') {
                 console.log('[JOIN] Publishing microphone...');
                 
+                // Start Tauri audio bridge if available (processes audio in Rust)
+                if (window.tauriAudioBridge && window.tauriAudioBridge.isTauri) {
+                    try {
+                        console.log('[JOIN] Starting Tauri audio bridge (Rust audio processing)...');
+                        await window.tauriAudioBridge.start();
+                        // Connect to LiveKit client for publishing
+                        window.tauriAudioBridge.setLiveKitClient(window.livekitClient);
+                        console.log('[JOIN] Tauri audio bridge ready');
+                    } catch (e) {
+                        console.warn('[JOIN] Tauri audio bridge failed:', e?.message);
+                    }
+                }
+                
                 // Function to attempt mic publish with retry
                 const publishWithRetry = async (attempt = 1, maxAttempts = 4) => {
                     try {
                         await window.livekitClient.publishMicrophone();
                         console.log('[JOIN] Microphone published! (attempt', attempt, ')');
+                        
+                        // If Tauri bridge is running, try to publish processed audio
+                        if (window.tauriAudioBridge && window.tauriAudioBridge.isRunning) {
+                            try {
+                                await window.tauriAudioBridge.publishToLiveKit();
+                                console.log('[JOIN] ✅ Using processed audio from Rust');
+                            } catch (e) {
+                                console.warn('[JOIN] Could not publish processed audio:', e?.message);
+                            }
+                        }
+                        
                         return true;
                     } catch (error) {
                         console.warn('[JOIN] Mic publish attempt', attempt, 'failed:', error?.message);
