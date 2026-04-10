@@ -460,9 +460,10 @@ class LiveKitClient {
      * Publish local microphone to the room
      * Uses LiveKit's NATIVE setMicrophoneEnabled — creates a proper LocalAudioTrack
      * that the SFU can control (mute/unmute/subscribe/unsubscribe)
+     * If Tauri audio bridge is available, uses processed audio from Rust
      */
     async publishMicrophone() {
-        console.log('=== PUBLISH MICROPHONE (NATIVE) ===');
+        console.log('=== PUBLISH MICROPHONE ===');
         
         if (!this.room || this.room.state !== 'connected') {
             console.warn('[AUDIO] Room not connected, cannot publish');
@@ -475,6 +476,14 @@ class LiveKitClient {
                 console.error('[AUDIO] No localParticipant available');
                 return;
             }
+        }
+        
+        // Check if Tauri audio bridge is available and running
+        if (window.tauriAudioBridge && window.tauriAudioBridge.isTauri && window.tauriAudioBridge.isRunning) {
+            console.log('[AUDIO] Using Tauri processed audio from Rust');
+            // Audio is already being processed by Rust, just ensure LiveKit is ready
+            // The bridge handles the actual publishing
+            return;
         }
         
         // Wait for room to be fully connected with retry
