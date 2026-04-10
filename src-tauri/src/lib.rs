@@ -1,7 +1,6 @@
 use log::info;
-use std::sync::Arc;
+use tauri::Emitter;
 use tokio::sync::mpsc;
-use tauri::{AppHandle, Emitter};
 
 mod audio;
 
@@ -9,8 +8,11 @@ use audio::{AudioProcessor, AudioInfo};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Initialize logging
-    env_logger::init();
+    // Initialize logging - print to console in debug mode
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
+        .format_timestamp_secs()
+        .init();
+    
     info!("VoiceSpace starting...");
     
     tauri::Builder::default()
@@ -33,7 +35,9 @@ fn get_processor() -> &'static tokio::sync::Mutex<AudioProcessor> {
 }
 
 #[tauri::command]
-async fn start_audio_processor(app: AppHandle) -> Result<String, String> {
+async fn start_audio_processor(app: tauri::AppHandle) -> Result<String, String> {
+    info!("[RUST] start_audio_processor called");
+    
     let (tx, mut rx) = mpsc::channel::<Vec<f32>>(100);
     
     // Clone app handle for the background task
@@ -41,18 +45,21 @@ async fn start_audio_processor(app: AppHandle) -> Result<String, String> {
     
     // Spawn task to forward audio events to frontend
     tokio::spawn(async move {
+        info!("[RUST] Audio event forwarder task started");
         while let Some(samples) = rx.recv().await {
             // Convert f32 samples to Vec<u8> (16-bit PCM)
             let pcm_data: Vec<u8> = samples
                 .iter()
-                .flat_map(|&s| {
+                .flat_map(|&s: &f32| {
                     let sample = (s.clamp(-1.0, 1.0) * 32767.0) as i16;
                     sample.to_le_bytes()
                 })
                 .collect();
             
             // Emit to frontend
-            let _ = app_handle.emit("audio-data", pcm_data);
+            if let Err(e) = app_handle.emit("audio-data", pcm_data) {
+                info!("[RUST] Failed to emit audio data: {}", e);
+            }
         }
     });
     
@@ -63,11 +70,13 @@ async fn start_audio_processor(app: AppHandle) -> Result<String, String> {
         processor.start()?;
     }
     
+    info!("[RUST] Audio processor started successfully");
     Ok("Audio processor started with audio streaming".to_string())
 }
 
 #[tauri::command]
 async fn stop_audio_processor() -> Result<String, String> {
+    info!("[RUST] stop_audio_processor called");
     let mut processor = get_processor().lock().await;
     processor.stop();
     Ok("Audio processor stopped".to_string())
@@ -81,6 +90,7 @@ async fn get_audio_info() -> Result<AudioInfo, String> {
 
 #[tauri::command]
 async fn set_noise_gate(db: f32) -> Result<String, String> {
+    info!("[RUST] set_noise_gate called: {} dB", db);
     let mut processor = get_processor().lock().await;
     processor.set_noise_gate(db);
     Ok(format!("Noise gate set to {} dB", db))
@@ -88,6 +98,7 @@ async fn set_noise_gate(db: f32) -> Result<String, String> {
 
 #[tauri::command]
 async fn set_compressor(threshold_db: f32, ratio: f32) -> Result<String, String> {
+    info!("[RUST] set_compressor called: {} dB, {}:1", threshold_db, ratio);
     let mut processor = get_processor().lock().await;
     processor.set_compressor_threshold(threshold_db);
     processor.set_compressor_ratio(ratio);
