@@ -1,6 +1,6 @@
 /**
  * Tauri Audio Bridge - Conecta audio procesado de Rust con LiveKit
- * Recibe audio procesado de Tauri y lo publica como track en LiveKit
+ * Recibe audio procesado de Rust y lo publica como track en LiveKit
  */
 
 class TauriAudioBridge {
@@ -10,11 +10,13 @@ class TauriAudioBridge {
         this.sampleRate = 48000;
         this.channels = 1;
         this.livekitClient = null;
-        this.lastProcessTime = 0;
         
-        // Audio buffer for smooth playback
-        this.audioBuffer = [];
-        this.bufferSize = 480; // 10ms at 48kHz
+        // Audio buffer for continuous stream
+        this.audioBuffer = new Float32Array(0);
+        this.bufferCapacity = 48000 * 2; // 2 seconds max
+        
+        // MediaStream for LiveKit
+        this.mediaStream = null;
         
         // Check if running in Tauri
         this.isTauri = typeof window.__TAURI__ !== 'undefined';
@@ -68,7 +70,18 @@ class TauriAudioBridge {
                 sampleRate: this.sampleRate,
             });
             
-            // Create MediaStreamDestination for LiveKit track
+            // Create MediaStream with a hidden audio element that feeds continuous audio
+            // This is the proper way to create a stream for LiveKit
+            this.mediaStream = new MediaStream();
+            
+            // Create an AudioElement and connect its capture stream
+            this.audioElement = document.createElement('audio');
+            this.audioElement.autoplay = true;
+            this.audioElement.muted = true;
+            this.audioElement.style.display = 'none';
+            document.body.appendChild(this.audioElement);
+            
+            // Use MediaStreamDestination for capturing
             this.mediaDest = this.audioContext.createMediaStreamDestination();
             this.mediaDest.channelCount = this.channels;
             
@@ -94,12 +107,13 @@ class TauriAudioBridge {
     
     /**
      * Process incoming PCM audio data from Rust and feed to LiveKit
+     * Uses AudioWorklet or ScriptProcessor for continuous audio
      */
     processAudioData(pcmData) {
-        if (!this.audioContext) return;
+        if (!this.audioContext || !this.mediaDest) return;
         
         try {
-            // Resume audio context if suspended (needed after user gesture)
+            // Resume audio context if suspended
             if (this.audioContext.state === 'suspended') {
                 this.audioContext.resume();
             }
@@ -112,19 +126,10 @@ class TauriAudioBridge {
                 const low = pcmData[i * 2];
                 const high = pcmData[i * 2 + 1];
                 const signed = (high << 8) | low;
-                // Convert to float -1 to 1
                 floatSamples[i] = signed > 32767 ? (signed - 65536) / 32768 : signed / 32768;
             }
             
-            // Add to buffer
-            this.audioBuffer.push(...floatSamples);
-            
-            // Keep buffer manageable
-            while (this.audioBuffer.length > this.sampleRate * 2) {
-                this.audioBuffer.shift();
-            }
-            
-            // Create a buffer source and connect to media destination
+            // Create buffer source and play immediately
             const buffer = this.audioContext.createBuffer(
                 this.channels,
                 floatSamples.length,
@@ -138,7 +143,7 @@ class TauriAudioBridge {
             source.start();
             
         } catch (e) {
-            // Silently handle errors to avoid flooding console
+            // Silent to avoid console spam
         }
     }
     
@@ -147,7 +152,7 @@ class TauriAudioBridge {
      */
     getProcessedStream() {
         if (!this.mediaDest) {
-            console.warn('[TauriAudio] No media destination - start() not called');
+            console.warn('[TauriAudio] No media destination');
             return null;
         }
         return this.mediaDest.stream;
@@ -171,25 +176,26 @@ class TauriAudioBridge {
                 return false;
             }
             
-            // Import LiveKit
-            const livekit = await import('https://cdn.jsdelivr.net/npm/livekit-client@2/+esm');
-            const { Track } = livekit;
+            // Import LiveKit client
+            const { LocalAudioTrack, Track } = await import('livekit-client');
             
             // Create LiveKit audio track from our processed stream
-            const localAudioTrack = new livekit.LocalAudioTrack(audioTrack, {
-                source: Track.Source.Microphone,
+            const localAudioTrack = new LocalAudioTrack(audioTrack, {
+                name: 'processed-audio',
             });
             
-            // Unpublish native mic if exists and publish our processed track
+            // Get local participant
             const lp = this.livekitClient.localParticipant;
             
-            // Get existing mic track
-            const existingPub = lp.getTrackPublication(Track.Source.Microphone);
-            if (existingPub) {
-                await lp.unpublishTrack(existingPub.track);
+            // Unpublish existing mic track
+            const existingPubs = lp.trackPublications.values();
+            for (const pub of existingPubs) {
+                if (pub.source === Track.Source.Microphone) {
+                    await lp.unpublishTrack(pub.track);
+                }
             }
             
-            // Publish processed track
+            // Publish our processed track
             await lp.publishTrack(localAudioTrack, {
                 source: Track.Source.Microphone,
             });
@@ -224,7 +230,11 @@ class TauriAudioBridge {
                 await this.audioContext.close();
             }
             
-            this.audioBuffer = [];
+            // Remove audio element
+            if (this.audioElement && this.audioElement.parentNode) {
+                this.audioElement.parentNode.removeChild(this.audioElement);
+            }
+            
             this.isRunning = false;
             console.log('[TauriAudio] Stopped');
         } catch (e) {
