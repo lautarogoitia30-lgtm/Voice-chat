@@ -11,9 +11,8 @@ class TauriAudioBridge {
         this.channels = 1;
         this.livekitClient = null;
         
-        // Audio buffer for continuous stream
+        // Audio buffer
         this.audioBuffer = new Float32Array(0);
-        this.bufferCapacity = 48000 * 2; // 2 seconds max
         
         // MediaStream for LiveKit
         this.mediaStream = null;
@@ -26,6 +25,8 @@ class TauriAudioBridge {
      * Initialize - check Tauri availability
      */
     async init() {
+        console.log('[TauriAudio] init() called, isTauri:', this.isTauri);
+        
         if (!this.isTauri) {
             console.log('[TauriAudio] Not in Tauri - using browser LiveKit native');
             return false;
@@ -33,17 +34,19 @@ class TauriAudioBridge {
         
         try {
             const tauri = await import('@tauri-apps/api/core');
+            const { listen } = await import('@tauri-apps/api/event');
             this.tauri = tauri;
+            this.listenFn = listen;
             console.log('[TauriAudio] ✅ Tauri API ready');
             return true;
         } catch (e) {
-            console.warn('[TauriAudio] Tauri not available:', e);
+            console.error('[TauriAudio] Tauri not available:', e);
             return false;
         }
     }
     
     /**
-     * Set the LiveKit client to use for publishing
+     * Set the LiveKit client
      */
     setLiveKitClient(client) {
         this.livekitClient = client;
@@ -51,9 +54,11 @@ class TauriAudioBridge {
     }
     
     /**
-     * Start the audio pipeline - capture from Rust, process, publish to LiveKit
+     * Start the audio pipeline
      */
     async start() {
+        console.log('[TauriAudio] start() called, isRunning:', this.isRunning, 'isTauri:', this.isTauri);
+        
         if (this.isRunning) {
             console.log('[TauriAudio] Already running');
             return;
@@ -65,35 +70,29 @@ class TauriAudioBridge {
         }
         
         try {
-            // Create audio context for processing
+            // Create audio context
             this.audioContext = new (window.AudioContext || window.webkitAudioContext)({
                 sampleRate: this.sampleRate,
             });
             
-            // Create MediaStream with a hidden audio element that feeds continuous audio
-            // This is the proper way to create a stream for LiveKit
-            this.mediaStream = new MediaStream();
+            console.log('[TauriAudio] AudioContext created, state:', this.audioContext.state);
             
-            // Create an AudioElement and connect its capture stream
-            this.audioElement = document.createElement('audio');
-            this.audioElement.autoplay = true;
-            this.audioElement.muted = true;
-            this.audioElement.style.display = 'none';
-            document.body.appendChild(this.audioElement);
-            
-            // Use MediaStreamDestination for capturing
+            // Create MediaStreamDestination
             this.mediaDest = this.audioContext.createMediaStreamDestination();
             this.mediaDest.channelCount = this.channels;
+            console.log('[TauriAudio] MediaStreamDestination created');
+            console.log('[TauriAudio] Stream tracks:', this.mediaDest.stream.getAudioTracks().length);
             
             // Start listening to audio events from Rust
-            const { listen } = await import('@tauri-apps/api/event');
-            
-            this.audioListener = await listen('audio-data', (event) => {
+            this.audioListener = await this.listenFn('audio-data', (event) => {
                 this.processAudioData(event.payload);
             });
             
+            console.log('[TauriAudio] Listener registered');
+            
             // Start audio processor in Rust
-            await this.tauri.invoke('start_audio_processor');
+            const result = await this.tauri.invoke('start_audio_processor');
+            console.log('[TauriAudio] Rust start result:', result);
             
             this.isRunning = true;
             console.log('[TauriAudio] ✅ Started - audio pipeline active');
@@ -106,15 +105,18 @@ class TauriAudioBridge {
     }
     
     /**
-     * Process incoming PCM audio data from Rust and feed to LiveKit
-     * Uses AudioWorklet or ScriptProcessor for continuous audio
+     * Process incoming PCM audio data from Rust
      */
     processAudioData(pcmData) {
-        if (!this.audioContext || !this.mediaDest) return;
+        if (!this.audioContext || !this.mediaDest) {
+            console.log('[TauriAudio] processAudioData: no audioContext or mediaDest');
+            return;
+        }
         
         try {
             // Resume audio context if suspended
             if (this.audioContext.state === 'suspended') {
+                console.log('[TauriAudio] Resuming audio context');
                 this.audioContext.resume();
             }
             
@@ -129,7 +131,7 @@ class TauriAudioBridge {
                 floatSamples[i] = signed > 32767 ? (signed - 65536) / 32768 : signed / 32768;
             }
             
-            // Create buffer source and play immediately
+            // Create buffer source and connect to media destination
             const buffer = this.audioContext.createBuffer(
                 this.channels,
                 floatSamples.length,
@@ -143,54 +145,63 @@ class TauriAudioBridge {
             source.start();
             
         } catch (e) {
-            // Silent to avoid console spam
+            console.error('[TauriAudio] processAudioData error:', e);
         }
     }
     
     /**
-     * Get the processed audio stream for LiveKit publishing
+     * Get the processed audio stream
      */
     getProcessedStream() {
         if (!this.mediaDest) {
             console.warn('[TauriAudio] No media destination');
             return null;
         }
-        return this.mediaDest.stream;
+        const stream = this.mediaDest.stream;
+        console.log('[TauriAudio] getProcessedStream, tracks:', stream.getAudioTracks().length);
+        return stream;
     }
     
     /**
-     * Publish processed audio to LiveKit (replaces native mic)
+     * Publish processed audio to LiveKit
      */
     async publishToLiveKit() {
+        console.log('[TauriAudio] publishToLiveKit() called');
+        
         if (!this.livekitClient || !this.mediaDest) {
-            console.warn('[TauriAudio] No LiveKit client or no audio stream');
+            console.error('[TauriAudio] No LiveKit client or no media destination');
             return false;
         }
         
         try {
             const stream = this.mediaDest.stream;
-            const audioTrack = stream.getAudioTracks()[0];
+            const tracks = stream.getAudioTracks();
+            console.log('[TauriAudio] Stream has', tracks.length, 'audio tracks');
             
-            if (!audioTrack) {
-                console.error('[TauriAudio] No audio track in stream');
+            if (tracks.length === 0) {
+                console.error('[TauriAudio] No audio tracks in stream');
                 return false;
             }
             
-            // Import LiveKit client
+            const audioTrack = tracks[0];
+            console.log('[TauriAudio] Using track:', audioTrack.label);
+            
+            // Create LiveKit audio track
             const { LocalAudioTrack, Track } = await import('livekit-client');
             
-            // Create LiveKit audio track from our processed stream
             const localAudioTrack = new LocalAudioTrack(audioTrack, {
                 name: 'processed-audio',
             });
             
             // Get local participant
             const lp = this.livekitClient.localParticipant;
+            console.log('[TauriAudio] Local participant:', lp.identity);
             
             // Unpublish existing mic track
             const existingPubs = lp.trackPublications.values();
             for (const pub of existingPubs) {
                 if (pub.source === Track.Source.Microphone) {
+                    console.log('[TauriAudio] Unpublishing existing mic track');
                     await lp.unpublishTrack(pub.track);
                 }
             }
@@ -230,11 +241,6 @@ class TauriAudioBridge {
                 await this.audioContext.close();
             }
             
-            // Remove audio element
-            if (this.audioElement && this.audioElement.parentNode) {
-                this.audioElement.parentNode.removeChild(this.audioElement);
-            }
-            
             this.isRunning = false;
             console.log('[TauriAudio] Stopped');
         } catch (e) {
@@ -270,9 +276,10 @@ class TauriAudioBridge {
 
 // Singleton instance
 window.tauriAudioBridge = new TauriAudioBridge();
-console.log('[TauriAudio] Bridge initialized');
+console.log('[TauriAudio] Bridge instance created');
 
 // Auto-init when module loads
 (async () => {
+    console.log('[TauriAudio] Auto-init running');
     await window.tauriAudioBridge.init();
 })();
