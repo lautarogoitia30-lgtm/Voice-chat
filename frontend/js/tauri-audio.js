@@ -17,39 +17,32 @@ class TauriAudioBridge {
         // MediaStream for LiveKit
         this.mediaStream = null;
         
-        // Check if running in Tauri - multiple detection methods
-        this.isTauri = typeof window.__TAURI__ !== 'undefined' || 
-                       typeof window.__TAURI_INTERNALS__ !== 'undefined' ||
-                       (window.navigator && window.navigator.userAgent && window.navigator.userAgent.includes('Tauri'));
+        // Tauri APIs (set in init)
+        this.isTauri = false;
+        this.tauri = null;
+        this.listenFn = null;
     }
     
     /**
-     * Initialize - check Tauri availability
+     * Initialize - try to load Tauri APIs
      */
     async init() {
-        alert('[TauriAudio] init() started - isTauri detection check');
-        console.log('[TauriAudio] init() called, isTauri:', this.isTauri);
-        alert('[TauriAudio] isTauri = ' + this.isTauri);
-        
-        if (!this.isTauri) {
-            console.log('[TauriAudio] Not in Tauri - using browser LiveKit native');
-            alert('[TauriAudio] NO es Tauri - modo navegador');
-            return false;
-        }
-        
-        alert('[TauriAudio] ES Tauri - comenzando...');
+        alert('[TauriAudio] Intentando cargar Tauri...');
         
         try {
-            const tauri = await import('@tauri-apps/api/core');
-            const { listen } = await import('@tauri-apps/api/event');
-            this.tauri = tauri;
-            this.listenFn = listen;
+            // Try to import Tauri APIs
+            this.tauri = await import('@tauri-apps/api/core');
+            const eventModule = await import('@tauri-apps/api/event');
+            this.listenFn = eventModule.listen;
+            
+            this.isTauri = true;
+            alert('✅ Tauri detectado correctamente! API lista');
             console.log('[TauriAudio] ✅ Tauri API ready');
-            alert('[TauriAudio] ✅ Tauri API lista!');
             return true;
         } catch (e) {
-            console.error('[TauriAudio] Tauri not available:', e);
-            alert('[TauriAudio] ERROR: ' + e.message);
+            alert('❌ Tauri no disponible: ' + e.message);
+            console.log('[TauriAudio] Tauri not available:', e);
+            this.isTauri = false;
             return false;
         }
     }
@@ -66,18 +59,15 @@ class TauriAudioBridge {
      * Start the audio pipeline
      */
     async start() {
-        alert('[TauriAudio] start() llamado');
-        console.log('[TauriAudio] start() called, isRunning:', this.isRunning, 'isTauri:', this.isTauri);
+        alert('[TauriAudio] start() llamado, isTauri: ' + this.isTauri);
         
         if (this.isRunning) {
             console.log('[TauriAudio] Already running');
-            alert('[TauriAudio] Ya estaba corriendo');
             return;
         }
         
         if (!this.isTauri) {
             console.log('[TauriAudio] Browser mode - use LiveKit native mic');
-            alert('[TauriAudio] No es Tauri - saliendo');
             return;
         }
         
@@ -87,30 +77,30 @@ class TauriAudioBridge {
                 sampleRate: this.sampleRate,
             });
             
-            console.log('[TauriAudio] AudioContext created, state:', this.audioContext.state);
+            alert('[TauriAudio] AudioContext creado');
             
             // Create MediaStreamDestination
             this.mediaDest = this.audioContext.createMediaStreamDestination();
             this.mediaDest.channelCount = this.channels;
-            console.log('[TauriAudio] MediaStreamDestination created');
-            console.log('[TauriAudio] Stream tracks:', this.mediaDest.stream.getAudioTracks().length);
+            alert('[TauriAudio] MediaStreamDestination creado');
             
             // Start listening to audio events from Rust
             this.audioListener = await this.listenFn('audio-data', (event) => {
                 this.processAudioData(event.payload);
             });
             
-            console.log('[TauriAudio] Listener registered');
+            alert('[TauriAudio] Listener registrado');
             
             // Start audio processor in Rust
             const result = await this.tauri.invoke('start_audio_processor');
-            console.log('[TauriAudio] Rust start result:', result);
+            alert('[TauriAudio] Rust iniciado: ' + result);
             
             this.isRunning = true;
-            console.log('[TauriAudio] ✅ Started - audio pipeline active');
+            alert('[TauriAudio] ✅ Audio pipeline ACTIVO!');
             
             return true;
         } catch (e) {
+            alert('[TauriAudio] Error: ' + e.message);
             console.error('[TauriAudio] Failed to start:', e);
             return false;
         }
@@ -121,14 +111,12 @@ class TauriAudioBridge {
      */
     processAudioData(pcmData) {
         if (!this.audioContext || !this.mediaDest) {
-            console.log('[TauriAudio] processAudioData: no audioContext or mediaDest');
             return;
         }
         
         try {
             // Resume audio context if suspended
             if (this.audioContext.state === 'suspended') {
-                console.log('[TauriAudio] Resuming audio context');
                 this.audioContext.resume();
             }
             
@@ -162,19 +150,6 @@ class TauriAudioBridge {
     }
     
     /**
-     * Get the processed audio stream
-     */
-    getProcessedStream() {
-        if (!this.mediaDest) {
-            console.warn('[TauriAudio] No media destination');
-            return null;
-        }
-        const stream = this.mediaDest.stream;
-        console.log('[TauriAudio] getProcessedStream, tracks:', stream.getAudioTracks().length);
-        return stream;
-    }
-    
-    /**
      * Publish processed audio to LiveKit
      */
     async publishToLiveKit() {
@@ -188,7 +163,6 @@ class TauriAudioBridge {
         try {
             const stream = this.mediaDest.stream;
             const tracks = stream.getAudioTracks();
-            console.log('[TauriAudio] Stream has', tracks.length, 'audio tracks');
             
             if (tracks.length === 0) {
                 console.error('[TauriAudio] No audio tracks in stream');
@@ -196,7 +170,6 @@ class TauriAudioBridge {
             }
             
             const audioTrack = tracks[0];
-            console.log('[TauriAudio] Using track:', audioTrack.label);
             
             // Create LiveKit audio track
             const { LocalAudioTrack, Track } = await import('livekit-client');
@@ -207,13 +180,11 @@ class TauriAudioBridge {
             
             // Get local participant
             const lp = this.livekitClient.localParticipant;
-            console.log('[TauriAudio] Local participant:', lp.identity);
             
             // Unpublish existing mic track
             const existingPubs = lp.trackPublications.values();
             for (const pub of existingPubs) {
                 if (pub.source === Track.Source.Microphone) {
-                    console.log('[TauriAudio] Unpublishing existing mic track');
                     await lp.unpublishTrack(pub.track);
                 }
             }
@@ -223,7 +194,7 @@ class TauriAudioBridge {
                 source: Track.Source.Microphone,
             });
             
-            console.log('[TauriAudio] ✅ Published processed audio to LiveKit');
+            alert('[TauriAudio] ✅ Audio procesado publicado en LiveKit!');
             return true;
         } catch (e) {
             console.error('[TauriAudio] Failed to publish:', e);
@@ -238,57 +209,30 @@ class TauriAudioBridge {
         if (!this.isRunning) return;
         
         try {
-            // Stop listening
             if (this.audioListener) {
                 this.audioListener();
             }
             
-            // Stop Rust processor
             if (this.isTauri) {
                 await this.tauri.invoke('stop_audio_processor');
             }
             
-            // Close audio context
             if (this.audioContext) {
                 await this.audioContext.close();
             }
             
             this.isRunning = false;
-            console.log('[TauriAudio] Stopped');
+            alert('[TauriAudio] Detenido');
         } catch (e) {
             console.error('[TauriAudio] Error stopping:', e);
         }
-    }
-    
-    /**
-     * Configure audio processing parameters
-     */
-    async setNoiseGate(db) {
-        if (this.isTauri) {
-            await this.tauri.invoke('set_noise_gate', { db });
-        }
-    }
-    
-    async setCompressor(thresholdDb, ratio) {
-        if (this.isTauri) {
-            await this.tauri.invoke('set_compressor', { thresholdDb, ratio });
-        }
-    }
-    
-    /**
-     * Get audio info from Rust
-     */
-    async getInfo() {
-        if (this.isTauri) {
-            return await this.tauri.invoke('get_audio_info');
-        }
-        return null;
     }
 }
 
 // Singleton instance
 window.tauriAudioBridge = new TauriAudioBridge();
 console.log('[TauriAudio] Bridge instance created');
+alert('[TauriAudio] Instancia creada');
 
 // Auto-init when module loads
 (async () => {
