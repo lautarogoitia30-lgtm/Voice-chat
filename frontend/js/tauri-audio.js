@@ -27,12 +27,17 @@ class TauriAudioBridge {
      * Initialize - check Tauri availability
      */
     async init() {
+        alert('[TauriAudio] init() started - isTauri detection check');
         console.log('[TauriAudio] init() called, isTauri:', this.isTauri);
+        alert('[TauriAudio] isTauri = ' + this.isTauri);
         
         if (!this.isTauri) {
             console.log('[TauriAudio] Not in Tauri - using browser LiveKit native');
+            alert('[TauriAudio] NO es Tauri - modo navegador');
             return false;
         }
+        
+        alert('[TauriAudio] ES Tauri - comenzando...');
         
         try {
             const tauri = await import('@tauri-apps/api/core');
@@ -40,9 +45,11 @@ class TauriAudioBridge {
             this.tauri = tauri;
             this.listenFn = listen;
             console.log('[TauriAudio] ✅ Tauri API ready');
+            alert('[TauriAudio] ✅ Tauri API lista!');
             return true;
         } catch (e) {
             console.error('[TauriAudio] Tauri not available:', e);
+            alert('[TauriAudio] ERROR: ' + e.message);
             return false;
         }
     }
@@ -59,15 +66,18 @@ class TauriAudioBridge {
      * Start the audio pipeline
      */
     async start() {
+        alert('[TauriAudio] start() llamado');
         console.log('[TauriAudio] start() called, isRunning:', this.isRunning, 'isTauri:', this.isTauri);
         
         if (this.isRunning) {
             console.log('[TauriAudio] Already running');
+            alert('[TauriAudio] Ya estaba corriendo');
             return;
         }
         
         if (!this.isTauri) {
             console.log('[TauriAudio] Browser mode - use LiveKit native mic');
+            alert('[TauriAudio] No es Tauri - saliendo');
             return;
         }
         
