@@ -17,8 +17,10 @@ class TauriAudioBridge {
         // MediaStream for LiveKit
         this.mediaStream = null;
         
-        // Check if running in Tauri
-        this.isTauri = typeof window.__TAURI__ !== 'undefined';
+        // Check if running in Tauri - multiple detection methods
+        this.isTauri = typeof window.__TAURI__ !== 'undefined' || 
+                       typeof window.__TAURI_INTERNALS__ !== 'undefined' ||
+                       (window.navigator && window.navigator.userAgent && window.navigator.userAgent.includes('Tauri'));
     }
     
     /**
