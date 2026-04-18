@@ -3,6 +3,8 @@
  * Recibe audio procesado de Rust y lo publica como track en LiveKit
  */
 
+alert('🎵 Tauri-audio.js CARGANDO...');
+
 class TauriAudioBridge {
     constructor() {
         this.audioContext = null;
@@ -30,13 +32,17 @@ class TauriAudioBridge {
         alert('[TauriAudio] Intentando cargar Tauri...');
         
         // Check if Tauri API is available globally (loaded from script)
+        alert('🔍 Buscando window.tauri...');
         if (window.tauri) {
+            alert('✅ window.tauri ENCONTRADO!');
             this.tauri = window.tauri;
             this.listenFn = window.tauri.listen;
             this.isTauri = true;
             alert('✅ Tauri detectado correctamente! API lista');
             console.log('[TauriAudio] ✅ Tauri API ready');
             return true;
+        } else {
+            alert('❌ window.tauri NO ENCONTRADO!');
         }
         
         // Fallback: try dynamic import
