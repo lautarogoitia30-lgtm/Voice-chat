@@ -29,8 +29,18 @@ class TauriAudioBridge {
     async init() {
         alert('[TauriAudio] Intentando cargar Tauri...');
         
+        // Check if Tauri API is available globally (loaded from script)
+        if (window.tauri) {
+            this.tauri = window.tauri;
+            this.listenFn = window.tauri.listen;
+            this.isTauri = true;
+            alert('✅ Tauri detectado correctamente! API lista');
+            console.log('[TauriAudio] ✅ Tauri API ready');
+            return true;
+        }
+        
+        // Fallback: try dynamic import
         try {
-            // Try to import Tauri APIs
             this.tauri = await import('@tauri-apps/api/core');
             const eventModule = await import('@tauri-apps/api/event');
             this.listenFn = eventModule.listen;
@@ -43,6 +53,9 @@ class TauriAudioBridge {
             alert('❌ Tauri no disponible: ' + e.message);
             console.log('[TauriAudio] Tauri not available:', e);
             this.isTauri = false;
+            return false;
+        }
+    }
             return false;
         }
     }
