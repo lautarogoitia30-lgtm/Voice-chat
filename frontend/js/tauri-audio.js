@@ -62,9 +62,6 @@ class TauriAudioBridge {
             return false;
         }
     }
-            return false;
-        }
-    }
     
     /**
      * Set the LiveKit client
