@@ -32,17 +32,32 @@ class TauriAudioBridge {
         alert('[TauriAudio] Intentando cargar Tauri...');
         
         // Check if Tauri API is available globally (loaded from script)
-        alert('🔍 Buscando window.tauri...');
+        // Tauri v2 uses window.__TAURI__, Tauri v1 uses window.tauri
+        alert('🔍 Buscando window.__TAURI__ (Tauri v2)...');
+        if (window.__TAURI__) {
+            alert('✅ window.__TAURI__ ENCONTRADO!');
+            this.tauri = window.__TAURI__;
+            this.listenFn = window.__TAURI__.listen;
+            this.isTauri = true;
+            alert('✅ Tauri v2 detectado correctamente! API lista');
+            console.log('[TauriAudio] ✅ Tauri v2 API ready');
+            return true;
+        } else {
+            alert('❌ window.__TAURI__ NO ENCONTRADO!');
+        }
+
+        // Fallback: check window.tauri (Tauri v1)
+        alert('🔍 Buscando window.tauri (Tauri v1)...');
         if (window.tauri) {
-            alert('✅ window.tauri ENCONTRADO!');
+            alert('✅ window.tauri ENCONTRADO (v1)!');
             this.tauri = window.tauri;
             this.listenFn = window.tauri.listen;
             this.isTauri = true;
-            alert('✅ Tauri detectado correctamente! API lista');
-            console.log('[TauriAudio] ✅ Tauri API ready');
+            alert('✅ Tauri v1 detectado correctamente! API lista');
+            console.log('[TauriAudio] ✅ Tauri v1 API ready');
             return true;
         } else {
-            alert('❌ window.tauri NO ENCONTRADO!');
+            alert('❌ window.tauri (v1) NO ENCONTRADO!');
         }
         
         // Fallback: try dynamic import
