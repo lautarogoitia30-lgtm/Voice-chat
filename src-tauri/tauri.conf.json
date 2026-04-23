@@ -6,7 +6,7 @@
   "build": {
     "beforeBuildCommand": "",
     "beforeDevCommand": "",
-    "frontendDist": "https://voice-chat-production-a794.up.railway.app"
+    "frontendDist": "../frontend"
   },
   "app": {
     "windows": [

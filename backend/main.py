@@ -45,8 +45,9 @@ app = FastAPI(
 )
 
 # Configure CORS - allow specific origins in production
-# Get allowed origins from env or default to common dev origins
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:8000").split(",")
+# Get allowed origins from env or default to common dev origins + Railway
+DEFAULT_ORIGINS = "http://localhost:3000,http://localhost:8000,https://voice-chat-production-a794.up.railway.app"
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", DEFAULT_ORIGINS).split(",")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
