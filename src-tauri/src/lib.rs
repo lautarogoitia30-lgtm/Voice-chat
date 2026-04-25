@@ -1,5 +1,6 @@
 use tauri::Emitter;
 use tokio::sync::mpsc;
+use tauri_plugin_http::init as http_init;
 
 mod audio;
 mod logger;
@@ -12,6 +13,7 @@ pub fn run() {
     write_log_timestamp("VoiceSpace starting...");
     
     tauri::Builder::default()
+        .plugin(http_init())
         .invoke_handler(tauri::generate_handler![
             start_audio_processor,
             stop_audio_processor,

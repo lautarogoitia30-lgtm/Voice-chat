@@ -54,10 +54,22 @@ async function apiRequest(endpoint, options = {}) {
         headers['Authorization'] = `Bearer ${authToken}`;
     }
     
-    const response = await fetch(url, {
-        ...options,
-        headers,
-    });
+    alert('[API] Request: ' + url);
+    alert('[API] Method: ' + (options.method || 'GET'));
+    
+    let response;
+    try {
+        response = await fetch(url, {
+            ...options,
+            headers,
+        });
+    } catch (error) {
+        alert('[API] ERROR: ' + error.message);
+        console.error('[API] Network error:', error);
+        throw new Error('Network error: ' + error.message);
+    }
+    
+    alert('[API] Response status: ' + response.status);
     
     // Handle 401 - unauthorized
     if (response.status === 401) {

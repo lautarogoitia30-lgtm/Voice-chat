@@ -158,8 +158,9 @@ function getElements() {
 
 // Initialize app
 function init() {
+    alert('🚀 APP INIT STARTING');
     const elements = getElements();
-    console.log('init called, isAuthenticated:', API.isAuthenticated());
+    alert('🚀 elements loaded, isAuthenticated: ' + API.isAuthenticated());
     
     // If authenticated, ensure currentUser is set from localStorage
     if (API.isAuthenticated()) {
@@ -175,11 +176,10 @@ function init() {
             validAvatarUrl = savedAvatarUrl;
         }
         
-        if (savedUsername && savedUserId) {
+if (savedUsername && savedUserId) {
             state.currentUser = { 
                 username: savedUsername, 
-                user_id: parseInt(savedUserId, 10),
-                avatar_url: validAvatarUrl
+                user_id: parseInt(savedUserId, 10)
             };
             console.log('Restored user from localStorage:', state.currentUser);
         }
@@ -387,27 +387,20 @@ async function handleLoginSubmit(e, elements) {
     e.preventDefault();
     const username = elements.loginUsername.value;
     const password = elements.loginPassword.value;
+    
+    alert('🔐 LOGIN: username=' + username);
+    
     try {
-        console.log('=== LOGIN SUBMIT ===');
-        console.log('Username from form:', username);
-        console.log('Password:', password ? 'provided' : 'empty');
-        
+        alert('🔐 calling API.auth.login...');
         const response = await API.auth.login(username, password);
-        console.log('=== LOGIN RESPONSE ===');
-        console.log('Full response:', response);
-        console.log('Response.user_id:', response.user_id, typeof response.user_id);
-        console.log('Response.username:', response.username, typeof response.username);
+        alert('🔐 LOGIN SUCCESS: ' + JSON.stringify(response));
         
         // Save token and username
         API.setAuthToken(response.access_token);
-        
+
         // DEBUG: Verify we're getting the correct user_id
         const loginUserId = response.user_id;
         const loginUsername = response.username || username;
-        
-        console.log('=== SETTING STATE ===');
-        console.log('Setting user_id:', loginUserId, 'type:', typeof loginUserId);
-        console.log('Setting username:', loginUsername);
         
         // Use the username from the form since response might not have it
         state.currentUser = { username: loginUsername, user_id: loginUserId };
@@ -416,34 +409,15 @@ async function handleLoginSubmit(e, elements) {
         localStorage.setItem('voice_chat_username', loginUsername);
         localStorage.setItem('voice_chat_user_id', String(loginUserId));
         
-        // Fetch user profile to get avatar (with cache busting)
-        try {
-            const profileResponse = await fetch('https://voice-chat-production-a794.up.railway.app/users/me?v=' + Date.now(), {
-                headers: { 'Authorization': 'Bearer ' + response.access_token }
-            });
-            if (profileResponse.ok) {
-                const profile = await profileResponse.json();
-                state.currentUser.avatar_url = profile.avatar_url;
-                if (profile.avatar_url) {
-                    localStorage.setItem('voice_chat_avatar_url', profile.avatar_url);
-                }
-            }
-        } catch (e) {
-            console.log('Could not fetch profile:', e);
-        }
-        
-        console.log('localStorage voice_chat_user_id:', localStorage.getItem('voice_chat_user_id'));
-        console.log('Token saved, localStorage voice_chat_token:', localStorage.getItem('voice_chat_token') ? 'present' : 'missing');
-        console.log('User logged in:', state.currentUser);
+        alert('🔐 Mostrando app...');
         
         // Force show app view - DON'T go back even if there's an error
-        console.log('Calling showAppView...');
         showAppView();
         
         // Prevent going back to auth view
-        console.log('Login complete, staying on app view');
         
     } catch (error) {
+        alert('🔐 ERROR: ' + error.message);
         console.error('Login error:', error);
         elements.loginError.textContent = error.message;
         elements.loginError.classList.remove('hidden');
@@ -2692,7 +2666,7 @@ async function handleEditChannel(e) {
         await API.channels.update(channelId, { name: name, type: type });
         
         // Update local state
-        if (state.selectedChannel && state.selectedChannel.id == channelId) {
+        if (state.selectedChannel && state.selectedChannel.id === channelId) {
             state.selectedChannel.name = name;
             state.selectedChannel.type = type;
         }
@@ -2721,7 +2695,7 @@ async function deleteChannel() {
         await API.channels.delete(channelId);
         
         // Clear selection if this channel was selected
-        if (state.selectedChannel && state.selectedChannel.id == channelId) {
+        if (state.selectedChannel && state.selectedChannel.id === channelId) {
             state.selectedChannel = null;
         }
         
