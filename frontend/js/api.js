@@ -3,7 +3,7 @@
  * Handles all HTTP requests with JWT authentication.
  */
 
-const API_BASE = 'https://voice-chat-production-a794.up.railway.app';
+const API_BASE = 'http://localhost:3000';
 
 // JWT token storage
 let authToken = localStorage.getItem('voice_chat_token');
@@ -211,7 +211,7 @@ const groupsAPI = {
     async createChannel(groupId, name, type = 'text') {
         const response = await apiRequest(`/groups/${groupId}/channels`, {
             method: 'POST',
-            body: JSON.stringify({ name, channel_type: type }),
+            body: JSON.stringify({ name, type: type }),
         });
         
         if (!response.ok) {
@@ -311,9 +311,10 @@ const channelsAPI = {
      * Create a new channel
      */
     async create(groupId, name, type = 'text') {
+        // Backend expects 'type', not 'channel_type'
         const response = await apiRequest(`/groups/${groupId}/channels`, {
             method: 'POST',
-            body: JSON.stringify({ name, channel_type: type }),
+            body: JSON.stringify({ name, type: type }),
         });
         
         if (!response.ok) {
