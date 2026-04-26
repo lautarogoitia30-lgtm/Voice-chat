@@ -8,6 +8,12 @@ const API_BASE = 'https://voice-chat-production-a794.up.railway.app';
 // JWT token storage
 let authToken = localStorage.getItem('voice_chat_token');
 
+// For Tauri audio only, not for HTTP
+let isTauriAudio = false;
+if (window.__TAURI__ || window.tauri) {
+    isTauriAudio = true;
+}
+
 /**
  * Save authentication token
  */
@@ -44,32 +50,24 @@ function isAuthenticated() {
 async function apiRequest(endpoint, options = {}) {
     const url = `${API_BASE}${endpoint}`;
     
-    const headers = {
-        'Content-Type': 'application/json',
-        ...options.headers,
-    };
-    
-    // Add auth token if available
-    if (authToken) {
-        headers['Authorization'] = `Bearer ${authToken}`;
-    }
-    
-    alert('[API] Request: ' + url);
-    alert('[API] Method: ' + (options.method || 'GET'));
-    
     let response;
     try {
+        // Use native fetch
+        const headers = {
+            'Content-Type': 'application/json',
+            ...options.headers,
+        };
+        if (authToken) {
+            headers['Authorization'] = `Bearer ${authToken}`;
+        }
+        
         response = await fetch(url, {
             ...options,
             headers,
         });
     } catch (error) {
-        alert('[API] ERROR: ' + error.message);
-        console.error('[API] Network error:', error);
         throw new Error('Network error: ' + error.message);
     }
-    
-    alert('[API] Response status: ' + response.status);
     
     // Handle 401 - unauthorized
     if (response.status === 401) {
@@ -164,68 +162,6 @@ const groupsAPI = {
     },
     
     /**
-     * Invite a user to a group
-     */
-    async invite(groupId, username) {
-        const response = await apiRequest(`/groups/${groupId}/invite`, {
-            method: 'POST',
-            body: JSON.stringify({ username }),
-        });
-        
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Failed to invite user');
-        }
-        
-        return response.json();
-    },
-    
-    /**
-     * Get group members
-     */
-    async getMembers(groupId) {
-        const response = await apiRequest(`/groups/${groupId}/members`);
-        
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Failed to fetch members');
-        }
-        
-        return response.json();
-    },
-    
-    /**
-     * Get group details
-     */
-    async get(groupId) {
-        const response = await apiRequest(`/groups/${groupId}`);
-        
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Failed to fetch group');
-        }
-        
-        return response.json();
-    },
-    
-    /**
-     * Update a group
-     */
-    async update(groupId, data) {
-        const response = await apiRequest(`/groups/${groupId}`, {
-            method: 'PUT',
-            body: JSON.stringify(data),
-        });
-        
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Failed to update group');
-        }
-        
-        return response.json();
-    },
-    
-    /**
      * Delete a group
      */
     async delete(groupId) {
@@ -242,7 +178,68 @@ const groupsAPI = {
     },
     
     /**
-     * Update a member's role (owner only)
+     * Get all members of a group
+     */
+    async getMembers(groupId) {
+        const response = await apiRequest(`/groups/${groupId}/members`);
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to fetch members');
+        }
+        
+        return response.json();
+    },
+    
+    /**
+     * Get all channels in a group
+     */
+    async getChannels(groupId) {
+        const response = await apiRequest(`/groups/${groupId}/channels`);
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to fetch channels');
+        }
+        
+        return response.json();
+    },
+    
+    /**
+     * Create a channel
+     */
+    async createChannel(groupId, name, type = 'text') {
+        const response = await apiRequest(`/groups/${groupId}/channels`, {
+            method: 'POST',
+            body: JSON.stringify({ name, channel_type: type }),
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to create channel');
+        }
+        
+        return response.json();
+    },
+    
+    /**
+     * Delete a channel
+     */
+    async deleteChannel(groupId, channelId) {
+        const response = await apiRequest(`/groups/${groupId}/channels/${channelId}`, {
+            method: 'DELETE',
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to delete channel');
+        }
+        
+        return response.json();
+    },
+    
+    /**
+     * Update a member's role
      */
     async updateMemberRole(groupId, userId, role) {
         const response = await apiRequest(`/groups/${groupId}/members/${userId}/role`, {
@@ -259,7 +256,7 @@ const groupsAPI = {
     },
     
     /**
-     * Kick a member from the group (owner/admin)
+     * Kick a member from group
      */
     async kickMember(groupId, userId) {
         const response = await apiRequest(`/groups/${groupId}/members/${userId}`, {
@@ -275,17 +272,17 @@ const groupsAPI = {
     },
     
     /**
-     * Transfer group ownership (owner only)
+     * Update a group (name)
      */
-    async transferOwnership(groupId, newOwnerId) {
-        const response = await apiRequest(`/groups/${groupId}/transfer-ownership`, {
-            method: 'POST',
-            body: JSON.stringify({ new_owner_id: newOwnerId }),
+    async update(groupId, data) {
+        const response = await apiRequest(`/groups/${groupId}`, {
+            method: 'PUT',
+            body: JSON.stringify(data),
         });
         
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.detail || 'Failed to transfer ownership');
+            throw new Error(error.detail || 'Failed to update group');
         }
         
         return response.json();
@@ -297,10 +294,10 @@ const groupsAPI = {
  */
 const channelsAPI = {
     /**
-     * Get all channels in a group
+     * List all channels in a group
      */
     async list(groupId) {
-        const response = await apiRequest(`/channels/groups/${groupId}/channels`);
+        const response = await apiRequest(`/groups/${groupId}/channels`);
         
         if (!response.ok) {
             const error = await response.json();
@@ -311,12 +308,12 @@ const channelsAPI = {
     },
     
     /**
-     * Create a new channel in a group
+     * Create a new channel
      */
-    async create(groupId, name, type) {
-        const response = await apiRequest(`/channels/groups/${groupId}/channels`, {
+    async create(groupId, name, type = 'text') {
+        const response = await apiRequest(`/groups/${groupId}/channels`, {
             method: 'POST',
-            body: JSON.stringify({ name, type }),
+            body: JSON.stringify({ name, channel_type: type }),
         });
         
         if (!response.ok) {
@@ -328,7 +325,21 @@ const channelsAPI = {
     },
     
     /**
-     * Join a voice channel (register in database)
+     * Get a single channel
+     */
+    async get(channelId) {
+        const response = await apiRequest(`/channels/${channelId}`);
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to fetch channel');
+        }
+        
+        return response.json();
+    },
+    
+    /**
+     * Join a voice channel
      */
     async joinVoice(channelId) {
         const response = await apiRequest(`/channels/${channelId}/voice/join`, {
@@ -344,7 +355,7 @@ const channelsAPI = {
     },
     
     /**
-     * Leave a voice channel (remove from database)
+     * Leave a voice channel
      */
     async leaveVoice(channelId) {
         const response = await apiRequest(`/channels/${channelId}/voice/leave`, {
@@ -360,14 +371,30 @@ const channelsAPI = {
     },
     
     /**
-     * Get voice participants (who's in the voice channel)
+     * Get voice participants in a channel
      */
     async getVoiceParticipants(channelId) {
         const response = await apiRequest(`/channels/${channelId}/voice/participants`);
         
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.detail || 'Failed to get voice participants');
+            throw new Error(error.detail || 'Failed to fetch voice participants');
+        }
+        
+        return response.json();
+    },
+    
+    /**
+     * Delete a channel
+     */
+    async delete(channelId) {
+        const response = await apiRequest(`/channels/${channelId}`, {
+            method: 'DELETE',
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to delete channel');
         }
         
         return response.json();
@@ -389,22 +416,6 @@ const channelsAPI = {
         
         return response.json();
     },
-    
-    /**
-     * Delete a channel
-     */
-    async delete(channelId) {
-        const response = await apiRequest(`/channels/${channelId}`, {
-            method: 'DELETE',
-        });
-        
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Failed to delete channel');
-        }
-        
-        return response.json();
-    },
 };
 
 /**
@@ -412,7 +423,7 @@ const channelsAPI = {
  */
 const livekitAPI = {
     /**
-     * Get LiveKit token for voice channel
+     * Get LiveKit token for voice chat (uses POST with JSON body)
      */
     async getToken(channelId) {
         const response = await apiRequest('/livekit/token', {
@@ -430,27 +441,63 @@ const livekitAPI = {
 };
 
 /**
- * API: Users
+ * API: Messages
  */
-const usersAPI = {
+const messagesAPI = {
     /**
-     * Get current user profile
+     * Get messages from a channel
      */
-    async getMe() {
-        const response = await apiRequest('/users/me');
+    async list(groupId, channelId) {
+        const response = await apiRequest(`/groups/${groupId}/channels/${channelId}/messages`);
         
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.detail || 'Failed to get profile');
+            throw new Error(error.detail || 'Failed to fetch messages');
         }
         
         return response.json();
     },
     
     /**
-     * Update current user profile
+     * Send a message
      */
-    async updateMe(data) {
+    async send(groupId, channelId, content) {
+        const response = await apiRequest(`/groups/${groupId}/channels/${channelId}/messages`, {
+            method: 'POST',
+            body: JSON.stringify({ content }),
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to send message');
+        }
+        
+        return response.json();
+    },
+};
+
+/**
+ * API: Users
+ */
+const usersAPI = {
+    /**
+     * Get current user
+     */
+    async me() {
+        const response = await apiRequest('/users/me');
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to fetch user');
+        }
+        
+        return response.json();
+    },
+    
+    /**
+     * Update user profile
+     */
+    async updateProfile(data) {
         const response = await apiRequest('/users/me', {
             method: 'PUT',
             body: JSON.stringify(data),
@@ -467,16 +514,13 @@ const usersAPI = {
     /**
      * Upload avatar
      */
-    async uploadAvatar(file) {
-        const formData = new FormData();
-        formData.append('file', file);
-        
+    async uploadAvatar(formData) {
         const response = await fetch(`${API_BASE}/users/me/avatar`, {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${authToken}`
+                'Authorization': `Bearer ${authToken}`,
             },
-            body: formData
+            body: formData,
         });
         
         if (!response.ok) {
@@ -489,50 +533,119 @@ const usersAPI = {
 };
 
 /**
+ * API: Voice
+ */
+const voiceAPI = {
+    /**
+     * Get Voice Server for a channel
+     */
+    async getVoiceServer(groupId, channelId) {
+        const response = await apiRequest(`/groups/${groupId}/channels/${channelId}/voice`);
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to get voice server');
+        }
+        
+        return response.json();
+    },
+};
+
+/**
+ * API: Files
+ */
+const filesAPI = {
+    /**
+     * Upload a file
+     */
+    async upload(groupId, channelId, formData) {
+        const response = await fetch(`${API_BASE}/groups/${groupId}/channels/${channelId}/files`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${authToken}`,
+            },
+            body: formData,
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to upload file');
+        }
+        
+        return response.json();
+    },
+};
+
+/**
+ * API: Invite
+ */
+const inviteAPI = {
+    /**
+     * Generate invite link
+     */
+    async create(groupId) {
+        const response = await apiRequest(`/groups/${groupId}/invite`, {
+            method: 'POST',
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to create invite');
+        }
+        
+        return response.json();
+    },
+};
+
+/**
  * API: Direct Messages
  */
 const dmAPI = {
     /**
-     * Get all DM conversations for current user
+     * List all DM conversations
      */
     async listConversations() {
         const response = await apiRequest('/dm/conversations');
+        
         if (!response.ok) {
             const error = await response.json();
             throw new Error(error.detail || 'Failed to fetch conversations');
         }
+        
         return response.json();
     },
-
+    
     /**
-     * Start a new DM conversation (or return existing)
+     * Start a new DM conversation
      */
     async startConversation(username) {
         const response = await apiRequest('/dm/conversations', {
             method: 'POST',
             body: JSON.stringify({ username }),
         });
+        
         if (!response.ok) {
             const error = await response.json();
             throw new Error(error.detail || 'Failed to start conversation');
         }
+        
         return response.json();
     },
-
+    
     /**
-     * Get messages from a DM conversation
+     * Get messages from a conversation
      */
-    async getMessages(conversationId, limit = 50, before = null) {
-        let url = `/dm/conversations/${conversationId}/messages?limit=${limit}`;
-        if (before) url += `&before=${before}`;
-        const response = await apiRequest(url);
+    async getMessages(conversationId) {
+        const response = await apiRequest(`/dm/conversations/${conversationId}/messages`);
+        
         if (!response.ok) {
             const error = await response.json();
             throw new Error(error.detail || 'Failed to fetch messages');
         }
+        
         return response.json();
     },
-
+    
     /**
      * Send a message in a DM conversation
      */
@@ -541,22 +654,32 @@ const dmAPI = {
             method: 'POST',
             body: JSON.stringify({ content }),
         });
+        
         if (!response.ok) {
             const error = await response.json();
             throw new Error(error.detail || 'Failed to send message');
         }
+        
         return response.json();
     },
 };
 
-// Export for use in other scripts
-window.API = {
+/**
+ * Combined API
+ */
+const API = {
     auth: authAPI,
     groups: groupsAPI,
     channels: channelsAPI,
-    livekit: livekitAPI,
+    messages: messagesAPI,
     users: usersAPI,
+    voice: voiceAPI,
+    files: filesAPI,
+    invite: inviteAPI,
+    livekit: livekitAPI,
     dm: dmAPI,
+    
+    // Auth helpers
     setAuthToken,
     clearAuthToken,
     getAuthToken,
