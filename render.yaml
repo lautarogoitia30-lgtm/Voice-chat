@@ -1,13 +1,14 @@
 # render.yaml — Render Blueprint
 # Deploys the FastAPI backend to Render
+# Uses uv for fast, reliable installs with pre-built wheels
 services:
   - type: web
     name: voice-chat-backend
-    env: python
-    runtime: python311
+    env: python311
     region: oregon
     plan: free
-    buildCommand: pip install -r requirements.txt
+    buildCommand: |
+      pip install uv && uv pip install -r requirements.txt --system
     startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /
     envVars:
@@ -23,5 +24,3 @@ services:
         value: '621maJGPYznXDbvf4AHd1Uzotpf7Up0N15j1eW70fAoD'
       - key: ALLOWED_ORIGINS
         value: '*'
-      - key: PYTHON_VERSION
-        value: '3.11'
