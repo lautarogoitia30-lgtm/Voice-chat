@@ -4,7 +4,6 @@ uvicorn[standard]==0.32.0
 
 # Database
 sqlalchemy==2.0.35
-aiosqlite==0.20.0
 asyncpg==0.29.0
 
 # Authentication
@@ -20,9 +19,8 @@ email-validator==2.2.0
 # File handling
 aiofiles==24.1.0
 
-# LiveKit for voice
+# LiveKit
 livekit==0.16.2
-livekit-agents==0.8.4
 
 # Environment variables
 python-dotenv==1.0.1

@@ -4,6 +4,7 @@ services:
   - type: web
     name: voice-chat-backend
     env: python
+    runtime: python311
     region: oregon
     plan: free
     buildCommand: pip install -r requirements.txt
@@ -22,5 +23,5 @@ services:
         value: '621maJGPYznXDbvf4AHd1Uzotpf7Up0N15j1eW70fAoD'
       - key: ALLOWED_ORIGINS
         value: '*'
-      - key: DEBUG
-        sync: false
+      - key: PYTHON_VERSION
+        value: '3.11'
