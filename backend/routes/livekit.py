@@ -5,8 +5,7 @@ import os
 from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
-from livekit import api
-from livekit.api import AccessToken
+from livekit.api import AccessToken, VideoGrants
 
 from backend.database import get_db
 from backend.models import Channel, GroupMember
@@ -76,9 +75,7 @@ async def generate_token(
     if not membership:
         raise HTTPException(status_code=403, detail="You are not a member of this channel")
     
-    # Generate LiveKit token - new API
-    from livekit.api import VideoGrants
-    
+    # Generate LiveKit token
     print(f"[LIVEKIT TOKEN GENERATION]")
     print(f"  API_KEY exists: {bool(LIVEKIT_API_KEY)}")
     print(f"  API_SECRET exists: {bool(LIVEKIT_API_SECRET)}")
