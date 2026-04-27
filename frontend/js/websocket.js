@@ -3,7 +3,9 @@
  * Handles connections, messages, and disconnection.
  */
 
-const WS_BASE = 'wss://voice-chat-production-a794.up.railway.app';
+// Get the HTTP base from api.js and convert to WebSocket base
+const HTTP_BASE = window.API_BASE || 'http://localhost:3000';
+const WS_BASE = HTTP_BASE.replace('http://', 'ws://').replace('https://', 'wss://');
 
 class WebSocketClient {
     constructor() {
@@ -30,7 +32,7 @@ class WebSocketClient {
         console.log('[WS] Token from localStorage:', token ? 'present' : 'missing', 'length:', token.length);
         
         // Build WebSocket URL with token
-        const wsUrl = `wss://voice-chat-production-a794.up.railway.app/ws/chat/${channelId}?token=${encodeURIComponent(token)}`;
+        const wsUrl = `${WS_BASE}/ws/chat/${channelId}?token=${encodeURIComponent(token)}`;
         console.log('WebSocket URL:', wsUrl);
         
         console.log(`Connecting to WebSocket: ${wsUrl}`);

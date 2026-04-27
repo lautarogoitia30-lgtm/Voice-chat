@@ -5,6 +5,9 @@
 
 const API_BASE = 'http://localhost:3000';
 
+// Expose globally so other files can use it
+window.API_BASE = API_BASE;
+
 // JWT token storage
 let authToken = localStorage.getItem('voice_chat_token');
 

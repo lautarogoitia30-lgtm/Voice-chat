@@ -163,7 +163,7 @@ async def get_channel(
     return channel
 
 
-@router.post("/{channel_id}/voice/join")
+@router.post("/channels/{channel_id}/voice/join")
 async def join_voice_channel(
     channel_id: int,
     current_user: dict = Depends(get_current_user),
@@ -240,7 +240,7 @@ async def join_voice_channel(
     return {"message": "Joined voice channel"}
 
 
-@router.post("/{channel_id}/voice/leave")
+@router.post("/channels/{channel_id}/voice/leave")
 async def leave_voice_channel(
     channel_id: int,
     current_user: dict = Depends(get_current_user),
@@ -283,7 +283,7 @@ class VoiceParticipantResponse(BaseModel):
     avatar_url: str | None = None
 
 
-@router.get("/{channel_id}/voice/participants", response_model=List[VoiceParticipantResponse])
+@router.get("/channels/{channel_id}/voice/participants", response_model=List[VoiceParticipantResponse])
 async def get_voice_participants(
     channel_id: int,
     current_user: dict = Depends(get_current_user),

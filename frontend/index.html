@@ -453,6 +453,10 @@
                             <span class="krisp-spinner"></span>
                             <span class="krisp-text">Verificando...</span>
                         </div>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="settings-noise-suppression" checked onchange="handleNoiseSuppressionChange(this.checked)">
+                            <span>🔇 Supresión de ruido (Krisp AI)</span>
+                        </label>
                     </div>
                     
                     <div class="settings-section">
@@ -581,7 +585,8 @@
     <script src="js/@tauri-apps/api/index.js"></script>
     <script src="js/api.js?v=12"></script>
     <script src="js/websocket.js?v=10"></script>
-    <script src="js/livekit.js?v=52"></script>
+    <script src="js/livekit.js?v=53"></script>
+    <script src="js/webaudio-filter.js?v=1"></script>
     <script src="js/tauri-audio.js?v=2"></script>
     <script src="js/app.js?v=68"></script>
 </body>

@@ -1,12 +1,21 @@
 use tauri::Emitter;
 use tokio::sync::mpsc;
 use tauri_plugin_http::init as http_init;
+use serde::{Deserialize, Serialize};
 
 mod audio;
 mod logger;
 
 use audio::{AudioProcessor, AudioInfo};
 use logger::write_log_timestamp;
+
+// HTTP response wrapper
+#[derive(Serialize, Deserialize)]
+struct HttpResponse {
+    status: u16,
+    ok: bool,
+    body: String,
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -19,7 +28,8 @@ pub fn run() {
             stop_audio_processor,
             get_audio_info,
             set_noise_gate,
-            set_compressor
+            set_compressor,
+            http_fetch
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -101,4 +111,41 @@ async fn set_compressor(threshold_db: f32, ratio: f32) -> Result<String, String>
     processor.set_compressor_threshold(threshold_db);
     processor.set_compressor_ratio(ratio);
     Ok(format!("Compressor set to {} dB, {}:1 ratio", threshold_db, ratio))
+}
+
+#[tauri::command]
+async fn http_fetch(url: String, method: String, body: Option<String>, token: Option<String>) -> Result<HttpResponse, String> {
+    write_log_timestamp(&format!("[RUST] http_fetch: {} {}", method, url));
+    
+    let client = reqwest::Client::new();
+    
+    let mut request = match method.to_uppercase().as_str() {
+        "POST" => client.post(&url),
+        "GET" => client.get(&url),
+        "PUT" => client.put(&url),
+        "DELETE" => client.delete(&url),
+        _ => return Err("Unsupported method".to_string()),
+    };
+    
+    // Add headers
+    request = request.header("Content-Type", "application/json");
+    if let Some(t) = token {
+        request = request.header("Authorization", format!("Bearer {}", t));
+    }
+    
+    // Add body if provided
+    if let Some(b) = body {
+        request = request.body(b);
+    }
+    
+    let response = request.send().await.map_err(|e| e.to_string())?;
+    let status = response.status().as_u16();
+    let ok = response.status().is_success();
+    let body_text = response.text().await.map_err(|e| e.to_string())?;
+    
+    Ok(HttpResponse {
+        status,
+        ok,
+        body: body_text,
+    })
 }

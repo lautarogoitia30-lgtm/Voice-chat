@@ -33,6 +33,9 @@ const state = {
     myRole: 'member', // Current user's role in selected group: "owner", "admin", "member"
 };
 
+// Logout on Ctrl+Shift+L
+document.addEventListener("keydown", (e) => { if (e.ctrlKey && e.shiftKey && e.key === "L") { localStorage.clear(); location.reload(); } });
+
 // Expose state globally so livekit.js can check observer mode
 window.appState = state;
 
@@ -171,7 +174,7 @@ function init() {
         // Validate saved avatar before using it
         let validAvatarUrl = null;
         if (savedAvatarUrl) {
-            const fullUrl = savedAvatarUrl.startsWith('http') ? savedAvatarUrl : 'https://voice-chat-production-a794.up.railway.app' + savedAvatarUrl;
+            const fullUrl = savedAvatarUrl.startsWith('http') ? savedAvatarUrl : `${window.API_BASE}` + savedAvatarUrl;
             // We'll validate on first load, if it fails it will be cleared
             validAvatarUrl = savedAvatarUrl;
         }
@@ -350,7 +353,7 @@ function updateUserDisplay() {
     }
     
     if (avatarUrl && avatarImg) {
-        const fullUrl = avatarUrl.startsWith('http') ? avatarUrl : 'https://voice-chat-production-a794.up.railway.app' + avatarUrl;
+        const fullUrl = avatarUrl.startsWith('http') ? avatarUrl : `${window.API_BASE}` + avatarUrl;
         avatarImg.src = fullUrl;
         avatarImg.style.display = 'block';
         if (avatarInitial) avatarInitial.style.display = 'none';
@@ -388,12 +391,14 @@ async function handleLoginSubmit(e, elements) {
     const username = elements.loginUsername.value;
     const password = elements.loginPassword.value;
     
-    alert('🔐 LOGIN: username=' + username);
-    
     try {
-        alert('🔐 calling API.auth.login...');
         const response = await API.auth.login(username, password);
-        alert('🔐 LOGIN SUCCESS: ' + JSON.stringify(response));
+        
+        // Check if response has required fields
+        if (!response.access_token) {
+            alert('Error: No token in response');
+            return;
+        }
         
         // Save token and username
         API.setAuthToken(response.access_token);
@@ -409,16 +414,11 @@ async function handleLoginSubmit(e, elements) {
         localStorage.setItem('voice_chat_username', loginUsername);
         localStorage.setItem('voice_chat_user_id', String(loginUserId));
         
-        alert('🔐 Mostrando app...');
-        
-        // Force show app view - DON'T go back even if there's an error
+        // Force show app view
         showAppView();
         
-        // Prevent going back to auth view
-        
     } catch (error) {
-        alert('🔐 ERROR: ' + error.message);
-        console.error('Login error:', error);
+        alert('Login error: ' + error.message);
         elements.loginError.textContent = error.message;
         elements.loginError.classList.remove('hidden');
     }
@@ -524,7 +524,7 @@ function renderMembers(members) {
         let avatarHtml = '';
         
         if (member.avatar_url) {
-            const avatarSrc = member.avatar_url.startsWith('http') ? member.avatar_url : 'https://voice-chat-production-a794.up.railway.app' + member.avatar_url;
+            const avatarSrc = member.avatar_url.startsWith('http') ? member.avatar_url : `${window.API_BASE}` + member.avatar_url;
             avatarHtml = `<img src="${avatarSrc}" alt="${member.username}" class="member-avatar-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"><div class="member-avatar" style="display:none">${initial}</div>`;
         } else {
             avatarHtml = `<div class="member-avatar">${initial}</div>`;
@@ -750,7 +750,7 @@ async function loadChannelVoiceParticipants(channelId) {
             
             let avatarHtml = '';
             if (p.avatar_url) {
-                const avatarSrc = p.avatar_url.startsWith('http') ? p.avatar_url : 'https://voice-chat-production-a794.up.railway.app' + p.avatar_url;
+                const avatarSrc = p.avatar_url.startsWith('http') ? p.avatar_url : `${window.API_BASE}` + p.avatar_url;
                 avatarHtml = `<img src="${avatarSrc}" alt="${p.username}" class="voice-participant-avatar-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"><div class="voice-participant-avatar">${initial}</div>`;
             } else {
                 avatarHtml = `<div class="voice-participant-avatar">${initial}</div>`;
@@ -882,7 +882,7 @@ async function handleInviteUserSubmit(e) {
         console.log('  - Username to invite:', username);
         console.log('  - Token:', token ? token.substring(0, 20) + '...' : 'NO TOKEN');
         
-        const response = await fetch(`https://voice-chat-production-a794.up.railway.app/groups/${state.selectedGroup.id}/invite`, {
+        const response = await fetch(`${window.API_BASE}/groups/${state.selectedGroup.id}/invite`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -1031,7 +1031,7 @@ async function handleFileUpload(input) {
     
     try {
         // Upload file
-        const response = await fetch('https://voice-chat-production-a794.up.railway.app/files/upload', {
+        const response = await fetch(`${window.API_BASE}/files/upload`, {
             method: 'POST',
             headers: {
                 'Authorization': 'Bearer ' + API.getAuthToken()
@@ -1103,12 +1103,12 @@ function renderFileMessage(message) {
     if (isImage) {
         fileHtml = `
             <div class="message-file">
-                <img src="https://voice-chat-production-a794.up.railway.app${fileInfo.url}" alt="${fileInfo.filename}" onclick="window.open(this.src, '_blank')">
+                <img src="${window.API_BASE}${fileInfo.url}" alt="${fileInfo.filename}" onclick="window.open(this.src, '_blank')">
                 <div class="message-file-info">
                     <div class="message-file-name">${fileInfo.filename}</div>
                     <div class="message-file-size">${sizeStr}</div>
                 </div>
-                <a href="https://voice-chat-production-a794.up.railway.app${fileInfo.url}" target="_blank" class="message-file-download">Abrir</a>
+                <a href="${window.API_BASE}${fileInfo.url}" target="_blank" class="message-file-download">Abrir</a>
             </div>
         `;
     } else {
@@ -1119,7 +1119,7 @@ function renderFileMessage(message) {
                     <div class="message-file-name">${fileInfo.filename}</div>
                     <div class="message-file-size">${sizeStr}</div>
                 </div>
-                <a href="https://voice-chat-production-a794.up.railway.app${fileInfo.url}" target="_blank" class="message-file-download">Descargar</a>
+                <a href="${window.API_BASE}${fileInfo.url}" target="_blank" class="message-file-download">Descargar</a>
             </div>
         `;
     }
@@ -1608,7 +1608,7 @@ async function updateVoiceParticipantsDisplay() {
             // Check if participant has avatar
             let avatarHtml = '';
             if (p.avatar_url) {
-                const avatarSrc = p.avatar_url.startsWith('http') ? p.avatar_url : 'https://voice-chat-production-a794.up.railway.app' + p.avatar_url;
+                const avatarSrc = p.avatar_url.startsWith('http') ? p.avatar_url : `${window.API_BASE}` + p.avatar_url;
                 avatarHtml = `<img src="${avatarSrc}" alt="${p.username}" class="member-avatar-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"><div class="member-avatar" style="display:none">${initial}</div>`;
             } else {
                 avatarHtml = `<div class="member-avatar">${initial}</div>`;
@@ -2437,7 +2437,7 @@ function updateParticipantsList() {
                 
                 let avatarHtml = '';
                 if (avatarUrl) {
-                    const avatarSrc = avatarUrl.startsWith('http') ? avatarUrl : 'https://voice-chat-production-a794.up.railway.app' + avatarUrl;
+                    const avatarSrc = avatarUrl.startsWith('http') ? avatarUrl : `${window.API_BASE}` + avatarUrl;
                     avatarHtml = `<img src="${avatarSrc}" alt="${state.currentUser?.username}" class="member-avatar-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"><div class="member-avatar" style="display:none">${initial}</div>`;
                 } else {
                     avatarHtml = `<div class="member-avatar">${initial}</div>`;
@@ -2468,7 +2468,7 @@ function updateParticipantsList() {
             // Check if participant has avatar
             let avatarHtml = '';
             if (p.avatar_url) {
-                const avatarSrc = p.avatar_url.startsWith('http') ? p.avatar_url : 'https://voice-chat-production-a794.up.railway.app' + p.avatar_url;
+                const avatarSrc = p.avatar_url.startsWith('http') ? p.avatar_url : `${window.API_BASE}` + p.avatar_url;
                 avatarHtml = `<img src="${avatarSrc}" alt="${p.name}" class="member-avatar-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"><div class="member-avatar" style="display:none">${initial}</div>`;
             } else {
                 avatarHtml = `<div class="member-avatar">${initial}</div>`;
@@ -2770,6 +2770,15 @@ function showSettingsModal() {
     loadPrivacySettings();
 }
 
+
+// Handle noise suppression toggle
+function handleNoiseSuppressionChange(enabled) {
+    localStorage.setItem('voice_chat_noise_suppression', enabled ? 'true' : 'false');
+    console.log('[SETTINGS] Noise suppression set to:', enabled);
+    // Show notification
+    showToast(enabled ? '🔇 Supresión de ruido ACTIVADA' : 'Supresión de ruido DESACTIVADA', 'success');
+}
+
 // Handle auto-gain change
 function handleAutoGainChange(enabled) {
     localStorage.setItem('voice_chat_auto_gain', enabled ? 'true' : 'false');
@@ -2865,7 +2874,7 @@ function switchSettingsTab(tabName) {
 // Load profile settings from API
 async function loadProfileSettings() {
     try {
-        const response = await fetch('https://voice-chat-production-a794.up.railway.app/users/me', {
+        const response = await fetch(`${window.API_BASE}/users/me`, {
             headers: {
                 'Authorization': 'Bearer ' + API.getAuthToken()
             }
@@ -2901,7 +2910,7 @@ async function loadProfileSettings() {
         }
         
         if (user.avatar_url) {
-            const fullUrl = user.avatar_url.startsWith('http') ? user.avatar_url : 'https://voice-chat-production-a794.up.railway.app' + user.avatar_url;
+            const fullUrl = user.avatar_url.startsWith('http') ? user.avatar_url : `${window.API_BASE}` + user.avatar_url;
             if (previewImg) {
                 previewImg.src = fullUrl;
                 previewImg.style.display = 'block';
@@ -2918,7 +2927,7 @@ async function loadProfileSettings() {
         // Update avatar
         const avatarImg = document.getElementById('settings-avatar');
         if (avatarImg && user.avatar_url) {
-            avatarImg.src = user.avatar_url.startsWith('http') ? user.avatar_url : 'https://voice-chat-production-a794.up.railway.app' + user.avatar_url;
+            avatarImg.src = user.avatar_url.startsWith('http') ? user.avatar_url : `${window.API_BASE}` + user.avatar_url;
         } else if (avatarImg) {
             // Default avatar with first letter
             avatarImg.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="50" fill="%234080d0"/><text x="50" y="65" text-anchor="middle" fill="white" font-size="40">' + (user.username?.charAt(0).toUpperCase() || 'U') + '</text></svg>';
@@ -2944,7 +2953,7 @@ async function saveProfileSettings() {
             }
         }
         
-        const response = await fetch('https://voice-chat-production-a794.up.railway.app/users/me', {
+        const response = await fetch(`${window.API_BASE}/users/me`, {
             method: 'PUT',
             headers: {
                 'Authorization': 'Bearer ' + API.getAuthToken(),
@@ -3059,7 +3068,7 @@ async function uploadAvatarFile(file) {
         formData.append('file', file);
         
         const token = localStorage.getItem('voice_chat_token');
-        const response = await fetch('https://voice-chat-production-a794.up.railway.app/users/me/avatar', {
+        const response = await fetch(`${window.API_BASE}/users/me/avatar`, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${token}` },
             body: formData,
@@ -3104,7 +3113,7 @@ async function handleAvatarUpload(input) {
     formData.append('file', file);
     
     try {
-        const response = await fetch('https://voice-chat-production-a794.up.railway.app/users/me/avatar', {
+        const response = await fetch(`${window.API_BASE}/users/me/avatar`, {
             method: 'POST',
             headers: {
                 'Authorization': 'Bearer ' + API.getAuthToken()
@@ -3122,7 +3131,7 @@ async function handleAvatarUpload(input) {
         console.log('Avatar uploaded, URL:', data.avatar_url);
         
         // Update the input with the full URL
-        const fullUrl = 'https://voice-chat-production-a794.up.railway.app' + data.avatar_url;
+        const fullUrl = `${window.API_BASE}` + data.avatar_url;
         const avatarUrlInput = document.getElementById('settings-avatar-url');
         if (avatarUrlInput) avatarUrlInput.value = fullUrl;
         
@@ -3218,6 +3227,15 @@ async function toggleMicTest() {
         btn.textContent = '🎤 Probar micrófono';
         status.textContent = 'Error: ' + e.message;
     }
+}
+
+
+// Handle noise suppression toggle
+function handleNoiseSuppressionChange(enabled) {
+    localStorage.setItem('voice_chat_noise_suppression', enabled ? 'true' : 'false');
+    console.log('[SETTINGS] Noise suppression set to:', enabled);
+    // Show notification
+    showToast(enabled ? '🔇 Supresión de ruido ACTIVADA' : 'Supresión de ruido DESACTIVADA', 'success');
 }
 
 // Handle auto-gain change

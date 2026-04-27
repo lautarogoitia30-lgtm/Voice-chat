@@ -517,6 +517,27 @@ class LiveKitClient {
             console.log('[AUDIO] Microphone published via native LiveKit API!');
             console.log('[AUDIO] audioTrackPublications:', this.localParticipant.audioTrackPublications?.size);
             
+            // CRITICAL: Force Krisp activation after setMicrophoneEnabled.
+            // Don't rely on LocalTrackPublished event — call directly.
+            const micPub = this.localParticipant.getTrackPublication(this._Track?.Source?.Microphone);
+            if (micPub) {
+                console.log('[AUDIO] Forcing Krisp/WebAudio filter on microphone track...');
+                await this._applyKrisp(micPub);
+            } else {
+                // Retry with exponential backoff (up to 3 retries, 100ms apart)
+                for (let attempt = 1; attempt <= 3; attempt++) {
+                    await new Promise(resolve => setTimeout(resolve, 100 * attempt));
+                    const pub = this.localParticipant.getTrackPublication(this._Track?.Source?.Microphone);
+                    if (pub) {
+                        console.log(`[AUDIO] Krisp retry ${attempt}: found track`);
+                        await this._applyKrisp(pub);
+                        break;
+                    } else {
+                        console.warn(`[AUDIO] Krisp retry ${attempt}: track not ready yet`);
+                    }
+                }
+            }
+            
             console.log('=== MICROPHONE READY (NATIVE) ===');
         } catch (error) {
             console.error('[AUDIO] Error publishing microphone:', error);
@@ -1305,7 +1326,7 @@ class LiveKitClient {
     /**
      * Apply Krisp AI noise cancellation to a published audio track.
      * Krisp runs locally in the browser — no audio sent to external servers.
-     * Falls back gracefully if Krisp is not supported or fails to load.
+     * Falls back gracefully to WebAudioFilter if Krisp is not supported or fails to load.
      */
     async _applyKrisp(publication) {
         try {
@@ -1321,18 +1342,20 @@ class LiveKitClient {
             }
             
             // Dynamic import of Krisp noise filter
-            console.log('[KRISP] Loading Krisp noise filter...');
+            console.log('[KRISP] Loading Krisp noise filter from CDN...');
             const krispModule = await import('https://cdn.jsdelivr.net/npm/@livekit/krisp-noise-filter@0.2/+esm');
             
             // Check browser support
             if (krispModule.isKrispNoiseFilterSupported && !krispModule.isKrispNoiseFilterSupported()) {
-                console.warn('[KRISP] Not supported on this browser — using browser-native noise suppression');
+                console.warn('[KRISP] ⚠️ Krisp NOT supported on this browser — falling back to WebAudioFilter');
                 this._krispSupported = false;
+                this._fallbackToWebAudioFilter(publication);
                 return;
             }
             
             // Create and apply the processor
-            this._krispProcessor = krispModule.KrispNoiseFilter();
+            console.log('[KRISP] Creating KrispNoiseFilter processor...');
+            this._krispProcessor = new krispModule.KrispNoiseFilter();
             
             if (publication.track && publication.track.setProcessor) {
                 await publication.track.setProcessor(this._krispProcessor);
@@ -1342,12 +1365,45 @@ class LiveKitClient {
             } else {
                 console.warn('[KRISP] Track does not support setProcessor');
                 this._krispSupported = false;
+                this._fallbackToWebAudioFilter(publication);
             }
         } catch (e) {
-            console.warn('[KRISP] Failed to apply Krisp:', e.message);
-            console.warn('[KRISP] Falling back to browser-native noise suppression');
+            console.warn('[KRISP] ❌ Krisp failed to load/apply:', e.message);
+            console.warn('[KRISP] Falling back to WebAudioFilter...');
             this._krispSupported = false;
             this._krispProcessor = null;
+            this._fallbackToWebAudioFilter(publication);
+        }
+    }
+
+    /**
+     * Fallback: apply WebAudio-based noise reduction when Krisp is not available.
+     * Uses a noise gate + high-pass filter + compressor chain — no external dependencies.
+     */
+    async _fallbackToWebAudioFilter(publication) {
+        try {
+            // Check if WebAudioFilter is available
+            if (!window.WebAudioFilter) {
+                console.warn('[WEBFILTER] WebAudioFilter not loaded — no fallback available');
+                return;
+            }
+
+            const pub = publication || this.localParticipant?.getTrackPublication(this._Track?.Source?.Microphone);
+            if (!pub || !pub.track) {
+                console.warn('[WEBFILTER] No microphone track available');
+                return;
+            }
+
+            // Create or reuse filter instance
+            if (!this._webAudioFilter) {
+                this._webAudioFilter = new window.WebAudioFilter();
+                await this._webAudioFilter.init();
+            }
+
+            await this._webAudioFilter.applyToTrack(pub.track);
+            console.log('[WEBFILTER] ✅ WebAudio noise filter ACTIVE — fallback mode');
+        } catch (e) {
+            console.warn('[WEBFILTER] ❌ Fallback also failed:', e.message);
         }
     }
 }
