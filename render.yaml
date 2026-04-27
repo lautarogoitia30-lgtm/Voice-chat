@@ -1,0 +1,26 @@
+# render.yaml — Render Blueprint
+# Deploys the FastAPI backend to Render
+services:
+  - type: web
+    name: voice-chat-backend
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /
+    envVars:
+      - key: DATABASE_URL
+        value: 'postgresql://postgres:sDxhKZKRVqaiwvNNFEYIZXELivJikefY@hopper.proxy.rlwy.net:27425/railway'
+      - key: SECRET_KEY
+        value: 'your-secret-key-here-change-in-production'
+      - key: LIVEKIT_URL
+        value: 'wss://voice-chat-9604g3de.livekit.cloud'
+      - key: LIVEKIT_API_KEY
+        value: 'API9qqksRVxerjC'
+      - key: LIVEKIT_API_SECRET
+        value: '621maJGPYznXDbvf4AHd1Uzotpf7Up0N15j1eW70fAoD'
+      - key: ALLOWED_ORIGINS
+        value: '*'
+      - key: DEBUG
+        sync: false
