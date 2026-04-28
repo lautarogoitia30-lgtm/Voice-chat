@@ -27,7 +27,42 @@ def generate_livekit_jwt(api_key: str, api_secret: str, identity: str, name: str
     """
     Generate a LiveKit JWT token.
     Uses the LiveKit SDK if available, otherwise manual JWT generation.
+    
+    Also creates the room if it doesn't exist.
     """
+    # Try to create the room first (rooms must exist before joining)
+    try:
+        from livekit import api
+        import asyncio
+        
+        async def ensure_room():
+            try:
+                # Connect to LiveKit API
+                lkapi = api.LiveKitAPI(
+                    url=LIVEKIT_URL.replace("wss://", "https://").rstrip("/"),
+                    api_key=api_key,
+                    api_secret=api_secret,
+                )
+                # Try to create room (ignores error if already exists)
+                try:
+                    await lkapi.room.create_room(api.CreateRoomRequest(name=room))
+                    print(f"[LIVEKIT] Created room: {room}")
+                except Exception as e:
+                    if "already exists" not in str(e).lower():
+                        print(f"[LIVEKIT] Room creation note: {e}")
+                await lkapi.aclose()
+            except Exception as e:
+                print(f"[LIVEKIT] Could not ensure room: {e}")
+        
+        # Run in new event loop
+        try:
+            asyncio.run(ensure_room())
+        except RuntimeError:
+            # If already in event loop, try sync way
+            pass
+    except Exception as e:
+        print(f"[LIVEKIT] Room setup error: {e}")
+    
     try:
         from livekit import api
         
@@ -51,6 +86,24 @@ def generate_livekit_jwt(api_key: str, api_secret: str, identity: str, name: str
         from jose import jwt
         
         now = int(time.time())
+        
+        claims = {
+            "iss": api_key,
+            "sub": identity,
+            "name": name,
+            "iat": now,
+            "exp": now + 3600,
+            "nbf": now,
+            "jti": f"{identity}-{now}",
+            "video": {
+                "room": room,
+                "room_join": True,
+                "can_publish": True,
+                "can_subscribe": True,
+            }
+        }
+        
+        return jwt.encode(claims, api_secret, algorithm="HS256")
         
         claims = {
             "iss": api_key,
