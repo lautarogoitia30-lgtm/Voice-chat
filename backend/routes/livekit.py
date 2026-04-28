@@ -25,33 +25,28 @@ LIVEKIT_API_SECRET = os.getenv("LIVEKIT_API_SECRET", "")
 
 def generate_livekit_jwt(api_key: str, api_secret: str, identity: str, name: str, room: str) -> str:
     """
-    Generate a LiveKit JWT token manually.
-    
-    Uses the correct format that LiveKit expects:
-    - iss: API key (as string)
-    - sub: identity (user ID)
-    - name: display name
-    - video grants embedded in 'video' claim
+    Generate a LiveKit JWT token using the official SDK format.
+    Uses livekit-server-sdk for correct token generation.
     """
-    now = int(time.time())
+    from livekit import AccessToken
     
-    claims = {
-        "iss": api_key,
-        "sub": identity,
-        "name": name,
-        "iat": now,
-        "exp": now + 3600,  # 1 hour
-        "nbf": now,
-        "jti": f"{identity}-{now}",
-        "video": {
-            "room": room,
-            "room_join": True,
-            "can_publish": True,
-            "can_subscribe": True,
-        }
-    }
+    token = AccessToken(
+        api_key=api_key,
+        api_secret=api_secret,
+        identity=identity,
+        name=name,
+    )
     
-    return jwt.encode(claims, api_secret, algorithm="HS256")
+    token.add_grant(
+        room=room,
+        room_join=True,
+        can_publish=True,
+        can_subscribe=True,
+    )
+    
+    token.expires = 3600  # 1 hour
+    
+    return token.to_jwt()
 
 
 @router.post("/token", response_model=LiveKitTokenResponse)
