@@ -45,8 +45,8 @@ app = FastAPI(
 )
 
 # Configure CORS - allow specific origins in production
-# Get allowed origins from env or default to common dev origins + Railway + Render + Vercel
-DEFAULT_ORIGINS = "http://localhost:3000,http://localhost:8000,https://voice-chat-production-a794.up.railway.app,https://voice-chat-backend-n90f.onrender.com,https://voice-chat-drab-five.vercel.app"
+# Get allowed origins from env or default to Render + Vercel
+DEFAULT_ORIGINS = "https://voice-chat-backend-n90f.onrender.com,https://voice-chat-drab-five.vercel.app"
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", DEFAULT_ORIGINS).split(",")
 app.add_middleware(
     CORSMiddleware,
