@@ -5,7 +5,7 @@ import os
 from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
-from livekit.api import AccessToken, VideoGrants
+from livekit import api
 
 from backend.database import get_db
 from backend.models import Channel, GroupMember
@@ -84,7 +84,7 @@ async def generate_token(
     print(f"  User ID: {current_user['user_id']}")
     print(f"  Username: {current_user['username']}")
     
-    token = AccessToken(
+token = api.AccessToken(
         api_key=LIVEKIT_API_KEY,
         api_secret=LIVEKIT_API_SECRET
     )
@@ -94,7 +94,7 @@ async def generate_token(
     token = token.with_name(current_user["username"])
     
     # Grant permissions to join the room (use channel ID for unique room name)
-    grants = VideoGrants(
+grants = api.VideoGrants(
         room=f"channel-{channel.id}",
         room_join=True,
         can_publish=True,
