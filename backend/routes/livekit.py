@@ -4,6 +4,7 @@ Generates JWT tokens manually with correct LiveKit format.
 """
 import os
 import time
+import httpx
 from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
@@ -21,6 +22,36 @@ router = APIRouter()
 LIVEKIT_URL = os.getenv("LIVEKIT_URL", "")
 LIVEKIT_API_KEY = os.getenv("LIVEKIT_API_KEY", "")
 LIVEKIT_API_SECRET = os.getenv("LIVEKIT_API_SECRET", "")
+
+
+async def ensure_room_exists(room_name: str) -> None:
+    """Create room in LiveKit if it doesn't exist using REST API"""
+    if not LIVEKIT_URL or not LIVEKIT_API_KEY or not LIVEKIT_API_SECRET:
+        return
+    
+    # Convert wss:// to https://
+    api_url = LIVEKIT_URL.replace("wss://", "https://").rstrip("/")
+    
+    async with httpx.AsyncClient() as client:
+        # Try to create room
+        try:
+            response = await client.post(
+                f"{api_url}/v1/rooms",
+                json={"name": room_name},
+                headers={
+                    "Authorization": f"Bearer {LIVEKIT_API_SECRET}",
+                    "Content-Type": "application/json",
+                },
+                timeout=5.0,
+            )
+            if response.status_code in (200, 201):
+                print(f"[LIVEKIT] Room created: {room_name}")
+            elif response.status_code == 409:
+                print(f"[LIVEKIT] Room already exists: {room_name}")
+            else:
+                print(f"[LIVEKIT] Room creation response: {response.status_code}")
+        except Exception as e:
+            print(f"[LIVEKIT] Room creation error: {e}")
 
 
 def generate_livekit_jwt(api_key: str, api_secret: str, identity: str, name: str, room: str) -> str:
@@ -169,6 +200,10 @@ async def generate_token(
     
     # Generate the token manually
     room_name = f"channel-{channel.id}"
+    
+    # Ensure room exists before generating token
+    await ensure_room_exists(room_name)
+    
     jwt_token = generate_livekit_jwt(
         api_key=LIVEKIT_API_KEY,
         api_secret=LIVEKIT_API_SECRET,
@@ -205,6 +240,10 @@ async def generate_debug_token(channel_id: int, user_id: int = 999, username: st
     
     # Generate token
     room_name = f"channel-{channel_id}"
+    
+    # Ensure room exists before generating token
+    await ensure_room_exists(room_name)
+    
     jwt_token = generate_livekit_jwt(
         api_key=LIVEKIT_API_KEY,
         api_secret=LIVEKIT_API_SECRET,
