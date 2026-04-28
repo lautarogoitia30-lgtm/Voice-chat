@@ -10,7 +10,7 @@ services:
     healthCheckPath: /api/health
     envVars:
       - key: DATABASE_URL
-        value: 'postgresql://postgres:sDxhKZKRVqaiwvNNFEYIZXELivJikefY@hopper.proxy.rlwy.net:27425/railway'
+        value: 'postgresql://voice_chat_db_user:HOmIipoTo0fdguaPKeCTciwp31B5XEHf@dpg-d7o1t867r5hc73b63ifg-a/voice_chat_db'
       - key: SECRET_KEY
         value: 'your-secret-key-here-change-in-production'
       - key: LIVEKIT_URL
