@@ -81,14 +81,21 @@ app.include_router(livekit.router, prefix="/livekit", tags=["LiveKit"])
 app.include_router(files.router, prefix="/files", tags=["Files"])
 app.include_router(dm.router, prefix="/dm", tags=["Direct Messages"])
 
-# Serve frontend index.html
-FRONTEND_PATH = Path(__file__).parent.parent / "frontend" / "index.html"
+# Serve frontend index.html (only if it exists)
+FRONTEND_PATH = BASE_DIR / "frontend" / "index.html"
 
 
 @app.get("/")
 async def root():
-    """Serve the frontend index.html."""
-    return FileResponse(FRONTEND_PATH)
+    """Serve the frontend index.html if available, otherwise API info."""
+    if FRONTEND_PATH.exists():
+        return FileResponse(FRONTEND_PATH)
+    return {
+        "name": "Voice-Chat API",
+        "version": "1.0.0",
+        "status": "running",
+        "docs": "/docs"
+    }
 
 
 @app.get("/api/health")
