@@ -3,12 +3,10 @@ LiveKit routes: /livekit/token (generate voice chat tokens)
 Uses official LiveKit SDK for token generation.
 """
 import os
-import time
 from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
-from livekit import AccessToken
-from livekit.jwt import VideoGrants
+from livekit import api
 
 from backend.database import get_db
 from backend.models import Channel, GroupMember
@@ -28,15 +26,15 @@ def generate_livekit_token(api_key: str, api_secret: str, identity: str, name: s
     """
     Generate a LiveKit token using the official SDK.
     """
-    token = AccessToken(api_key, api_secret)
-    token.identity = identity
-    token.name = name
-    token.video = VideoGrants(
+    token = api.AccessToken(api_key, api_secret)
+    token = token.with_identity(identity)
+    token = token.with_name(name)
+    token = token.with_grants(api.VideoGrants(
         room=room,
         room_join=True,
         can_publish=True,
         can_subscribe=True,
-    )
+    ))
     return token.to_jwt()
 
 
