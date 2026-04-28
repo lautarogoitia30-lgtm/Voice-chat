@@ -24,6 +24,3 @@ python-dotenv==1.0.1
 
 # Python typing
 typing-extensions==4.12.2
-
-# LiveKit for voice chat
-livekit-api
