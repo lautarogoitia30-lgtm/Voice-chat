@@ -3,7 +3,7 @@
  * Handles all HTTP requests with JWT authentication.
  */
 
-const API_BASE = 'http://localhost:3000';
+const API_BASE = 'https://voice-chat-backend-n90f.onrender.com';
 
 // Expose globally so other files can use it
 window.API_BASE = API_BASE;
