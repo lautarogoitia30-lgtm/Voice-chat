@@ -96,21 +96,6 @@ def generate_livekit_jwt(api_key: str, api_secret: str, identity: str, name: str
     
     try:
         from livekit import api
-        
-        token = api.AccessToken(
-            api_key=api_key,
-            api_secret=api_secret,
-        ) \
-            .with_identity(identity) \
-            .with_name(name) \
-            .with_grants(api.VideoGrants(
-                room=room,
-                room_join=True,
-                can_publish=True,
-                can_subscribe=True,
-            ))
-        
-        return token.to_jwt()
     except ImportError:
         # Fallback: manual JWT generation with correct format
         import time
