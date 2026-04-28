@@ -6,7 +6,7 @@ import os
 from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
-from livekit import api
+from livekit.api import AccessToken, VideoGrants
 
 from backend.database import get_db
 from backend.models import Channel, GroupMember
@@ -26,10 +26,10 @@ def generate_livekit_token(api_key: str, api_secret: str, identity: str, name: s
     """
     Generate a LiveKit token using the official SDK.
     """
-    token = api.AccessToken(api_key, api_secret)
+    token = AccessToken(api_key, api_secret)
     token = token.with_identity(identity)
     token = token.with_name(name)
-    token = token.with_grants(api.VideoGrants(
+    token = token.with_grants(VideoGrants(
         room=room,
         room_join=True,
         can_publish=True,
