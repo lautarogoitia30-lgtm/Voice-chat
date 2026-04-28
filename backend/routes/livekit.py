@@ -25,28 +25,53 @@ LIVEKIT_API_SECRET = os.getenv("LIVEKIT_API_SECRET", "")
 
 def generate_livekit_jwt(api_key: str, api_secret: str, identity: str, name: str, room: str) -> str:
     """
-    Generate a LiveKit JWT token using the official SDK format.
-    Uses livekit-api for correct token generation.
+    Generate a LiveKit JWT token.
+    Uses the LiveKit SDK if available, otherwise manual JWT generation.
     """
-    from livekit import AccessToken
-    
-    token = AccessToken(
-        api_key=api_key,
-        api_secret=api_secret,
-        identity=identity,
-        name=name,
-    )
-    
-    token.add_grant(
-        room=room,
-        room_join=True,
-        can_publish=True,
-        can_subscribe=True,
-    )
-    
-    token.expires = 3600  # 1 hour
-    
-    return token.to_jwt()
+    try:
+        from livekit import AccessToken
+        
+        token = AccessToken(
+            api_key=api_key,
+            api_secret=api_secret,
+            identity=identity,
+            name=name,
+        )
+        
+        token.add_grant(
+            room=room,
+            room_join=True,
+            can_publish=True,
+            can_subscribe=True,
+        )
+        
+        token.expires = 3600  # 1 hour
+        
+        return token.to_jwt()
+    except ImportError:
+        # Fallback: manual JWT generation with correct format
+        import time
+        from jose import jwt
+        
+        now = int(time.time())
+        
+        claims = {
+            "iss": api_key,
+            "sub": identity,
+            "name": name,
+            "iat": now,
+            "exp": now + 3600,
+            "nbf": now,
+            "jti": f"{identity}-{now}",
+            "video": {
+                "room": room,
+                "room_join": True,
+                "can_publish": True,
+                "can_subscribe": True,
+            }
+        }
+        
+        return jwt.encode(claims, api_secret, algorithm="HS256")
 
 
 @router.post("/token", response_model=LiveKitTokenResponse)

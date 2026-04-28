@@ -46,27 +46,13 @@ app = FastAPI(
 
 # Configure CORS - allow all origins for desktop app compatibility
 # In production, you might want to restrict this more
-DEFAULT_ORIGINS = "*"
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", DEFAULT_ORIGINS).split(",")
-
-# If ALLOWED_ORIGINS is exactly "*", use ["*"] without credentials
-# Otherwise, use the specified origins with credentials
-if ALLOWED_ORIGINS == ["*"]:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=False,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-else:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=ALLOWED_ORIGINS,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Serve static files (JS, CSS, Images)
 app.mount("/js", StaticFiles(directory=str(FRONTEND_DIR / "js")), name="js")
