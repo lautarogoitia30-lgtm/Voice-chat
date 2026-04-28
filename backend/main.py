@@ -76,7 +76,7 @@ app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR), html=True), name="
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 app.include_router(users.router, prefix="/users", tags=["Users"])
 app.include_router(groups.router, prefix="/groups", tags=["Groups"])
-app.include_router(channels.router, prefix="/channels", tags=["Channels"])
+app.include_router(channels.router, prefix="", tags=["Channels"])
 app.include_router(livekit.router, prefix="/livekit", tags=["LiveKit"])
 app.include_router(files.router, prefix="/files", tags=["Files"])
 app.include_router(dm.router, prefix="/dm", tags=["Direct Messages"])
