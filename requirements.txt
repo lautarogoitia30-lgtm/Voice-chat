@@ -19,9 +19,6 @@ email-validator==2.2.0
 # File handling
 aiofiles==24.1.0
 
-# LiveKit SDK
-livekit-server-sdk==0.6.8
-
 # Environment variables
 python-dotenv==1.0.1
 

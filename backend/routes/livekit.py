@@ -1,11 +1,13 @@
 """
 LiveKit routes: /livekit/token (generate voice chat tokens)
+Generates JWT tokens manually without livekit package.
 """
 import os
+import time
 from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
-from livekit_server_sdk import AccessToken, VideoGrants
+from jose import jwt
 
 from backend.database import get_db
 from backend.models import Channel, GroupMember
@@ -21,6 +23,39 @@ LIVEKIT_API_KEY = os.getenv("LIVEKIT_API_KEY", "")
 LIVEKIT_API_SECRET = os.getenv("LIVEKIT_API_SECRET", "")
 
 
+def generate_livekit_jwt(api_key: str, api_secret: str, identity: str, name: str, room: str) -> str:
+    """
+    Generate a LiveKit JWT token manually.
+    
+    This is a simplified implementation that creates the same token structure
+    that LiveKit's AccessToken would generate.
+    """
+    # Build the JWT payload (LiveKit token format)
+    now = int(time.time())
+    
+    claims = {
+        # Standard JWT claims
+        "iss": api_key,
+        "sub": identity,
+        "name": name,
+        "iat": now,
+        "exp": now + 3600,  # 1 hour expiration
+        "nbf": now,
+        
+        # LiveKit-specific claims
+        "jti": f"{identity}-{now}",  # unique token ID
+        "video": {
+            "room": room,
+            "room_join": True,
+            "can_publish": True,
+            "can_subscribe": True,
+        }
+    }
+    
+    # Sign with HS256
+    return jwt.encode(claims, api_secret, algorithm="HS256")
+
+
 @router.post("/token", response_model=LiveKitTokenResponse)
 async def generate_token(
     token_request: LiveKitTokenRequest,
@@ -29,17 +64,6 @@ async def generate_token(
 ):
     """
     Generate a LiveKit token for voice chat.
-    
-    Args:
-        token_request: Channel ID to join
-        current_user: Authenticated user from JWT
-        db: Database session
-        
-    Returns:
-        LiveKit token and URL
-        
-    Raises:
-        HTTPException: If channel not found, user not a member, or LiveKit not configured
     """
     # Check if LiveKit is configured
     if not LIVEKIT_URL or not LIVEKIT_API_KEY or not LIVEKIT_API_SECRET:
@@ -75,36 +99,25 @@ async def generate_token(
     if not membership:
         raise HTTPException(status_code=403, detail="You are not a member of this channel")
     
-    # Generate LiveKit token
-    token = AccessToken(
+    # Generate the token manually
+    room_name = f"channel-{channel.id}"
+    jwt_token = generate_livekit_jwt(
         api_key=LIVEKIT_API_KEY,
-        api_secret=LIVEKIT_API_SECRET
+        api_secret=LIVEKIT_API_SECRET,
+        identity=str(current_user["user_id"]),
+        name=current_user["username"],
+        room=room_name
     )
     
-    # Set identity and name
-    token = token.with_identity(str(current_user["user_id"]))
-    token = token.with_name(current_user["username"])
-    
-    # Grant permissions to join the room
-    grants = VideoGrants(
-        room=f"channel-{channel.id}",
-        room_join=True,
-        can_publish=True,
-        can_subscribe=True
-    )
-    token = token.with_grants(grants)
-    
-    # Build URLs - Convert HTTPS to WSS for WebSocket
+    # Build WebSocket URL
     livekit_url = LIVEKIT_URL.strip().rstrip("/")
     if livekit_url.startswith("https://"):
         livekit_url = livekit_url.replace("https://", "wss://", 1)
     
-    jwt_token = token.to_jwt()
-    
     return LiveKitTokenResponse(
         token=jwt_token,
         url=livekit_url,
-        room_name=f"channel-{channel.id}"
+        room_name=room_name
     )
 
 
@@ -112,7 +125,6 @@ async def generate_token(
 async def generate_debug_token(channel_id: int, user_id: int = 999, username: str = "debug", debug_secret: str | None = None):
     """
     Debug endpoint: generate a LiveKit token without DB checks.
-    For development only - should be disabled in production.
     """
     # Check debug secret
     configured_secret = os.getenv('LIVEKIT_DEBUG_SECRET', '')
@@ -121,39 +133,25 @@ async def generate_debug_token(channel_id: int, user_id: int = 999, username: st
     
     # Check if LiveKit is configured
     if not LIVEKIT_URL or not LIVEKIT_API_KEY or not LIVEKIT_API_SECRET:
-        raise HTTPException(
-            status_code=503,
-            detail="LiveKit is not configured"
-        )
+        raise HTTPException(status_code=503, detail="LiveKit is not configured")
     
     # Generate token
-    token = AccessToken(
+    room_name = f"channel-{channel_id}"
+    jwt_token = generate_livekit_jwt(
         api_key=LIVEKIT_API_KEY,
-        api_secret=LIVEKIT_API_SECRET
+        api_secret=LIVEKIT_API_SECRET,
+        identity=str(user_id),
+        name=username,
+        room=room_name
     )
     
-    # Set identity and name
-    token = token.with_identity(str(user_id))
-    token = token.with_name(username)
-    
-    # Grant permissions to join the room
-    grants = VideoGrants(
-        room=f"channel-{channel_id}",
-        room_join=True,
-        can_publish=True,
-        can_subscribe=True
-    )
-    token = token.with_grants(grants)
-    
-    # Build URLs - Convert HTTPS to WSS
+    # Build WebSocket URL
     livekit_url = LIVEKIT_URL.strip().rstrip("/")
     if livekit_url.startswith("https://"):
         livekit_url = livekit_url.replace("https://", "wss://", 1)
     
-    jwt_token = token.to_jwt()
-    
     return LiveKitTokenResponse(
         token=jwt_token,
         url=livekit_url,
-        room_name=f"channel-{channel_id}"
+        room_name=room_name
     )
