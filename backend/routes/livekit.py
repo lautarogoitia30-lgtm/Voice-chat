@@ -5,7 +5,7 @@ import os
 from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
-from livekit.api import AccessToken, VideoGrants
+from livekit_server_sdk import AccessToken, VideoGrants
 
 from backend.database import get_db
 from backend.models import Channel, GroupMember
