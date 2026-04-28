@@ -1,13 +1,14 @@
 """
 LiveKit routes: /livekit/token (generate voice chat tokens)
-Generates JWT tokens manually without livekit package.
+Uses official LiveKit SDK for token generation.
 """
 import os
 import time
 from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
-from jose import jwt
+from livekit import AccessToken
+from livekit.jwt import VideoGrants
 
 from backend.database import get_db
 from backend.models import Channel, GroupMember
@@ -23,37 +24,20 @@ LIVEKIT_API_KEY = os.getenv("LIVEKIT_API_KEY", "")
 LIVEKIT_API_SECRET = os.getenv("LIVEKIT_API_SECRET", "")
 
 
-def generate_livekit_jwt(api_key: str, api_secret: str, identity: str, name: str, room: str) -> str:
+def generate_livekit_token(api_key: str, api_secret: str, identity: str, name: str, room: str) -> str:
     """
-    Generate a LiveKit JWT token manually.
-    
-    This is a simplified implementation that creates the same token structure
-    that LiveKit's AccessToken would generate.
+    Generate a LiveKit token using the official SDK.
     """
-    # Build the JWT payload (LiveKit token format)
-    now = int(time.time())
-    
-    claims = {
-        # Standard JWT claims
-        "iss": api_key,
-        "sub": identity,
-        "name": name,
-        "iat": now,
-        "exp": now + 3600,  # 1 hour expiration
-        "nbf": now,
-        
-        # LiveKit-specific claims
-        "jti": f"{identity}-{now}",  # unique token ID
-        "video": {
-            "room": room,
-            "room_join": True,
-            "can_publish": True,
-            "can_subscribe": True,
-        }
-    }
-    
-    # Sign with HS256
-    return jwt.encode(claims, api_secret, algorithm="HS256")
+    token = AccessToken(api_key, api_secret)
+    token.identity = identity
+    token.name = name
+    token.video = VideoGrants(
+        room=room,
+        room_join=True,
+        can_publish=True,
+        can_subscribe=True,
+    )
+    return token.to_jwt()
 
 
 @router.post("/token", response_model=LiveKitTokenResponse)
@@ -99,9 +83,9 @@ async def generate_token(
     if not membership:
         raise HTTPException(status_code=403, detail="You are not a member of this channel")
     
-    # Generate the token manually
+    # Generate the token using official SDK
     room_name = f"channel-{channel.id}"
-    jwt_token = generate_livekit_jwt(
+    jwt_token = generate_livekit_token(
         api_key=LIVEKIT_API_KEY,
         api_secret=LIVEKIT_API_SECRET,
         identity=str(current_user["user_id"]),
@@ -143,9 +127,9 @@ async def generate_debug_token(channel_id: int, user_id: int = 999, username: st
     logger.info(f"DEBUG LIVEKIT_API_KEY starts with: {LIVEKIT_API_KEY[:8] if LIVEKIT_API_KEY else 'EMPTY'}")
     logger.info(f"DEBUG LIVEKIT_URL: {LIVEKIT_URL}")
     
-    # Generate token
+    # Generate token using official SDK
     room_name = f"channel-{channel_id}"
-    jwt_token = generate_livekit_jwt(
+    jwt_token = generate_livekit_token(
         api_key=LIVEKIT_API_KEY,
         api_secret=LIVEKIT_API_SECRET,
         identity=str(user_id),
