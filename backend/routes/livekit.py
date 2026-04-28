@@ -4,7 +4,6 @@ Generates JWT tokens manually with correct LiveKit format.
 """
 import os
 import time
-import httpx
 from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
