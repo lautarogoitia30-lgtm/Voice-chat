@@ -26,7 +26,7 @@ LIVEKIT_API_SECRET = os.getenv("LIVEKIT_API_SECRET", "")
 def generate_livekit_jwt(api_key: str, api_secret: str, identity: str, name: str, room: str) -> str:
     """
     Generate a LiveKit JWT token using the official SDK format.
-    Uses livekit-server-sdk for correct token generation.
+    Uses livekit-api for correct token generation.
     """
     from livekit import AccessToken
     
