@@ -126,6 +126,9 @@ async def generate_debug_token(channel_id: int, user_id: int = 999, username: st
     """
     Debug endpoint: generate a LiveKit token without DB checks.
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
     # Check debug secret
     configured_secret = os.getenv('LIVEKIT_DEBUG_SECRET', '')
     if configured_secret and debug_secret != configured_secret:
@@ -134,6 +137,11 @@ async def generate_debug_token(channel_id: int, user_id: int = 999, username: st
     # Check if LiveKit is configured
     if not LIVEKIT_URL or not LIVEKIT_API_KEY or not LIVEKIT_API_SECRET:
         raise HTTPException(status_code=503, detail="LiveKit is not configured")
+    
+    # Debug: show what we're reading
+    logger.info(f"DEBUG LIVEKIT_API_KEY: {LIVEKIT_API_KEY}")
+    logger.info(f"DEBUG LIVEKIT_API_KEY starts with: {LIVEKIT_API_KEY[:8] if LIVEKIT_API_KEY else 'EMPTY'}")
+    logger.info(f"DEBUG LIVEKIT_URL: {LIVEKIT_URL}")
     
     # Generate token
     room_name = f"channel-{channel_id}"
