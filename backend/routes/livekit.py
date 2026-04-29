@@ -149,8 +149,13 @@ async def generate_token(
     """
     Generate a LiveKit token for voice chat.
     """
+    # Debug: log the environment
+    print(f"[TOKEN] LIVEKIT_URL: {LIVEKIT_URL[:20]}..." if LIVEKIT_URL else "[TOKEN] LIVEKIT_URL: NOT SET")
+    print(f"[TOKEN] LIVEKIT_API_KEY: {LIVEKIT_API_KEY[:10]}..." if LIVEKIT_API_KEY else "[TOKEN] LIVEKIT_API_KEY: NOT SET")
+    
     # Check if LiveKit is configured
     if not LIVEKIT_URL or not LIVEKIT_API_KEY or not LIVEKIT_API_SECRET:
+        print("[TOKEN] ERROR: LiveKit not configured!")
         raise HTTPException(
             status_code=503,
             detail="LiveKit is not configured. Please set LIVEKIT_* environment variables."
