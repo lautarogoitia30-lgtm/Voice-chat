@@ -27,36 +27,45 @@ LIVEKIT_API_SECRET = os.getenv("LIVEKIT_API_SECRET", "")
 async def ensure_room_exists(room_name: str) -> None:
     """Create room in LiveKit if it doesn't exist using REST API"""
     if not LIVEKIT_URL or not LIVEKIT_API_KEY or not LIVEKIT_API_SECRET:
+        print("[LIVEKIT] Not configured, skipping room creation")
         return
     
     # Convert wss:// to https://
     api_url = LIVEKIT_URL.replace("wss://", "https://").rstrip("/")
     
-    # Create a service JWT for API calls
+    # Create a service JWT with proper format for LiveKit Admin API
     import time
     from jose import jwt as jwt_encoder
     
     now = int(time.time())
     service_claims = {
         "iss": LIVEKIT_API_KEY,
-        "sub": "service",
+        "sub": "admin",
         "exp": now + 60,
         "nbf": now,
+        "jti": f"service-{now}",
     }
     service_token = jwt_encoder.encode(service_claims, LIVEKIT_API_SECRET, algorithm="HS256")
+    
+    print(f"[LIVEKIT] Creating room: {room_name}")
+    print(f"[LIVEKIT] Using API URL: {api_url}")
     
     async with httpx.AsyncClient() as client:
         # Try to create room
         try:
             response = await client.post(
                 f"{api_url}/v1/rooms",
-                json={"name": room_name},
+                json={
+                    "name": room_name,
+                    "max_participants": 100,
+                },
                 headers={
                     "Authorization": f"Bearer {service_token}",
                     "Content-Type": "application/json",
                 },
-                timeout=5.0,
+                timeout=10.0,
             )
+            print(f"[LIVEKIT] Room API response: {response.status_code}")
             if response.status_code in (200, 201):
                 print(f"[LIVEKIT] Room created: {room_name}")
             elif response.status_code == 409:
