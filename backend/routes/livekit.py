@@ -79,30 +79,54 @@ async def ensure_room_exists(room_name: str) -> None:
 def generate_livekit_jwt(api_key: str, api_secret: str, identity: str, name: str, room: str) -> str:
     """
     Generate a LiveKit JWT token.
-    Uses manual JWT generation with correct LiveKit format.
+    Uses the LiveKit SDK (AccessToken) to generate a valid token.
     """
-    import time
-    from jose import jwt
-    
-    now = int(time.time())
-    
-    claims = {
-        "iss": api_key,
-        "sub": identity,
-        "name": name,
-        "iat": now,
-        "exp": now + 3600,
-        "nbf": now,
-        "jti": f"{identity}-{now}",
-        "video": {
-            "room": room,
-            "room_join": True,
-            "can_publish": True,
-            "can_subscribe": True,
+    try:
+        from livekit import api
+        from livekit.api import AccessToken, VideoGrants
+        
+        # Create access token
+        token = AccessToken(api_key, api_secret)
+        
+        # Set identity (required for room join)
+        token.with_identity(identity)
+        
+        # Set name
+        token.with_name(name)
+        
+        # Set video grants (permissions)
+        token.with_grants(VideoGrants(
+            room_join=True,
+            room=room,
+            can_publish=True,
+            can_subscribe=True,
+        ))
+        
+        # Generate JWT
+        return token.to_jwt()
+    except Exception as e:
+        print(f"[LIVEKIT] Error generating token: {e}")
+        # Fallback to manual generation
+        import time
+        from jose import jwt
+        
+        now = int(time.time())
+        claims = {
+            "iss": api_key,
+            "sub": identity,
+            "name": name,
+            "iat": now,
+            "exp": now + 3600,
+            "nbf": now,
+            "jti": f"{identity}-{now}",
+            "video": {
+                "room": room,
+                "room_join": True,
+                "can_publish": True,
+                "can_subscribe": True,
+            }
         }
-    }
-    
-    return jwt.encode(claims, api_secret, algorithm="HS256")
+        return jwt.encode(claims, api_secret, algorithm="HS256")
 
 
 @router.post("/token", response_model=LiveKitTokenResponse)

@@ -26,7 +26,7 @@ python-dotenv==1.0.1
 typing-extensions==4.12.2
 
 # LiveKit
-livekit-api==1.1.0
+livekit==0.17.5
 
 # HTTP client
 httpx==0.27.0
