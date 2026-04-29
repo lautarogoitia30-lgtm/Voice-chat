@@ -32,6 +32,19 @@ async def ensure_room_exists(room_name: str) -> None:
     # Convert wss:// to https://
     api_url = LIVEKIT_URL.replace("wss://", "https://").rstrip("/")
     
+    # Create a service JWT for API calls
+    import time
+    from jose import jwt as jwt_encoder
+    
+    now = int(time.time())
+    service_claims = {
+        "iss": LIVEKIT_API_KEY,
+        "sub": "service",
+        "exp": now + 60,
+        "nbf": now,
+    }
+    service_token = jwt_encoder.encode(service_claims, LIVEKIT_API_SECRET, algorithm="HS256")
+    
     async with httpx.AsyncClient() as client:
         # Try to create room
         try:
@@ -39,7 +52,7 @@ async def ensure_room_exists(room_name: str) -> None:
                 f"{api_url}/v1/rooms",
                 json={"name": room_name},
                 headers={
-                    "Authorization": f"Bearer {LIVEKIT_API_SECRET}",
+                    "Authorization": f"Bearer {service_token}",
                     "Content-Type": "application/json",
                 },
                 timeout=5.0,
@@ -49,7 +62,7 @@ async def ensure_room_exists(room_name: str) -> None:
             elif response.status_code == 409:
                 print(f"[LIVEKIT] Room already exists: {room_name}")
             else:
-                print(f"[LIVEKIT] Room creation response: {response.status_code}")
+                print(f"[LIVEKIT] Room creation response: {response.status_code} - {response.text}")
         except Exception as e:
             print(f"[LIVEKIT] Room creation error: {e}")
 
