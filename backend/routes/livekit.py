@@ -115,10 +115,9 @@ async def generate_token(
     """
     Generate a LiveKit token for voice chat.
     """
-    try:
-        # Debug: log the environment
-        print(f"[TOKEN] LIVEKIT_URL: {LIVEKIT_URL[:20]}..." if LIVEKIT_URL else "[TOKEN] LIVEKIT_URL: NOT SET")
-        print(f"[TOKEN] LIVEKIT_API_KEY: {LIVEKIT_API_KEY[:10]}..." if LIVEKIT_API_KEY else "[TOKEN] LIVEKIT_API_KEY: NOT SET")
+    # Debug: log the environment
+    print(f"[TOKEN] LIVEKIT_URL: {LIVEKIT_URL[:20]}..." if LIVEKIT_URL else "[TOKEN] LIVEKIT_URL: NOT SET")
+    print(f"[TOKEN] LIVEKIT_API_KEY: {LIVEKIT_API_KEY[:10]}..." if LIVEKIT_API_KEY else "[TOKEN] LIVEKIT_API_KEY: NOT SET")
     
     # Check if LiveKit is configured
     if not LIVEKIT_URL or not LIVEKIT_API_KEY or not LIVEKIT_API_SECRET:
@@ -182,11 +181,6 @@ async def generate_token(
             url=livekit_url,
             room_name=room_name
         )
-    except Exception as e:
-        import traceback
-        print(f"[TOKEN] ERROR: {e}")
-        print(f"[TOKEN] Traceback: {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"Token generation failed: {str(e)}")
 
 
 @router.get("/token_debug")
