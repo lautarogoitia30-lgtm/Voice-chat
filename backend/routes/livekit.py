@@ -35,9 +35,11 @@ async def ensure_room_exists(room_name: str) -> None:
     try:
         from livekit import api
         from livekit.api import LiveKitAPI
+        print("[LIVEKIT] LiveKit SDK imported successfully")
         
         # Convert wss:// to https:// for REST API
         api_url = LIVEKIT_URL.replace("wss://", "https://").rstrip("/")
+        print(f"[LIVEKIT] API URL: {api_url}")
         
         # Create service token for admin operations
         import time
@@ -52,9 +54,11 @@ async def ensure_room_exists(room_name: str) -> None:
             "jti": f"service-{now}",
         }
         service_token = jwt_encoder.encode(service_claims, LIVEKIT_API_SECRET, algorithm="HS256")
+        print(f"[LIVEKIT] Service token created")
         
         # Use LiveKit REST API to create room
         async with httpx.AsyncClient() as client:
+            print(f"[LIVEKIT] Calling {api_url}/v1/rooms")
             response = await client.post(
                 f"{api_url}/v1/rooms",
                 json={"name": room_name},
@@ -71,7 +75,9 @@ async def ensure_room_exists(room_name: str) -> None:
             else:
                 print(f"[LIVEKIT] Room creation response: {response.status_code} - {response.text}")
     except Exception as e:
+        import traceback
         print(f"[LIVEKIT] Room creation error: {e}")
+        print(f"[LIVEKIT] Traceback: {traceback.format_exc()}")
 
 
 def generate_livekit_jwt(api_key: str, api_secret: str, identity: str, name: str, room: str) -> str:
@@ -79,9 +85,11 @@ def generate_livekit_jwt(api_key: str, api_secret: str, identity: str, name: str
     Generate a LiveKit JWT token.
     Uses the LiveKit SDK (AccessToken) to generate a valid token.
     """
+    print(f"[LIVEKIT] generate_livekit_jwt called with api_key={api_key[:10]}..., identity={identity}, room={room}")
     try:
         from livekit import api
         from livekit.api import AccessToken, VideoGrants
+        print(f"[LIVEKIT] Import successful")
     except Exception as e:
         print(f"[LIVEKIT] Import error: {e}")
         raise RuntimeError(f"Failed to import LiveKit SDK: {e}")
@@ -110,7 +118,9 @@ def generate_livekit_jwt(api_key: str, api_secret: str, identity: str, name: str
         print(f"[LIVEKIT] Generated token (first 80 chars): {jwt_token[:80]}...")
         return jwt_token
     except Exception as e:
+        import traceback
         print(f"[LIVEKIT] Token generation error: {e}")
+        print(f"[LIVEKIT] Traceback: {traceback.format_exc()}")
         raise
 
 
@@ -189,6 +199,18 @@ async def generate_token(
             url=livekit_url,
             room_name=room_name
         )
+
+
+@router.get("/env_debug")
+async def debug_env():
+    """Debug endpoint to check environment variables"""
+    return {
+        "LIVEKIT_URL": "SET" if LIVEKIT_URL else "NOT SET",
+        "LIVEKIT_URL_value": LIVEKIT_URL[:30] + "..." if LIVEKIT_URL else None,
+        "LIVEKIT_API_KEY": "SET" if LIVEKIT_API_KEY else "NOT SET",
+        "LIVEKIT_API_KEY_value": LIVEKIT_API_KEY[:10] + "..." if LIVEKIT_API_KEY else None,
+        "LIVEKIT_API_SECRET": "SET" if LIVEKIT_API_SECRET else "NOT SET",
+    }
 
 
 @router.get("/token_debug")
