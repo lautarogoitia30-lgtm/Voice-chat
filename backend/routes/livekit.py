@@ -191,8 +191,8 @@ async def generate_token(
     username_safe = username.replace('ó', 'o').replace('á', 'a').replace('é', 'e').replace('í', 'i').replace('ú', 'u').replace('ñ', 'n')
     
     jwt_token = generate_livekit_jwt(
-        api_key=LIVEKIT_API_KEY,
-        api_secret=LIVEKIT_API_SECRET,
+        api_key=LIVEKIT_API_KEY.strip(),
+        api_secret=LIVEKIT_API_SECRET.strip(),
         identity=username_safe,
         name=username,
         room=room_name
@@ -220,13 +220,19 @@ async def test_endpoint():
 @router.get("/env_debug")
 async def debug_env():
     """Debug endpoint to check environment variables"""
+    # Strip whitespace from env vars
+    livekit_url = LIVEKIT_URL.strip() if LIVEKIT_URL else ""
+    livekit_key = LIVEKIT_API_KEY.strip() if LIVEKIT_API_KEY else ""
+    livekit_secret = LIVEKIT_API_SECRET.strip() if LIVEKIT_API_SECRET else ""
+    
     logger.info("[ENV_DEBUG] called")
     return {
-        "LIVEKIT_URL": "SET" if LIVEKIT_URL else "NOT SET",
-        "LIVEKIT_URL_value": LIVEKIT_URL[:30] + "..." if LIVEKIT_URL else None,
-        "LIVEKIT_API_KEY": "SET" if LIVEKIT_API_KEY else "NOT SET",
-        "LIVEKIT_API_KEY_value": LIVEKIT_API_KEY[:10] + "..." if LIVEKIT_API_KEY else None,
-        "LIVEKIT_API_SECRET": "SET" if LIVEKIT_API_SECRET else "NOT SET",
+        "LIVEKIT_URL": "SET" if livekit_url else "NOT SET",
+        "LIVEKIT_URL_value": livekit_url[:30] + "..." if livekit_url else None,
+        "LIVEKIT_API_KEY": "SET" if livekit_key else "NOT SET",
+        "LIVEKIT_API_KEY_value": livekit_key[:10] + "..." if livekit_key else None,
+        "LIVEKIT_API_SECRET": "SET" if livekit_secret else "NOT SET",
+        "LIVEKIT_SECRET_LENGTH": len(livekit_secret) if livekit_secret else 0,
     }
 
 
@@ -247,12 +253,12 @@ async def generate_debug_token(channel_id: int, user_id: int = 999, username: st
     # Generate token
     room_name = f"channel-{channel_id}"
     
-    # Ensure room exists before generating token
-    await ensure_room_exists(room_name)
+    # Room creation disabled - LiveKit creates rooms on demand
+    # await ensure_room_exists(room_name)
     
     jwt_token = generate_livekit_jwt(
-        api_key=LIVEKIT_API_KEY,
-        api_secret=LIVEKIT_API_SECRET,
+        api_key=LIVEKIT_API_KEY.strip(),
+        api_secret=LIVEKIT_API_SECRET.strip(),
         identity=str(user_id),
         name=username,
         room=room_name
