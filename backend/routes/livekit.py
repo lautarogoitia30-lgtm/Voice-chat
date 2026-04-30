@@ -160,6 +160,9 @@ async def generate_token(
     # Ensure room exists before generating token
     await ensure_room_exists(room_name)
     
+    # Debug: show what we're using for identity
+    print(f"[TOKEN] user_id: {current_user['user_id']}, username: {current_user['username']}")
+    
     jwt_token = generate_livekit_jwt(
         api_key=LIVEKIT_API_KEY,
         api_secret=LIVEKIT_API_SECRET,
