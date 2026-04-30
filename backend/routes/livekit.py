@@ -87,47 +87,48 @@ async def ensure_room_exists(room_name: str) -> None:
 
 def generate_livekit_jwt(api_key: str, api_secret: str, identity: str, name: str, room: str) -> str:
     """
-    Generate a LiveKit JWT token.
-    Uses the LiveKit SDK (AccessToken) to generate a valid token.
+    Generate a LiveKit JWT token manually using jose library.
+    This avoids dependency on LiveKit SDK version issues.
     """
-    logger.info(f"[LIVEKIT] generate_livekit_jwt called with api_key={api_key[:10]}..., identity={identity}, room={room}")
-    try:
-        # LiveKit 1.x imports
-        import livekit
-        from livekit import AccessToken, VideoGrants
-        logger.info(f"[LIVEKIT] LiveKit version: {livekit.__version__}, imports successful")
-    except Exception as e:
-        logger.error(f"[LIVEKIT] Import error: {e}")
-        raise RuntimeError(f"Failed to import LiveKit SDK: {e}")
+    import time
+    import jwt as jwt_encoder
     
-    try:
-        # Create access token
-        token = AccessToken(api_key, api_secret)
-        
-        # Set identity (required for room join)
-        token.with_identity(identity)
-        
-        # Set name
-        token.with_name(name)
-        
-        # Set video grants (permissions)
-        grants = VideoGrants(
-            room_join=True,
-            room=room,
-            can_publish=True,
-            can_subscribe=True,
-        )
-        token.with_grants(grants)
-        
-        # Generate JWT
-        jwt_token = token.to_jwt()
-        logger.info(f"[LIVEKIT] Generated token (first 80 chars): {jwt_token[:80]}...")
-        return jwt_token
-    except Exception as e:
-        import traceback
-        logger.error(f"[LIVEKIT] Token generation error: {e}")
-        logger.error(f"[LIVEKIT] Traceback: {traceback.format_exc()}")
-        raise
+    logger.info(f"[LIVEKIT] Generating JWT manually for identity={identity}, room={room}")
+    
+    # Current time
+    now = int(time.time())
+    
+    # Token validity: 1 hour
+    exp = now + 3600
+    
+    # Build the JWT claims according to LiveKit format
+    claims = {
+        # Issuer - must match API key
+        "iss": api_key,
+        # Subject (identity) - the user identifier
+        "sub": identity,
+        # Not valid before
+        "nbf": now,
+        # Expiration time
+        "exp": exp,
+        # JWT ID - unique identifier
+        "jti": f"token-{now}-{identity}",
+        # Video/Audio grants
+        "video": {
+            "room": room,
+            "join": True,
+            "publish": True,
+            "subscribe": True,
+        },
+        # Name (optional)
+        "name": name,
+    }
+    
+    # Generate the JWT
+    jwt_token = jwt_encoder.encode(claims, api_secret, algorithm="HS256")
+    logger.info(f"[LIVEKIT] Generated token (first 80 chars): {jwt_token[:80]}...")
+    
+    return jwt_token
 
 
 @router.post("/token", response_model=LiveKitTokenResponse)
@@ -181,8 +182,8 @@ async def generate_token(
     # Generate the token manually
     room_name = f"channel-{channel.id}"
     
-    # Ensure room exists before generating token
-    await ensure_room_exists(room_name)
+    # Note: Room auto-creation is disabled - LiveKit creates rooms on-demand
+    # await ensure_room_exists(room_name)
     
     # Debug: show what we're using for identity
     logger.info(f"[TOKEN] user_id: {current_user['user_id']}, username: {current_user['username']}")
