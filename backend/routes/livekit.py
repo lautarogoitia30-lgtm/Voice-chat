@@ -79,31 +79,39 @@ def generate_livekit_jwt(api_key: str, api_secret: str, identity: str, name: str
     Generate a LiveKit JWT token.
     Uses the LiveKit SDK (AccessToken) to generate a valid token.
     """
-    from livekit import api
-    from livekit.api import AccessToken, VideoGrants
+    try:
+        from livekit import api
+        from livekit.api import AccessToken, VideoGrants
+    except Exception as e:
+        print(f"[LIVEKIT] Import error: {e}")
+        raise RuntimeError(f"Failed to import LiveKit SDK: {e}")
     
-    # Create access token
-    token = AccessToken(api_key, api_secret)
-    
-    # Set identity (required for room join)
-    token.with_identity(identity)
-    
-    # Set name
-    token.with_name(name)
-    
-    # Set video grants (permissions)
-    grants = VideoGrants(
-        room_join=True,
-        room=room,
-        can_publish=True,
-        can_subscribe=True,
-    )
-    token.with_grants(grants)
-    
-    # Generate JWT
-    jwt_token = token.to_jwt()
-    print(f"[LIVEKIT] Generated token (first 80 chars): {jwt_token[:80]}...")
-    return jwt_token
+    try:
+        # Create access token
+        token = AccessToken(api_key, api_secret)
+        
+        # Set identity (required for room join)
+        token.with_identity(identity)
+        
+        # Set name
+        token.with_name(name)
+        
+        # Set video grants (permissions)
+        grants = VideoGrants(
+            room_join=True,
+            room=room,
+            can_publish=True,
+            can_subscribe=True,
+        )
+        token.with_grants(grants)
+        
+        # Generate JWT
+        jwt_token = token.to_jwt()
+        print(f"[LIVEKIT] Generated token (first 80 chars): {jwt_token[:80]}...")
+        return jwt_token
+    except Exception as e:
+        print(f"[LIVEKIT] Token generation error: {e}")
+        raise
 
 
 @router.post("/token", response_model=LiveKitTokenResponse)
