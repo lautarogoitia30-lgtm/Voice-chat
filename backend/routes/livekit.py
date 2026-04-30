@@ -25,55 +25,53 @@ LIVEKIT_API_SECRET = os.getenv("LIVEKIT_API_SECRET", "")
 
 
 async def ensure_room_exists(room_name: str) -> None:
-    """Create room in LiveKit if it doesn't exist using REST API"""
+    """Create room in LiveKit if it doesn't exist using the SDK"""
     if not LIVEKIT_URL or not LIVEKIT_API_KEY or not LIVEKIT_API_SECRET:
         print("[LIVEKIT] Not configured, skipping room creation")
         return
     
-    # Convert wss:// to https://
-    api_url = LIVEKIT_URL.replace("wss://", "https://").rstrip("/")
+    print(f"[LIVEKIT] Ensuring room exists: {room_name}")
     
-    # Create a service JWT with proper format for LiveKit Admin API
-    import time
-    from jose import jwt as jwt_encoder
-    
-    now = int(time.time())
-    service_claims = {
-        "iss": LIVEKIT_API_KEY,
-        "sub": "admin",
-        "exp": now + 60,
-        "nbf": now,
-        "jti": f"service-{now}",
-    }
-    service_token = jwt_encoder.encode(service_claims, LIVEKIT_API_SECRET, algorithm="HS256")
-    
-    print(f"[LIVEKIT] Creating room: {room_name}")
-    print(f"[LIVEKIT] Using API URL: {api_url}")
-    
-    async with httpx.AsyncClient() as client:
-        # Try to create room
-        try:
+    try:
+        from livekit import api
+        from livekit.api import LiveKitAPI
+        
+        # Convert wss:// to https:// for REST API
+        api_url = LIVEKIT_URL.replace("wss://", "https://").rstrip("/")
+        
+        # Create service token for admin operations
+        import time
+        import jwt as jwt_encoder
+        
+        now = int(time.time())
+        service_claims = {
+            "iss": LIVEKIT_API_KEY,
+            "sub": "service",
+            "exp": now + 60,
+            "nbf": now,
+            "jti": f"service-{now}",
+        }
+        service_token = jwt_encoder.encode(service_claims, LIVEKIT_API_SECRET, algorithm="HS256")
+        
+        # Use LiveKit REST API to create room
+        async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{api_url}/v1/rooms",
-                json={
-                    "name": room_name,
-                    "max_participants": 100,
-                },
+                json={"name": room_name},
                 headers={
                     "Authorization": f"Bearer {service_token}",
                     "Content-Type": "application/json",
                 },
                 timeout=10.0,
             )
-            print(f"[LIVEKIT] Room API response: {response.status_code}")
             if response.status_code in (200, 201):
                 print(f"[LIVEKIT] Room created: {room_name}")
             elif response.status_code == 409:
                 print(f"[LIVEKIT] Room already exists: {room_name}")
             else:
                 print(f"[LIVEKIT] Room creation response: {response.status_code} - {response.text}")
-        except Exception as e:
-            print(f"[LIVEKIT] Room creation error: {e}")
+    except Exception as e:
+        print(f"[LIVEKIT] Room creation error: {e}")
 
 
 def generate_livekit_jwt(api_key: str, api_secret: str, identity: str, name: str, room: str) -> str:
@@ -106,27 +104,6 @@ def generate_livekit_jwt(api_key: str, api_secret: str, identity: str, name: str
     jwt_token = token.to_jwt()
     print(f"[LIVEKIT] Generated token (first 80 chars): {jwt_token[:80]}...")
     return jwt_token
-        # Fallback to manual generation
-        import time
-        from jose import jwt
-        
-        now = int(time.time())
-        claims = {
-            "iss": api_key,
-            "sub": identity,
-            "name": name,
-            "iat": now,
-            "exp": now + 3600,
-            "nbf": now,
-            "jti": f"{identity}-{now}",
-            "video": {
-                "room": room,
-                "room_join": True,
-                "can_publish": True,
-                "can_subscribe": True,
-            }
-        }
-        return jwt.encode(claims, api_secret, algorithm="HS256")
 
 
 @router.post("/token", response_model=LiveKitTokenResponse)
