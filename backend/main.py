@@ -11,7 +11,7 @@ load_dotenv(override=False)
 
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket
-from starlette.middleware.base import BaseHTTPMiddleware
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -44,37 +44,17 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Configure CORS - explicitly add all headers
-from starlette.middleware.base import BaseHTTPMiddleware
+# Configure CORS - use FastAPI's standard CORSMiddleware
+from fastapi.middleware.cors import CORSMiddleware
 
-class CORSMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request, call_next):
-        # Handle preflight (OPTIONS) requests directly
-        if request.method == "OPTIONS":
-            from fastapi.responses import Response
-            return Response(
-                status_code=200,
-                headers={
-                    "Access-Control-Allow-Origin": "*",
-                    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
-                    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, X-Api-Key",
-                    "Access-Control-Allow-Credentials": "true",
-                    "Access-Control-Expose-Headers": "*",
-                }
-            )
-        
-        response = await call_next(request)
-        
-        # Add CORS headers to EVERY response
-        response.headers["Access-Control-Allow-Origin"] = "*"
-        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH"
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With, X-Api-Key"
-        response.headers["Access-Control-Allow-Credentials"] = "true"
-        response.headers["Access-Control-Expose-Headers"] = "*"
-        
-        return response
-
-app.add_middleware(CORSMiddleware)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["*"],
+)
 
 # Serve static files (JS, CSS, Images)
 app.mount("/js", StaticFiles(directory=str(FRONTEND_DIR / "js")), name="js")
