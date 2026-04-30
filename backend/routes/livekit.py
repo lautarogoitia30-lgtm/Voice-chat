@@ -90,9 +90,6 @@ def generate_livekit_jwt(api_key: str, api_secret: str, identity: str, name: str
     Generate a LiveKit JWT token manually using jose library.
     This avoids dependency on LiveKit SDK version issues.
     """
-    import time
-    import jwt as jwt_encoder
-    
     logger.info(f"[LIVEKIT] Generating JWT manually for identity={identity}, room={room}")
     
     # Current time
@@ -124,8 +121,8 @@ def generate_livekit_jwt(api_key: str, api_secret: str, identity: str, name: str
         "name": name,
     }
     
-    # Generate the JWT
-    jwt_token = jwt_encoder.encode(claims, api_secret, algorithm="HS256")
+    # Generate the JWT using the already-imported jwt
+    jwt_token = jwt.encode(claims, api_secret, algorithm="HS256")
     logger.info(f"[LIVEKIT] Generated token (first 80 chars): {jwt_token[:80]}...")
     
     return jwt_token
