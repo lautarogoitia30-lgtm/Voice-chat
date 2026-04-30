@@ -33,9 +33,9 @@ async def ensure_room_exists(room_name: str) -> None:
     print(f"[LIVEKIT] Ensuring room exists: {room_name}")
     
     try:
-        from livekit import api
-        from livekit.api import LiveKitAPI
-        print("[LIVEKIT] LiveKit SDK imported successfully")
+        # LiveKit 1.x - no need to import api module, just use httpx directly
+        import livekit
+        print(f"[LIVEKIT] LiveKit version: {livekit.__version__}")
         
         # Convert wss:// to https:// for REST API
         api_url = LIVEKIT_URL.replace("wss://", "https://").rstrip("/")
@@ -87,9 +87,10 @@ def generate_livekit_jwt(api_key: str, api_secret: str, identity: str, name: str
     """
     print(f"[LIVEKIT] generate_livekit_jwt called with api_key={api_key[:10]}..., identity={identity}, room={room}")
     try:
-        from livekit import api
-        from livekit.api import AccessToken, VideoGrants
-        print(f"[LIVEKIT] Import successful")
+        # LiveKit 1.x imports
+        import livekit
+        from livekit import AccessToken, VideoGrants
+        print(f"[LIVEKIT] LiveKit version: {livekit.__version__}, imports successful")
     except Exception as e:
         print(f"[LIVEKIT] Import error: {e}")
         raise RuntimeError(f"Failed to import LiveKit SDK: {e}")
