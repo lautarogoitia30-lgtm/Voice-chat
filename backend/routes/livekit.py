@@ -185,11 +185,16 @@ async def generate_token(
     # Debug: show what we're using for identity
     logger.info(f"[TOKEN] user_id: {current_user['user_id']}, username: {current_user['username']}")
     
+    # Use username as identity but replace special characters
+    username = current_user["username"]
+    # Replace 'ó' with 'o' and other special chars to avoid encoding issues
+    username_safe = username.replace('ó', 'o').replace('á', 'a').replace('é', 'e').replace('í', 'i').replace('ú', 'u').replace('ñ', 'n')
+    
     jwt_token = generate_livekit_jwt(
         api_key=LIVEKIT_API_KEY,
         api_secret=LIVEKIT_API_SECRET,
-        identity=str(current_user["user_id"]),
-        name=current_user["username"],
+        identity=username_safe,
+        name=username,
         room=room_name
     )
     
