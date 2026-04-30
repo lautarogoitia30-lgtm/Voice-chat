@@ -163,7 +163,7 @@ async def generate_token(
     jwt_token = generate_livekit_jwt(
         api_key=LIVEKIT_API_KEY,
         api_secret=LIVEKIT_API_SECRET,
-        identity=str(current_user["user_id"]),
+        identity=current_user["username"],
         name=current_user["username"],
         room=room_name
     )
