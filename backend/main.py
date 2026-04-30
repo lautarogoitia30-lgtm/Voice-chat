@@ -44,10 +44,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Configure CORS - allow all origins for development
+# Configure CORS - allow Vercel and Render origins
+ALLOWED_ORIGINS = [
+    "https://voice-chat-drab-five.vercel.app",
+    "https://voice-chat-92bv681bz-lautarogoitia30-7018s-projects.vercel.app",
+    "https://voice-chat-backend-n90f.onrender.com",
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
