@@ -201,9 +201,17 @@ async def generate_token(
         )
 
 
+@router.get("/test")
+async def test_endpoint():
+    """Simple test endpoint that doesn't call LiveKit"""
+    print("[TEST] test_endpoint called!")
+    return {"status": "ok", "message": "This is a test"}
+
+
 @router.get("/env_debug")
 async def debug_env():
     """Debug endpoint to check environment variables"""
+    print("[ENV_DEBUG] called")
     return {
         "LIVEKIT_URL": "SET" if LIVEKIT_URL else "NOT SET",
         "LIVEKIT_URL_value": LIVEKIT_URL[:30] + "..." if LIVEKIT_URL else None,
