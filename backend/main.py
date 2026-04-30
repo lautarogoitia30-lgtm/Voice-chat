@@ -49,6 +49,20 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 class CORSMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
+        # Handle preflight (OPTIONS) requests directly
+        if request.method == "OPTIONS":
+            from fastapi.responses import Response
+            return Response(
+                status_code=200,
+                headers={
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
+                    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, X-Api-Key",
+                    "Access-Control-Allow-Credentials": "true",
+                    "Access-Control-Expose-Headers": "*",
+                }
+            )
+        
         response = await call_next(request)
         
         # Add CORS headers to EVERY response
