@@ -208,14 +208,6 @@ async def websocket_endpoint(websocket: WebSocket, channel_id: int, user_data: O
                 
     except WebSocketDisconnect:
         manager.disconnect(channel_id, websocket)
-        
-        # Notify others in channel
-        await manager.broadcast(channel_id, {
-            "channel_id": channel_id,
-            "content": "User disconnected",
-            "sender_username": "System",
-            "timestamp": datetime.utcnow().isoformat()
-        })
 
 
 async def dm_websocket_endpoint(websocket: WebSocket, conversation_id: int, user_data: Optional[dict] = None):
