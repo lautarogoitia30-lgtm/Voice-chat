@@ -1,5 +1,5 @@
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use log::{debug, error, info};
+use log::{error, info};
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
@@ -283,18 +283,19 @@ impl AudioProcessor {
         compressor_ratio: f32,
         auto_gain_level: f32,
     ) {
-        // Track state in thread-local (we can't share &mut self across threads)
+        use std::cell::RefCell as TRC;
         thread_local! {
-            static STATE: RefCell<ProcessorState> = RefCell::new(ProcessorState::new(
-                noise_gate_open_db, noise_gate_close_db,
-                compressor_threshold_db, compressor_ratio, auto_gain_level,
-            ));
+            static STATE: TRC<Option<ProcessorState>> = TRC::new(None);
         }
         
         let mut processed_samples = Vec::with_capacity(data.len());
         
-        STATE.with(|state| {
-            let mut state = state.borrow_mut();
+        STATE.with(|cell| {
+            let mut borrow = cell.borrow_mut();
+            let state = borrow.get_or_insert_with(|| ProcessorState::new(
+                noise_gate_open_db, noise_gate_close_db,
+                compressor_threshold_db, compressor_ratio, auto_gain_level,
+            ));
             for &sample in data.iter() {
                 let processed = state.process_sample(sample);
                 processed_samples.push(processed);
@@ -331,17 +332,19 @@ impl AudioProcessor {
         compressor_ratio: f32,
         auto_gain_level: f32,
     ) {
+        use std::cell::RefCell as TRC;
         thread_local! {
-            static STATE: RefCell<ProcessorState> = RefCell::new(ProcessorState::new(
-                noise_gate_open_db, noise_gate_close_db,
-                compressor_threshold_db, compressor_ratio, auto_gain_level,
-            ));
+            static STATE: TRC<Option<ProcessorState>> = TRC::new(None);
         }
         
         let mut processed_samples = Vec::with_capacity(data.len());
         
-        STATE.with(|state| {
-            let mut state = state.borrow_mut();
+        STATE.with(|cell| {
+            let mut borrow = cell.borrow_mut();
+            let state = borrow.get_or_insert_with(|| ProcessorState::new(
+                noise_gate_open_db, noise_gate_close_db,
+                compressor_threshold_db, compressor_ratio, auto_gain_level,
+            ));
             for &sample in data.iter() {
                 let float_sample = sample as f32 / 32768.0;
                 let processed = state.process_sample(float_sample);

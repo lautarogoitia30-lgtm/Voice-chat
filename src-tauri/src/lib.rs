@@ -92,7 +92,8 @@ async fn get_audio_info() -> Result<AudioInfo, String> {
 async fn set_noise_gate(db: f32) -> Result<String, String> {
     info!("[RUST] set_noise_gate called: {} dB", db);
     let mut processor = get_processor().lock().await;
-    processor.set_noise_gate(db);
+    // Use db for both open and close, with 4dB hysteresis
+    processor.set_noise_gate(db, db - 4.0);
     Ok(format!("Noise gate set to {} dB", db))
 }
 
@@ -100,7 +101,6 @@ async fn set_noise_gate(db: f32) -> Result<String, String> {
 async fn set_compressor(threshold_db: f32, ratio: f32) -> Result<String, String> {
     info!("[RUST] set_compressor called: {} dB, {}:1", threshold_db, ratio);
     let mut processor = get_processor().lock().await;
-    processor.set_compressor_threshold(threshold_db);
-    processor.set_compressor_ratio(ratio);
+    processor.set_compressor(threshold_db, ratio);
     Ok(format!("Compressor set to {} dB, {}:1 ratio", threshold_db, ratio))
 }
