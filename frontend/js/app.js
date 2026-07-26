@@ -1215,7 +1215,7 @@ function handleWebSocketMessage(message) {
     
     const div = document.createElement('div');
     div.className = 'message other';
-    div.innerHTML = '<div class="message-sender">' + (message.sender_username || 'Unknown') + '</div><div class="message-content">' + message.content + '</div><div class="message-time">' + new Date(message.timestamp).toLocaleTimeString() + '</div>';
+    div.innerHTML = '<div class="message-sender">' + (message.sender_username || 'Unknown') + '</div><div class="message-content">' + message.content + '</div><div class="message-time">' + (message.timestamp ? new Date(message.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString()) + '</div>';
     elements.messagesList.appendChild(div);
     elements.messagesList.scrollTop = elements.messagesList.scrollHeight;
 }

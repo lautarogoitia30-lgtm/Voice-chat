@@ -213,7 +213,8 @@ async def websocket_endpoint(websocket: WebSocket, channel_id: int, user_data: O
         await manager.broadcast(channel_id, {
             "channel_id": channel_id,
             "content": "User disconnected",
-            "sender_username": "System"
+            "sender_username": "System",
+            "timestamp": datetime.utcnow().isoformat()
         })
 
 
