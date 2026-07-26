@@ -151,13 +151,8 @@ class LiveKitClient {
                         maxBitrate: 5_000_000,
                         maxFramerate: 30,
                     },
-                    // Default simulcast layers: low(360p) → mid(720p) → high(1080p)
-                    // LiveKit SFU picks the right layer per subscriber based on their bandwidth
-                    screenShareSimulcastLayers: [
-                        { maxBitrate: 600_000,   maxFramerate: 15, width: 640,  height: 360 },
-                        { maxBitrate: 2_000_000, maxFramerate: 30, width: 1280, height: 720 },
-                        { maxBitrate: 5_000_000, maxFramerate: 30, width: 1920, height: 1080 },
-                    ],
+                    // Default simulcast layers set per-publisher in startScreenShare()
+                    screenShareSimulcastLayers: [],
                 },
             });
             
@@ -1133,9 +1128,9 @@ class LiveKitClient {
         }
         
         try {
-            // Import LiveKit for Track class
+            // Import LiveKit for Track class and presets
             const livekit = await import('https://cdn.jsdelivr.net/npm/livekit-client@2/+esm');
-            const { Track } = livekit;
+            const { Track, VideoPresets, ScreenSharePresets } = livekit;
             
             // Get quality setting from localStorage
             // Default is '1080p' — good balance of quality and bandwidth
@@ -1143,7 +1138,8 @@ class LiveKitClient {
             console.log('[SCREEN] Using quality:', quality);
             
             // === Quality presets with capture constraints + simulcast layers ===
-            // Each preset captures at the chosen resolution but publishes 3 simulcast layers
+            // Uses LiveKit's VideoPreset objects which have { width, height, encoding: { maxBitrate, maxFramerate } }
+            // Each preset captures at the chosen resolution but publishes simulcast layers
             // so viewers on bad connections still see something smooth
             let videoConstraints, primaryEncoding, simulcastLayers, audioBitrate;
             
@@ -1155,11 +1151,10 @@ class LiveKitClient {
                         frameRate: { ideal: 30, max: 30 },
                         displaySurface: 'monitor',
                     };
-                    primaryEncoding = { maxBitrate: 2_500_000, maxFramerate: 30 };
-                    // Simulcast: 360p(low) → 720p(high)
+                    primaryEncoding = ScreenSharePresets.h720fps30.encoding;
                     simulcastLayers = [
-                        { maxBitrate: 600_000,  maxFramerate: 15, width: 640,  height: 360 },  // low
-                        { maxBitrate: 2_500_000, maxFramerate: 30, width: 1280, height: 720 },  // high
+                        ScreenSharePresets.h360fps15,
+                        ScreenSharePresets.h720fps15,
                     ];
                     audioBitrate = 128_000;
                     break;
@@ -1171,11 +1166,10 @@ class LiveKitClient {
                         displaySurface: 'monitor',
                     };
                     primaryEncoding = { maxBitrate: 8_000_000, maxFramerate: 30 };
-                    // Simulcast: 360p → 720p → 1440p
                     simulcastLayers = [
-                        { maxBitrate: 600_000,   maxFramerate: 15, width: 640,  height: 360 },   // low
-                        { maxBitrate: 2_000_000, maxFramerate: 30, width: 1280, height: 720 },   // mid
-                        { maxBitrate: 8_000_000, maxFramerate: 30, width: 2560, height: 1440 },  // high
+                        ScreenSharePresets.h360fps15,
+                        ScreenSharePresets.h720fps30,
+                        { maxBitrate: 5_000_000, maxFramerate: 30 },
                     ];
                     audioBitrate = 256_000;
                     break;
@@ -1187,16 +1181,14 @@ class LiveKitClient {
                         displaySurface: 'monitor',
                     };
                     primaryEncoding = { maxBitrate: 15_000_000, maxFramerate: 30 };
-                    // Simulcast: 360p → 720p → 1440p → 4K
                     simulcastLayers = [
-                        { maxBitrate: 600_000,    maxFramerate: 15, width: 640,  height: 360 },   // low
-                        { maxBitrate: 2_000_000,  maxFramerate: 30, width: 1280, height: 720 },   // mid
-                        { maxBitrate: 8_000_000,  maxFramerate: 30, width: 2560, height: 1440 },  // high-mid
+                        ScreenSharePresets.h360fps15,
+                        ScreenSharePresets.h720fps30,
+                        ScreenSharePresets.h1080fps30,
                     ];
                     audioBitrate = 512_000;
                     break;
                 case 'auto':
-                    // Auto: capture native resolution, let simulcast handle the rest
                     videoConstraints = {
                         width: { ideal: 3840 },
                         height: { ideal: 2160 },
@@ -1205,9 +1197,9 @@ class LiveKitClient {
                     };
                     primaryEncoding = { maxBitrate: 10_000_000, maxFramerate: 30 };
                     simulcastLayers = [
-                        { maxBitrate: 600_000,   maxFramerate: 15, width: 640,  height: 360 },   // low
-                        { maxBitrate: 2_000_000, maxFramerate: 30, width: 1280, height: 720 },   // mid
-                        { maxBitrate: 8_000_000, maxFramerate: 30, width: 2560, height: 1440 },  // high
+                        ScreenSharePresets.h360fps15,
+                        ScreenSharePresets.h720fps30,
+                        ScreenSharePresets.h1080fps30,
                     ];
                     audioBitrate = 256_000;
                     break;
@@ -1219,12 +1211,11 @@ class LiveKitClient {
                         frameRate: { ideal: 30, max: 30 },
                         displaySurface: 'monitor',
                     };
-                    primaryEncoding = { maxBitrate: 5_000_000, maxFramerate: 30 };
-                    // Simulcast: 360p → 720p → 1080p
+                    primaryEncoding = ScreenSharePresets.h1080fps30.encoding;
                     simulcastLayers = [
-                        { maxBitrate: 600_000,   maxFramerate: 15, width: 640,  height: 360 },   // low
-                        { maxBitrate: 2_000_000, maxFramerate: 30, width: 1280, height: 720 },   // mid
-                        { maxBitrate: 5_000_000, maxFramerate: 30, width: 1920, height: 1080 },  // high
+                        ScreenSharePresets.h360fps15,
+                        ScreenSharePresets.h720fps30,
+                        ScreenSharePresets.h1080fps15,
                     ];
                     audioBitrate = 128_000;
                     break;
@@ -1274,7 +1265,8 @@ class LiveKitClient {
             console.log(`[SCREEN] ✅ Video published with ${layerCount} simulcast layers (${quality}):`);
             console.log(`[SCREEN]   Primary: ${primaryEncoding.maxBitrate / 1_000_000}Mbps @ ${primaryEncoding.maxFramerate}fps`);
             simulcastLayers.forEach((layer, i) => {
-                console.log(`[SCREEN]   Layer ${i + 1}: ${layer.width}x${layer.height} @ ${layer.maxBitrate / 1_000}kbps, ${layer.maxFramerate}fps`);
+                const enc = layer.encoding || layer;
+                console.log(`[SCREEN]   Layer ${i + 1}: ${layer.width}x${layer.height} @ ${enc.maxBitrate / 1_000}kbps, ${enc.maxFramerate}fps`);
             });
             
             // STEP 4: Publish audio track if available
