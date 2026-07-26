@@ -1196,7 +1196,6 @@ class LiveKitClient {
                     audioBitrate = 512_000;
                     break;
                 case 'auto':
-                default:
                     // Auto: capture native resolution, let simulcast handle the rest
                     videoConstraints = {
                         width: { ideal: 3840 },
