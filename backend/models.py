@@ -1,6 +1,6 @@
 """
 Database models using SQLAlchemy.
-Contains: User, Group, Channel, GroupMember, VoiceParticipant, DMConversation, DirectMessage
+Contains: User, Group, Channel, GroupMember, VoiceParticipant, ChannelMessage, DMConversation, DirectMessage
 """
 from sqlalchemy import Column, Integer, String, ForeignKey, Enum, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
@@ -86,6 +86,21 @@ class VoiceParticipant(Base):
     # Relationships
     user = relationship("User")
     channel = relationship("Channel")
+
+
+class ChannelMessage(Base):
+    """A single message in a text channel."""
+    __tablename__ = "channel_messages"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    channel_id = Column(Integer, ForeignKey("channels.id"), nullable=False)
+    sender_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    content = Column(Text, nullable=False)
+    created_at = Column(Integer, nullable=False)  # Unix timestamp
+
+    # Relationships
+    channel = relationship("Channel")
+    sender = relationship("User")
 
 
 class DMConversation(Base):

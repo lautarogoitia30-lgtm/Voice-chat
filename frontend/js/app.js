@@ -826,6 +826,24 @@ async function selectChannel(channel) {
         elements.emptyState.classList.add('hidden');
         // Show message input in bottom bar
         if (elements.bottomMessageArea) elements.bottomMessageArea.classList.remove('hidden');
+        
+        // Clear existing messages and load history
+        if (elements.messagesList) elements.messagesList.innerHTML = '';
+        try {
+            const messages = await API.channels.getMessages(channel.id, 50);
+            if (messages && messages.length > 0) {
+                messages.forEach(msg => {
+                    const div = document.createElement('div');
+                    div.className = 'message other';
+                    div.innerHTML = '<div class="message-sender">' + (msg.sender_username || 'Unknown') + '</div><div class="message-content">' + msg.content + '</div><div class="message-time">' + (msg.timestamp ? new Date(msg.timestamp * 1000).toLocaleTimeString() : '') + '</div>';
+                    elements.messagesList.appendChild(div);
+                });
+                elements.messagesList.scrollTop = elements.messagesList.scrollHeight;
+            }
+        } catch (e) {
+            console.error('Failed to load message history:', e);
+        }
+        
         window.wsClient.connect(channel.id);
     } else {
         elements.textChat.classList.add('hidden');
@@ -1215,7 +1233,7 @@ function handleWebSocketMessage(message) {
     
     const div = document.createElement('div');
     div.className = 'message other';
-    div.innerHTML = '<div class="message-sender">' + (message.sender_username || 'Unknown') + '</div><div class="message-content">' + message.content + '</div><div class="message-time">' + (message.timestamp ? new Date(message.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString()) + '</div>';
+    div.innerHTML = '<div class="message-sender">' + (message.sender_username || 'Unknown') + '</div><div class="message-content">' + message.content + '</div><div class="message-time">' + (message.timestamp ? (typeof message.timestamp === 'number' && message.timestamp < 10000000000 ? new Date(message.timestamp * 1000).toLocaleTimeString() : new Date(message.timestamp).toLocaleTimeString()) : new Date().toLocaleTimeString()) + '</div>';
     elements.messagesList.appendChild(div);
     elements.messagesList.scrollTop = elements.messagesList.scrollHeight;
 }

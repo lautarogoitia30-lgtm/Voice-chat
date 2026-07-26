@@ -8,7 +8,7 @@ from typing import List
 from pydantic import BaseModel
 
 from backend.database import get_db
-from backend.models import Group, Channel, GroupMember, VoiceParticipant
+from backend.models import Group, Channel, GroupMember, VoiceParticipant, ChannelMessage, User
 from backend.schemas import ChannelCreate, ChannelResponse
 from backend.auth import get_current_user
 from backend.permissions import require_role, get_member_role
@@ -161,6 +161,75 @@ async def get_channel(
         raise HTTPException(status_code=403, detail="You are not a member of this group's channel")
     
     return channel
+
+
+class ChannelMessageResponse(BaseModel):
+    """Response model for a channel message."""
+    id: int
+    channel_id: int
+    sender_id: int
+    sender_username: str
+    content: str
+    timestamp: int
+    avatar_url: str | None = None
+
+
+@router.get("/{channel_id}/messages")
+async def get_channel_messages(
+    channel_id: int,
+    limit: int = Query(default=50, le=200),
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get recent messages for a text channel.
+    """
+    # Get channel
+    result = await db.execute(
+        select(Channel).where(Channel.id == channel_id)
+    )
+    channel = result.scalar_one_or_none()
+    
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+    
+    # Check membership
+    result = await db.execute(
+        select(GroupMember).where(
+            and_(
+                GroupMember.group_id == channel.group_id,
+                GroupMember.user_id == current_user["user_id"]
+            )
+        )
+    )
+    membership = result.scalar_one_or_none()
+    
+    if not membership:
+        raise HTTPException(status_code=403, detail="Not a member")
+    
+    # Get last N messages with sender info
+    result = await db.execute(
+        select(ChannelMessage, User)
+        .join(User, ChannelMessage.sender_id == User.id)
+        .where(ChannelMessage.channel_id == channel_id)
+        .order_by(ChannelMessage.id.desc())
+        .limit(limit)
+    )
+    rows = result.all()
+    
+    messages = []
+    for msg, user in reversed(list(rows)):
+        messages.append(ChannelMessageResponse(
+            id=msg.id,
+            channel_id=msg.channel_id,
+            sender_id=msg.sender_id,
+            sender_username=user.username,
+            content=msg.content,
+            timestamp=msg.created_at,
+            avatar_url=user.avatar_url
+        ))
+    
+    return messages
 
 
 @router.post("/{channel_id}/voice/join")

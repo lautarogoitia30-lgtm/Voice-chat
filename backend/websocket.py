@@ -192,13 +192,32 @@ async def websocket_endpoint(websocket: WebSocket, channel_id: int, user_data: O
                     sender_id = websocket.user_data.get("user_id", 0) if hasattr(websocket, 'user_data') else 0
                     sender_username = websocket.user_data.get("username", "Anonymous") if hasattr(websocket, 'user_data') else "Anonymous"
                     
+                    timestamp = datetime.utcnow().isoformat()
+                    
                     broadcast_message = {
                         "channel_id": channel_id,
                         "sender_id": sender_id,
                         "sender_username": sender_username,
                         "content": content,
-                        "timestamp": datetime.utcnow().isoformat()
+                        "timestamp": timestamp
                     }
+                    
+                    # Save to database
+                    try:
+                        from backend.database import async_session_maker
+                        from backend.models import ChannelMessage
+                        
+                        async with async_session_maker() as db:
+                            msg = ChannelMessage(
+                                channel_id=channel_id,
+                                sender_id=sender_id,
+                                content=content,
+                                created_at=int(time.time())
+                            )
+                            db.add(msg)
+                            await db.commit()
+                    except Exception as e:
+                        print(f"Error saving channel message: {e}")
                     
                     # Broadcast to all in channel
                     await manager.broadcast(channel_id, broadcast_message)

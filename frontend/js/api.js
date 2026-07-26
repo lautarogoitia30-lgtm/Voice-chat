@@ -393,6 +393,20 @@ const channelsAPI = {
         
         return response.json();
     },
+    
+    /**
+     * Get message history for a text channel
+     */
+    async getMessages(channelId, limit = 50) {
+        const response = await apiRequest(`/channels/${channelId}/messages?limit=${limit}`);
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to fetch messages');
+        }
+        
+        return response.json();
+    },
 };
 
 /**
