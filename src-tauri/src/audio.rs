@@ -190,7 +190,11 @@ impl AudioProcessor {
         let compressed = self.apply_compressor(gated);
         
         // 4. Auto-gain (2x boost)
-        compressed * self.auto_gain_level
+        let gained = compressed * self.auto_gain_level;
+        
+        // 5. Hard limiter (-1dBFS) — prevents clipping after gain boost
+        // -1dBFS ≈ 0.891 linear. Any sample above this gets clamped.
+        gained.clamp(-0.891, 0.891)
     }
     
     pub fn start(&mut self) -> Result<(), String> {
@@ -202,6 +206,7 @@ impl AudioProcessor {
         info!("  Noise gate: open={}dB close={}dB (hysteresis)", self.noise_gate_open_db, self.noise_gate_close_db);
         info!("  Compressor: {}dB threshold, {}:1 ratio, soft-knee", self.compressor_threshold_db, self.compressor_ratio);
         info!("  Auto-gain: {}x", self.auto_gain_level);
+        info!("  Hard limiter: -1dBFS (prevents clipping)");
         info!("  High-pass: 80Hz");
         info!("  Noise profiler: active (spectral subtraction)");
         
@@ -479,8 +484,11 @@ impl ProcessorState {
         // 3. Compressor
         let compressed = self.apply_compressor(gated);
         
-        // 4. Auto-gain
-        compressed * self.auto_gain_level
+        // 4. Auto-gain (2x boost)
+        let gained = compressed * self.auto_gain_level;
+        
+        // 5. Hard limiter (-1dBFS) — prevents clipping after gain boost
+        gained.clamp(-0.891, 0.891)
     }
     
     fn update_noise_floor(&mut self) {

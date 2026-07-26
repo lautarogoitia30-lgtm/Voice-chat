@@ -132,9 +132,10 @@
                             <label for="screen-quality-select" title="Calidad de transmisión">⚡</label>
                             <select id="screen-quality-select" class="screen-quality-select" onchange="handleScreenQualityChange(this.value)">
                                 <option value="auto">Auto</option>
-                                <option value="1080p">1080p</option>
+                                <option value="720p">720p</option>
+                                <option value="1080p" selected>1080p</option>
                                 <option value="1440p">1440p</option>
-                                <option value="4k" selected>4K</option>
+                                <option value="4k">4K</option>
                             </select>
                         </div>
                         <div class="screen-share-volume">
@@ -536,8 +537,9 @@
                 <label>Calidad de Transmisión</label>
                 <select id="settings-screen-quality" onchange="handleScreenQualityChange(this.value)">
                     <option value="auto">🔄 Auto (Recomendado)</option>
-                    <option value="1080p">📹 1080p - Para wifi lento</option>
-                    <option value="1440p">🖥️ 1440p - Calidad media</option>
+                    <option value="720p">📹 720p - Bajo consumo</option>
+                    <option value="1080p" selected>🎥 1080p - Balance ideal</option>
+                    <option value="1440p">🖥️ 1440p - Alta calidad</option>
                     <option value="4k">🌟 4K - Máxima calidad</option>
                 </select>
             </div>

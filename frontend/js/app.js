@@ -1909,7 +1909,7 @@ function handleLocalScreenShareStarted() {
         const qualitySelect = document.getElementById('screen-quality-select');
         if (qualitySelect) {
             // Restore saved quality
-            const savedQuality = localStorage.getItem('voice_chat_screen_quality') || '4k';
+            const savedQuality = localStorage.getItem('voice_chat_screen_quality') || '1080p';
             qualitySelect.value = savedQuality;
         }
         
@@ -1956,7 +1956,7 @@ function showScreenShareSettings() {
     const audioCheckbox = document.getElementById('settings-screen-audio');
     
     // Restore saved settings
-    const savedQuality = localStorage.getItem('voice_chat_screen_quality') || '4k';
+    const savedQuality = localStorage.getItem('voice_chat_screen_quality') || '1080p';
     const savedAudio = localStorage.getItem('voice_chat_screen_audio') !== 'false';
     
     if (qualitySelect) qualitySelect.value = savedQuality;

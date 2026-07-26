@@ -146,12 +146,18 @@ class LiveKitClient {
                     },
                     dtx: false,            // Disable DTX for higher quality (uses more bandwidth)
                     red: false,           // Disable redundant encoding for quality
-                    // Screen share encoding — 3 Mbps for crisp text/UI
+                    // Screen share encoding — primary layer
                     screenShareEncoding: {
-                        maxBitrate: 3_000_000,
+                        maxBitrate: 5_000_000,
                         maxFramerate: 30,
                     },
-                    screenShareSimulcastLayers: [], // No simulcast — single high quality stream
+                    // Default simulcast layers: low(360p) → mid(720p) → high(1080p)
+                    // LiveKit SFU picks the right layer per subscriber based on their bandwidth
+                    screenShareSimulcastLayers: [
+                        { maxBitrate: 600_000,   maxFramerate: 15, width: 640,  height: 360 },
+                        { maxBitrate: 2_000_000, maxFramerate: 30, width: 1280, height: 720 },
+                        { maxBitrate: 5_000_000, maxFramerate: 30, width: 1920, height: 1080 },
+                    ],
                 },
             });
             
@@ -257,34 +263,40 @@ class LiveKitClient {
                             this._ensureAudioContext();
                             if (this._audioContext && audioElement) {
                                 const participantId = String(participant.identity);
+                                const isScreenShareAudio = track.source === 'screen_share_audio' || track.source === 'ScreenShareAudio';
                                 
-                                try {
-                                    // Create source from the audio element
-                                    const source = this._audioContext.createMediaElementSource(audioElement);
-                                    
-                                    // Create a dynamics compressor for louder, more consistent audio
-                                    const compressor = this._audioContext.createDynamicsCompressor();
-                                    compressor.threshold.setValueAtTime(-30, this._audioContext.currentTime);
-                                    compressor.knee.setValueAtTime(20, this._audioContext.currentTime);
-                                    compressor.ratio.setValueAtTime(8, this._audioContext.currentTime);
-                                    compressor.attack.setValueAtTime(0.01, this._audioContext.currentTime);
-                                    compressor.release.setValueAtTime(0.2, this._audioContext.currentTime);
-                                    
-                                    // Create gain node for volume control
-                                    const gainNode = this._audioContext.createGain();
-                                    gainNode.gain.setValueAtTime(1.0, this._audioContext.currentTime);
-                                    
-                                    // Connect: source -> compressor -> gainNode -> speakers
-                                    source.connect(compressor);
-                                    compressor.connect(gainNode);
-                                    gainNode.connect(this._audioContext.destination);
-                                    
-                                    // Store the gain node for volume control
-                                    this._userGainNodes.set(participantId, gainNode);
-                                    
-                                    console.log('[LIVEKIT] 🎛️ Created Web Audio chain for user:', participantId);
-                                } catch (e) {
-                                    console.warn('[LIVEKIT] Web Audio chain error:', e);
+                                // Skip Web Audio chain for screen share audio — user volume should NOT affect it
+                                if (isScreenShareAudio) {
+                                    console.log('[LIVEKIT] 🎛️ Skipping Web Audio chain for screen share audio:', participantId);
+                                } else {
+                                    try {
+                                        // Create source from the audio element
+                                        const source = this._audioContext.createMediaElementSource(audioElement);
+                                        
+                                        // Create a dynamics compressor for louder, more consistent audio
+                                        const compressor = this._audioContext.createDynamicsCompressor();
+                                        compressor.threshold.setValueAtTime(-30, this._audioContext.currentTime);
+                                        compressor.knee.setValueAtTime(20, this._audioContext.currentTime);
+                                        compressor.ratio.setValueAtTime(8, this._audioContext.currentTime);
+                                        compressor.attack.setValueAtTime(0.01, this._audioContext.currentTime);
+                                        compressor.release.setValueAtTime(0.2, this._audioContext.currentTime);
+                                        
+                                        // Create gain node for volume control
+                                        const gainNode = this._audioContext.createGain();
+                                        gainNode.gain.setValueAtTime(1.0, this._audioContext.currentTime);
+                                        
+                                        // Connect: source -> compressor -> gainNode -> speakers
+                                        source.connect(compressor);
+                                        compressor.connect(gainNode);
+                                        gainNode.connect(this._audioContext.destination);
+                                        
+                                        // Store the gain node for volume control
+                                        this._userGainNodes.set(participantId, gainNode);
+                                        
+                                        console.log('[LIVEKIT] 🎛️ Created Web Audio chain for user:', participantId);
+                                    } catch (e) {
+                                        console.warn('[LIVEKIT] Web Audio chain error:', e);
+                                    }
                                 }
                             }
                             
@@ -1009,8 +1021,11 @@ class LiveKitClient {
         });
         
         // Apply volume via audio element (DOM volume)
+        // Only affect microphone tracks — screen share audio must stay independent
         this.audioElements.forEach(audio => {
             if (String(audio.participantId) === targetId) {
+                const isScreenShareAudio = audio.track?.source === 'screen_share_audio' || audio.track?.source === 'ScreenShareAudio';
+                if (isScreenShareAudio) return; // Skip screen share audio
                 // If gain is 0, force mute to ensure absolute silence
                 if (gain === 0) {
                     audio.element.muted = true;
@@ -1097,8 +1112,11 @@ class LiveKitClient {
     }
     
     /**
-     * Start screen sharing with system audio.
-     * Uses LiveKit's native setScreenShareEnabled — captures screen + system audio.
+     * Start screen sharing with system audio and adaptive simulcast.
+     * Uses 3 simulcast layers so each receiver gets quality matching their bandwidth.
+     * Layer 1 (high): 1080p @ 30fps — crisp for fullscreen viewers
+     * Layer 2 (mid):  720p @ 30fps — good for split-screen
+     * Layer 3 (low):  360p @ 15fps — thumbnails and poor connections
      * System audio only works on Chromium browsers (Chrome, Edge, Tauri WebView2).
      */
     async startScreenShare() {
@@ -1117,57 +1135,99 @@ class LiveKitClient {
         try {
             // Import LiveKit for Track class
             const livekit = await import('https://cdn.jsdelivr.net/npm/livekit-client@2/+esm');
-            const { Track, createLocalScreenTracks, ScreenSharePresets } = livekit;
+            const { Track } = livekit;
             
             // Get quality setting from localStorage
-            const quality = localStorage.getItem('voice_chat_screen_quality') || '4k';
+            // Default is '1080p' — good balance of quality and bandwidth
+            const quality = localStorage.getItem('voice_chat_screen_quality') || '1080p';
             console.log('[SCREEN] Using quality:', quality);
             
-            // Define quality presets
-            let videoConstraints, encodingSettings, audioBitrate;
+            // === Quality presets with capture constraints + simulcast layers ===
+            // Each preset captures at the chosen resolution but publishes 3 simulcast layers
+            // so viewers on bad connections still see something smooth
+            let videoConstraints, primaryEncoding, simulcastLayers, audioBitrate;
             
             switch(quality) {
-                case '1080p':
+                case '720p':
                     videoConstraints = {
-                        width: { ideal: 1920, max: 1920 },
-                        height: { ideal: 1080, max: 1080 },
+                        width: { ideal: 1280, max: 1280 },
+                        height: { ideal: 720, max: 720 },
                         frameRate: { ideal: 30, max: 30 },
                         displaySurface: 'monitor',
                     };
-                    encodingSettings = { maxBitrate: 5_000_000, maxFramerate: 30 };
+                    primaryEncoding = { maxBitrate: 2_500_000, maxFramerate: 30 };
+                    // Simulcast: 360p(low) → 720p(high)
+                    simulcastLayers = [
+                        { maxBitrate: 600_000,  maxFramerate: 15, width: 640,  height: 360 },  // low
+                        { maxBitrate: 2_500_000, maxFramerate: 30, width: 1280, height: 720 },  // high
+                    ];
                     audioBitrate = 128_000;
                     break;
                 case '1440p':
                     videoConstraints = {
                         width: { ideal: 2560, max: 2560 },
                         height: { ideal: 1440, max: 1440 },
-                        frameRate: { ideal: 60, max: 60 },
+                        frameRate: { ideal: 30, max: 30 },
                         displaySurface: 'monitor',
                     };
-                    encodingSettings = { maxBitrate: 10_000_000, maxFramerate: 60 };
+                    primaryEncoding = { maxBitrate: 8_000_000, maxFramerate: 30 };
+                    // Simulcast: 360p → 720p → 1440p
+                    simulcastLayers = [
+                        { maxBitrate: 600_000,   maxFramerate: 15, width: 640,  height: 360 },   // low
+                        { maxBitrate: 2_000_000, maxFramerate: 30, width: 1280, height: 720 },   // mid
+                        { maxBitrate: 8_000_000, maxFramerate: 30, width: 2560, height: 1440 },  // high
+                    ];
                     audioBitrate = 256_000;
                     break;
                 case '4k':
                     videoConstraints = {
                         width: { ideal: 3840, max: 3840 },
                         height: { ideal: 2160, max: 2160 },
-                        frameRate: { ideal: 60, max: 60 },
+                        frameRate: { ideal: 30, max: 30 },
                         displaySurface: 'monitor',
                     };
-                    encodingSettings = { maxBitrate: 20_000_000, maxFramerate: 60 };
+                    primaryEncoding = { maxBitrate: 15_000_000, maxFramerate: 30 };
+                    // Simulcast: 360p → 720p → 1440p → 4K
+                    simulcastLayers = [
+                        { maxBitrate: 600_000,    maxFramerate: 15, width: 640,  height: 360 },   // low
+                        { maxBitrate: 2_000_000,  maxFramerate: 30, width: 1280, height: 720 },   // mid
+                        { maxBitrate: 8_000_000,  maxFramerate: 30, width: 2560, height: 1440 },  // high-mid
+                    ];
                     audioBitrate = 512_000;
                     break;
                 case 'auto':
                 default:
-                    // Default high quality
+                    // Auto: capture native resolution, let simulcast handle the rest
                     videoConstraints = {
-                        width: { ideal: 3840, max: 3840 },
-                        height: { ideal: 2160, max: 2160 },
-                        frameRate: { ideal: 60, max: 60 },
+                        width: { ideal: 3840 },
+                        height: { ideal: 2160 },
+                        frameRate: { ideal: 30, max: 60 },
                         displaySurface: 'monitor',
                     };
-                    encodingSettings = { maxBitrate: 20_000_000, maxFramerate: 60 };
-                    audioBitrate = 512_000;
+                    primaryEncoding = { maxBitrate: 10_000_000, maxFramerate: 30 };
+                    simulcastLayers = [
+                        { maxBitrate: 600_000,   maxFramerate: 15, width: 640,  height: 360 },   // low
+                        { maxBitrate: 2_000_000, maxFramerate: 30, width: 1280, height: 720 },   // mid
+                        { maxBitrate: 8_000_000, maxFramerate: 30, width: 2560, height: 1440 },  // high
+                    ];
+                    audioBitrate = 256_000;
+                    break;
+                case '1080p':
+                default:
+                    videoConstraints = {
+                        width: { ideal: 1920, max: 1920 },
+                        height: { ideal: 1080, max: 1080 },
+                        frameRate: { ideal: 30, max: 30 },
+                        displaySurface: 'monitor',
+                    };
+                    primaryEncoding = { maxBitrate: 5_000_000, maxFramerate: 30 };
+                    // Simulcast: 360p → 720p → 1080p
+                    simulcastLayers = [
+                        { maxBitrate: 600_000,   maxFramerate: 15, width: 640,  height: 360 },   // low
+                        { maxBitrate: 2_000_000, maxFramerate: 30, width: 1280, height: 720 },   // mid
+                        { maxBitrate: 5_000_000, maxFramerate: 30, width: 1920, height: 1080 },  // high
+                    ];
+                    audioBitrate = 128_000;
                     break;
             }
             
@@ -1194,28 +1254,31 @@ class LiveKitClient {
             // Set content hint for screen content — tells the encoder to preserve detail
             videoTrack.contentHint = 'detail';
             
-            // STEP 2: Create LocalVideoTrack from the stream
-            // ULTRA: Maximum quality settings
+            // STEP 2: Create LocalVideoTrack with simulcast layers
             const LocalVideoTrack = livekit.LocalVideoTrack;
             const localScreenTrack = new LocalVideoTrack(videoTrack, {
                 source: Track.Source.ScreenShare,
-                // Use quality settings
-                simulcast: false,
-                videoEncoding: encodingSettings,
-                scalabilityMode: 'L1T1', // Single layer, max quality
+                simulcast: true,  // Enable simulcast — 3 quality layers
+                videoEncoding: primaryEncoding,
+                screenShareSimulcastLayers: simulcastLayers,
             });
             
-            // STEP 3: Publish the video track
+            // STEP 3: Publish the video track with simulcast
             await this.localParticipant.publishTrack(localScreenTrack, {
                 source: Track.Source.ScreenShare,
-                simulcast: false,
-                videoEncoding: encodingSettings,
-                scalabilityMode: 'L1T1',
+                simulcast: true,
+                videoEncoding: primaryEncoding,
+                screenShareSimulcastLayers: simulcastLayers,
             });
-            console.log('[SCREEN] Video track published at', encodingSettings.maxBitrate / 1_000_000, 'Mbps,', encodingSettings.maxFramerate, 'fps');
+            
+            const layerCount = simulcastLayers.length + 1; // +1 for primary
+            console.log(`[SCREEN] ✅ Video published with ${layerCount} simulcast layers (${quality}):`);
+            console.log(`[SCREEN]   Primary: ${primaryEncoding.maxBitrate / 1_000_000}Mbps @ ${primaryEncoding.maxFramerate}fps`);
+            simulcastLayers.forEach((layer, i) => {
+                console.log(`[SCREEN]   Layer ${i + 1}: ${layer.width}x${layer.height} @ ${layer.maxBitrate / 1_000}kbps, ${layer.maxFramerate}fps`);
+            });
             
             // STEP 4: Publish audio track if available
-            // Use quality settings
             const audioTracks = displayStream.getAudioTracks();
             if (audioTracks.length > 0) {
                 const LocalAudioTrack = livekit.LocalAudioTrack;
@@ -1239,7 +1302,7 @@ class LiveKitClient {
                 }
             });
             
-            console.log('[SCREEN] ✅ Screen share started successfully!');
+            console.log('[SCREEN] ✅ Screen share started with adaptive simulcast!');
             // State is updated by LocalTrackPublished event handler
             return true;
         } catch (error) {
