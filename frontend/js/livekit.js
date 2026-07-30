@@ -7,6 +7,19 @@
 // DEBUG: Make sure this is the latest version
 console.log('=== LIVEKIT CLIENT v12 LOADED ===');
 
+// Cache for livekit-client ESM module — avoids re-fetching from CDN on every connect
+let _livekitModule = null;
+/**
+ * Get (or cache) the livekit-client ESM module.
+ * First call imports from CDN, subsequent calls return cached reference.
+ */
+async function _getLiveKitModule() {
+    if (!_livekitModule) {
+        _livekitModule = await import('https://cdn.jsdelivr.net/npm/livekit-client@2/+esm');
+    }
+    return _livekitModule;
+}
+
 // PATCH: Override HTMLMediaElement.volume setter globally to prevent IndexSizeError
 // LiveKit's internal setVolume can pass values > 1, which throws
 const originalVolumeDesc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'volume');
@@ -117,9 +130,9 @@ class LiveKitClient {
             console.log('[LIVEKIT] PRE-CONNECT CLEANUP COMPLETE - room is:', this.room);
             console.log('Connecting to LiveKit room at:', url);
             
-            // Import LiveKit client library
+            // Import LiveKit client library (cached after first load)
             console.log('Importing LiveKit...');
-            const livekit = await import('https://cdn.jsdelivr.net/npm/livekit-client@2/+esm');
+            const livekit = await _getLiveKitModule();
             console.log('LiveKit imported:', livekit);
             
             const { Room, RoomEvent, Track } = livekit;
@@ -496,47 +509,46 @@ class LiveKitClient {
         // Wait for room to be fully connected with retry
         await this._waitForRoomConnected();
         
-        try {
-            // Get user settings — noise suppression and echo cancellation ON by default
-            const inputDevice = localStorage.getItem('voice_chat_input_device');
-            const noiseSuppression = localStorage.getItem('voice_chat_noise_suppression') !== 'false'; // ON by default
-            const echoCancellation = localStorage.getItem('voice_chat_echo_cancellation') !== 'false'; // ON by default
-            
-            console.log('[AUDIO] Publishing mic natively. Device:', inputDevice, 'NS:', noiseSuppression, 'EC:', echoCancellation);
-            
-            // Build audio capture options — optimized for voice
-            const opts = {
-                echoCancellation: echoCancellation,
-                noiseSuppression: noiseSuppression,
-                autoGainControl: false,      // OFF by default — user controls volume manually via slider
-                channelCount: 1,
-                sampleRate: 48000,
-            };
-            
-            if (inputDevice) {
-                opts.deviceId = inputDevice;
-            }
-            
-            // USE LIVEKIT'S NATIVE API — this creates a proper LocalAudioTrack
-            // that the SFU knows how to mute/unmute correctly
-            await this.localParticipant.setMicrophoneEnabled(true, opts);
-            
-            console.log('[AUDIO] Microphone published via native LiveKit API!');
-            console.log('[AUDIO] audioTrackPublications:', this.localParticipant.audioTrackPublications?.size);
-            
-            console.log('=== MICROPHONE READY (NATIVE) ===');
-        } catch (error) {
-            console.error('[AUDIO] Error publishing microphone:', error);
-            console.error('[AUDIO] Error name:', error.name);
-            console.error('[AUDIO] Error message:', error.message);
-            alert('Error al acceder al micrófono: ' + error.message);
+        // Get user settings — noise suppression and echo cancellation ON by default
+        const inputDevice = localStorage.getItem('voice_chat_input_device');
+        const noiseSuppression = localStorage.getItem('voice_chat_noise_suppression') !== 'false'; // ON by default
+        const echoCancellation = localStorage.getItem('voice_chat_echo_cancellation') !== 'false'; // ON by default
+        
+        console.log('[AUDIO] Publishing mic natively. Device:', inputDevice, 'NS:', noiseSuppression, 'EC:', echoCancellation);
+        
+        // Build audio capture options — optimized for voice
+        const opts = {
+            echoCancellation: echoCancellation,
+            noiseSuppression: noiseSuppression,
+            autoGainControl: false,      // OFF by default — user controls volume manually via slider
+            channelCount: 1,
+            sampleRate: 48000,
+        };
+        
+        if (inputDevice) {
+            opts.deviceId = inputDevice;
         }
+        
+        // USE LIVEKIT'S NATIVE API — this creates a proper LocalAudioTrack
+        // that the SFU knows how to mute/unmute correctly
+        await this.localParticipant.setMicrophoneEnabled(true, opts);
+        
+        console.log('[AUDIO] Microphone published via native LiveKit API!');
+        console.log('[AUDIO] audioTrackPublications:', this.localParticipant.audioTrackPublications?.size);
+        
+        // Verify the mic track was actually published — prevents silent failure
+        const hasMicTrack = this.localParticipant.audioTrackPublications?.size > 0;
+        if (!hasMicTrack) {
+            throw new Error('Microphone track was not published after setMicrophoneEnabled');
+        }
+        
+        console.log('=== MICROPHONE READY (NATIVE) ===');
     }
     
     /**
      * Wait for room to be fully connected, with retry logic
      */
-    async _waitForRoomConnected(maxRetries = 5, delayMs = 500) {
+    async _waitForRoomConnected(maxRetries = 10, delayMs = 200) {
         for (let i = 0; i < maxRetries; i++) {
             if (this.room && this.room.state === 'connected' && this.room.localParticipant) {
                 // Additional check: room engine should be ready
@@ -601,7 +613,7 @@ class LiveKitClient {
                     this._micGainNode.connect(dest);
                     
                     // Publish processed track
-                    const livekit = await import('https://cdn.jsdelivr.net/npm/livekit-client@2/+esm');
+                    const livekit = await _getLiveKitModule();
                     const processedTrack = new livekit.LocalAudioTrack(dest.stream.getAudioTracks()[0], {
                         source: this._Track.Source.Microphone,
                     });
@@ -681,7 +693,7 @@ class LiveKitClient {
             this._micGainNode.connect(dest);
             
             // Create new LiveKit track from processed stream
-            const livekit = await import('https://cdn.jsdelivr.net/npm/livekit-client@2/+esm');
+            const livekit = await _getLiveKitModule();
             const processedTrack = new livekit.LocalAudioTrack(dest.stream.getAudioTracks()[0], {
                 source: this._Track.Source.Microphone,
             });
@@ -975,70 +987,89 @@ class LiveKitClient {
     
     /**
      * Set volume for a specific user (per-user volume control).
-     * Uses LiveKit's internal setVolume API with a very aggressive exponential curve.
+     * Uses Web Audio API GainNode for actual volume boosting (>100%).
+     * Falls back to LiveKit's setVolume for non-Web-Audio paths.
      * @param {string} userId - The participant identity (user_id)
-     * @param {number} volume - 0 to 300
+     * @param {number} volume - 0 to 300 (100 = normal, >100 = boost)
      */
     setUserVolume(userId, volume) {
         const safeVolume = Math.min(300, Math.max(0, volume));
         
-        // Aggressive exponential curve (Power of 3)
-        // 100% -> 1x
-        // 200% -> 8x
-        // 300% -> 27x
+        // Exponential curve (Power of 2):
+        // 100% -> 1x   (normal)
+        // 200% -> 4x   (moderate boost)
+        // 300% -> 9x   (max boost — comparable to Discord/TS)
         let gain;
         if (safeVolume <= 100) {
             gain = safeVolume / 100;
         } else {
-            gain = Math.pow(safeVolume / 100, 3);
+            gain = Math.pow(safeVolume / 100, 2);
         }
         
         // Save preference
         localStorage.setItem(`voice_chat_user_vol_${userId}`, safeVolume);
         
-        if (!this.room) return;
+        console.log(`[VOL-USER] Setting ${userId} to ${safeVolume}% (gain: ${gain.toFixed(2)}x)`);
         
-        const targetId = String(userId);
-        let updated = 0;
+        // === PRIMARY: Web Audio GainNode boost (works above 1.0) ===
+        // The GainNode is created once in TrackSubscribed and stored in _userGainNodes.
+        // We just update its value — no reconnection needed.
+        if (this._audioContext) {
+            this._applyUserVolumeGain(userId, safeVolume);
+        }
         
-        this.room.remoteParticipants.forEach((participant) => {
-            if (String(participant.identity) === targetId) {
-                participant.trackPublications.forEach((pub) => {
-                    if (pub.kind === 'audio' && pub.source === 'microphone') {
-                        if (pub.setVolume) {
-                            pub.setVolume(gain);
-                            updated++;
-                            console.log(`[VOL-USER] Set track volume for ${targetId} to ${safeVolume}% (gain: ${gain.toFixed(2)}x)`);
-                        }
-                    }
-                });
-            }
-        });
-        
-        // Apply volume via audio element (DOM volume)
-        // Only affect microphone tracks — screen share audio must stay independent
+        // === FALLBACK: DOM audio element volume ===
+        // When Web Audio chain exists, the element volume should be at 1.0
+        // (the GainNode handles the actual level). Only use this for 0-100%
+        // when there's NO Web Audio chain available.
+        const hasWebAudio = this._audioContext && this._userGainNodes.has(String(userId));
         this.audioElements.forEach(audio => {
-            if (String(audio.participantId) === targetId) {
+            if (String(audio.participantId) === String(userId)) {
                 const isScreenShareAudio = audio.track?.source === 'screen_share_audio' || audio.track?.source === 'ScreenShareAudio';
                 if (isScreenShareAudio) return; // Skip screen share audio
-                // If gain is 0, force mute to ensure absolute silence
+                
                 if (gain === 0) {
                     audio.element.muted = true;
                     audio.element.volume = 0;
                 } else {
                     audio.element.muted = false;
-                    // Clamp to max 1 since browsers don't allow > 1
-                    audio.element.volume = Math.min(1, gain);
+                    if (hasWebAudio) {
+                        // Web Audio handles the boost — keep element at max
+                        audio.element.volume = 1.0;
+                    } else {
+                        // No Web Audio — clamp to browser max (0-100% only works)
+                        audio.element.volume = Math.min(1, gain);
+                    }
                 }
             }
         });
         
-        // Note: GainNode boost disabled - not working reliably
-        // Volume >100% is limited by browser audio element constraints
+        // === LEGACY FALLBACK: LiveKit pub.setVolume (also clamped to 0-1) ===
+        // Only used when Web Audio chain is NOT available
+        if (!hasWebAudio && this.room) {
+            const targetId = String(userId);
+            this.room.remoteParticipants.forEach((participant) => {
+                if (String(participant.identity) === targetId) {
+                    participant.trackPublications.forEach((pub) => {
+                        if (pub.kind === 'audio' && pub.source === 'microphone') {
+                            if (pub.setVolume) {
+                                pub.setVolume(Math.min(1, gain));
+                                console.log(`[VOL-USER] Fallback setVolume for ${targetId}: ${Math.min(1, gain).toFixed(2)}x`);
+                            }
+                        }
+                    });
+                }
+            });
+        }
     }
     
     /**
-     * Apply volume gain via Web Audio API (allows >100% boost)
+     * Apply volume gain via Web Audio API (allows >100% boost).
+     * Uses the same exponential curve as setUserVolume for consistency.
+     * 
+     * 100% -> 1.0x  (normal)
+     * 200% -> 4.0x  (boost)
+     * 300% -> 9.0x  (max)
      */
     _applyUserVolumeGain(userId, volumePercent) {
         const gainNode = this._userGainNodes.get(String(userId));
@@ -1047,16 +1078,20 @@ class LiveKitClient {
             return;
         }
         
-        // Convert percentage to gain (1.0 = 100%)
-        // 100% -> 1.0 gain
-        // 150% -> 1.5 gain
-        // 200% -> 2.0 gain
-        // 300% -> 3.0 gain
-        const gainValue = volumePercent / 100;
+        // Same exponential curve as setUserVolume (Power of 2)
+        let gainValue;
+        if (volumePercent <= 100) {
+            gainValue = volumePercent / 100;
+        } else {
+            gainValue = Math.pow(volumePercent / 100, 2);
+        }
+        
+        // Clamp to prevent insane values (just in case)
+        gainValue = Math.min(20, Math.max(0, gainValue));
         
         try {
             gainNode.gain.setValueAtTime(gainValue, this._audioContext.currentTime);
-            console.log(`[VOL-WEB] 🎛️ Set gain for user ${userId} to ${gainValue}x (${volumePercent}%)`);
+            console.log(`[VOL-WEB] 🎛️ Set gain for user ${userId} to ${gainValue.toFixed(2)}x (${volumePercent}%)`);
         } catch (e) {
             console.warn('[VOL-WEB] Error setting gain:', e);
         }
@@ -1129,7 +1164,7 @@ class LiveKitClient {
         
         try {
             // Import LiveKit for Track class and presets
-            const livekit = await import('https://cdn.jsdelivr.net/npm/livekit-client@2/+esm');
+            const livekit = await _getLiveKitModule();
             const { Track, VideoPresets, ScreenSharePresets } = livekit;
             
             // Get quality setting from localStorage

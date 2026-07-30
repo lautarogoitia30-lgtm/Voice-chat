@@ -1249,19 +1249,25 @@ async function handleJoinVoice() {
     state.joining = true;
     window.appState = state;
 
+    // Show connecting state on button
+    const elements = getElements();
+    if (elements.joinVoiceBtn) {
+        elements.joinVoiceBtn.innerHTML = '⏳ Conectando...';
+        elements.joinVoiceBtn.disabled = true;
+    }
+
     try {
         console.log('=== JOINING VOICE ===');
         console.log('Channel ID:', state.selectedChannel.id);
         console.log('Current user:', state.currentUser);
 
-        // Register in database first
-        console.log('[JOIN] Calling joinVoice API...');
-        await API.channels.joinVoice(state.selectedChannel.id);
-        console.log('[JOIN] Registered in database');
-
-        // Get token from API
-        console.log('[JOIN] Getting LiveKit token...');
-        const tokenData = await API.livekit.getToken(state.selectedChannel.id);
+        // Register in database AND get LiveKit token in PARALLEL
+        // Both calls are independent — saves one full HTTP round trip
+        console.log('[JOIN] Registering in DB and getting LiveKit token...');
+        const [ /* joinResult */ , tokenData] = await Promise.all([
+            API.channels.joinVoice(state.selectedChannel.id),
+            API.livekit.getToken(state.selectedChannel.id)
+        ]);
         console.log('[JOIN] Token received, URL:', tokenData.url, 'Room:', tokenData.room_name);
         console.log('[JOIN] Token starts with:', tokenData.token.substring(0, 50) + '...');
 
@@ -1352,7 +1358,7 @@ async function handleJoinVoice() {
                             return publishWithRetry(attempt + 1, maxAttempts);
                         } else {
                             console.error('[JOIN] All mic publish attempts failed');
-                            return false;
+                            throw new Error('No se pudo publicar el micrófono después de ' + maxAttempts + ' intentos: ' + (error?.message || 'error desconocido'));
                         }
                     }
                 };
@@ -1410,11 +1416,25 @@ async function handleJoinVoice() {
          console.error('[JOIN] Full error:', error);
          console.error('[JOIN] Error message:', error.message);
          console.error('[JOIN] Error stack:', error.stack);
+         // Restore join button on error
+         const els = getElements();
+         if (els.joinVoiceBtn) {
+             els.joinVoiceBtn.innerHTML = '🎤 Unirse';
+             els.joinVoiceBtn.disabled = false;
+         }
          alert('No se pudo unir a voz: ' + error.message + '\n\nRevisa la consola (F12) para más detalles.');
      } finally {
          // Clear joining flag so user can try again
          state.joining = false;
          window.appState = state;
+         // If we failed (not in voice), restore the join button
+         if (!state.isInVoice) {
+             const els = getElements();
+             if (els.joinVoiceBtn) {
+                 els.joinVoiceBtn.innerHTML = '🎤 Unirse';
+                 els.joinVoiceBtn.disabled = false;
+             }
+         }
          console.log('[JOIN] joining flag cleared');
      }
 }
