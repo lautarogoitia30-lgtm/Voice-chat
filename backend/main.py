@@ -46,7 +46,7 @@ app = FastAPI(
 
 # Configure CORS - allow specific origins in production
 # Get allowed origins from env or default to common dev origins
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:8000").split(",")
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:8000,http://tauri.localhost,https://tauri.localhost,tauri://localhost").split(",")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
@@ -116,6 +116,28 @@ async def chat_websocket(websocket: WebSocket, channel_id: int, token: str = "")
         await websocket.close(code=4001, reason="Invalid token")
         return
     
+    # Authorize the target before the handler accepts the connection.
+    from sqlalchemy import select
+    from backend.database import async_session_maker
+    from backend.models import Channel, ChannelType, GroupMember
+
+    async with async_session_maker() as db:
+        result = await db.execute(
+            select(Channel.id)
+            .join(GroupMember, GroupMember.group_id == Channel.group_id)
+            .where(
+                Channel.id == channel_id,
+                Channel.type == ChannelType.TEXT,
+                GroupMember.user_id == user_data["user_id"],
+            )
+            .limit(1)
+        )
+        authorized_channel = result.scalar_one_or_none()
+
+    if authorized_channel is None:
+        await websocket.close(code=4003, reason="Not authorized for this channel")
+        return
+
     # Pass user_data to the endpoint
     await websocket_endpoint(websocket, channel_id, user_data)
 

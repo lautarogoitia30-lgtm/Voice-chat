@@ -13,9 +13,21 @@ use tokio::sync::mpsc;
 ///
 /// Each component is tuned for VOICE — not music. Attack/release times, knee widths,
 /// and thresholds are calibrated for speech intelligibility and naturalness.
+#[derive(Clone, Copy)]
+struct LiveSettings {
+    noise_gate_open_db: f32,
+    noise_gate_close_db: f32,
+    compressor_threshold_db: f32,
+    compressor_ratio: f32,
+}
+
 pub struct AudioProcessor {
+    live_settings: Arc<Mutex<LiveSettings>>,
+    error_tx: Option<mpsc::UnboundedSender<String>>,
     buffer: Arc<Mutex<VecDeque<f32>>>,
     is_running: bool,
+    stop_tx: Option<std::sync::mpsc::Sender<()>>,
+    capture_thread: Option<std::thread::JoinHandle<()>>,
     sample_rate: u32,
     channels: u16,
 
@@ -45,8 +57,17 @@ pub struct AudioProcessor {
 impl AudioProcessor {
     pub fn new() -> Self {
         Self {
+            live_settings: Arc::new(Mutex::new(LiveSettings {
+                noise_gate_open_db: -48.0,
+                noise_gate_close_db: -52.0,
+                compressor_threshold_db: -18.0,
+                compressor_ratio: 4.0,
+            })),
+            error_tx: None,
             buffer: Arc::new(Mutex::new(VecDeque::new())),
             is_running: false,
+            stop_tx: None,
+            capture_thread: None,
             sample_rate: 48000,
             channels: 1,
 
@@ -77,11 +98,76 @@ impl AudioProcessor {
         self.tx = Some(tx);
     }
 
-    pub fn start(&mut self) -> Result<(), String> {
-        if self.is_running {
-            return Ok(());
-        }
+    pub fn set_error_callback(&mut self, tx: mpsc::UnboundedSender<String>) {
+        self.error_tx = Some(tx);
+    }
 
+    fn report_runtime_error(tx: &mpsc::UnboundedSender<String>, message: String) {
+        error!("Audio input error: {}", message);
+        let _ = tx.send(message);
+    }
+
+    pub fn start(&mut self) -> Result<(), String> {
+        if self.is_running { return Ok(()); }
+        let settings = self.get_info();
+        let live_settings = self.live_settings.clone();
+        let error_tx = self.error_tx.clone();
+        let tx = self.tx.clone();
+        let buffer = self.buffer.clone();
+        let (stop_tx, stop_rx) = std::sync::mpsc::channel();
+        let (ready_tx, ready_rx) = std::sync::mpsc::sync_channel(1);
+        // CPAL Stream is !Send on some platforms. Create, retain and drop it
+        // on this owner thread; the global controller contains only Send handles.
+        let worker = std::thread::spawn(move || {
+            let mut capture = AudioProcessor::new();
+            capture.noise_gate_open_db = settings.noise_gate_open_db;
+            capture.noise_gate_close_db = settings.noise_gate_close_db;
+            capture.compressor_threshold_db = settings.compressor_threshold_db;
+            capture.compressor_ratio = settings.compressor_ratio;
+            capture.auto_gain_level = settings.auto_gain;
+            capture.expander_threshold_db = settings.expander_threshold_db;
+            capture.expander_ratio = settings.expander_ratio;
+            capture.presence_eq_gain_db = settings.presence_eq_gain_db;
+            capture.deesser_threshold_db = settings.deesser_threshold_db;
+            capture.deesser_ratio = settings.deesser_ratio;
+            capture.agc_target_db = settings.agc_target_db;
+            capture.tx = tx;
+            capture.live_settings = live_settings;
+            capture.error_tx = error_tx;
+            capture.buffer = buffer;
+            match capture.start_capture() {
+                Ok(stream) => {
+                    if ready_tx.send(Ok((capture.sample_rate, capture.channels))).is_ok() {
+                        let _ = stop_rx.recv();
+                    }
+                    drop(stream);
+                }
+                Err(error) => { let _ = ready_tx.send(Err(error)); }
+            }
+        });
+        match ready_rx.recv() {
+            Ok(Ok((sample_rate, channels))) => {
+                self.sample_rate = sample_rate;
+                self.channels = channels;
+                self.stop_tx = Some(stop_tx);
+                self.capture_thread = Some(worker);
+                self.is_running = true;
+                Ok(())
+            }
+            result => {
+                drop(stop_tx);
+                let _ = worker.join();
+                self.tx = None;
+                self.error_tx = None;
+                Err(match result {
+                    Ok(Err(error)) => error,
+                    _ => "Audio capture thread failed to initialize".to_string(),
+                })
+            }
+        }
+    }
+
+    fn start_capture(&mut self) -> Result<cpal::Stream, String> {
         info!("=== Starting Teamspeak-quality audio processor ===");
         info!("  High-pass: 80Hz (rumble removal)");
         info!("  Expander: {}dB threshold, {}:1 ratio", self.expander_threshold_db, self.expander_ratio);
@@ -112,36 +198,29 @@ impl AudioProcessor {
         let buffer = self.buffer.clone();
         let tx = self.tx.clone();
 
-        // Capture params for callback
-        let noise_gate_open_db = self.noise_gate_open_db;
-        let noise_gate_close_db = self.noise_gate_close_db;
-        let compressor_threshold_db = self.compressor_threshold_db;
-        let compressor_ratio = self.compressor_ratio;
         let auto_gain_level = self.auto_gain_level;
-        let expander_threshold_db = self.expander_threshold_db;
-        let expander_ratio = self.expander_ratio;
-        let presence_eq_gain_db = self.presence_eq_gain_db;
-        let deesser_threshold_db = self.deesser_threshold_db;
-        let deesser_ratio = self.deesser_ratio;
-        let agc_target_db = self.agc_target_db;
-        let sample_rate = self.sample_rate as f32;
-
-        let err_fn = |err| error!("Audio input error: {}", err);
+        let channels = self.channels;
+        let mut state = ProcessorState::new(
+            self.noise_gate_open_db, self.noise_gate_close_db,
+            self.compressor_threshold_db, self.compressor_ratio,
+            self.expander_threshold_db, self.expander_ratio,
+            self.presence_eq_gain_db, self.deesser_threshold_db,
+            self.deesser_ratio, self.agc_target_db, self.sample_rate as f32,
+        );
+        let live_settings = self.live_settings.clone();
+        let error_tx = self.error_tx.clone();
+        let err_fn = move |err: cpal::StreamError| {
+            if let Some(tx) = &error_tx { Self::report_runtime_error(tx, err.to_string()); }
+            else { error!("Audio input error: {}", err); }
+        };
 
         let stream = match config.sample_format() {
             cpal::SampleFormat::F32 => device.build_input_stream(
                 &config.into(),
                 move |data: &[f32], _: &cpal::InputCallbackInfo| {
-                    Self::process_f32(
-                        data, buffer.clone(), tx.as_ref(),
-                        noise_gate_open_db, noise_gate_close_db,
-                        compressor_threshold_db, compressor_ratio,
-                        auto_gain_level,
-                        expander_threshold_db, expander_ratio,
-                        presence_eq_gain_db,
-                        deesser_threshold_db, deesser_ratio,
-                        agc_target_db, sample_rate,
-                    );
+                    state.update_live_settings(*live_settings.lock().unwrap());
+                    Self::process_f32(data, channels, &mut state,
+                        &buffer, tx.as_ref(), auto_gain_level);
                 },
                 err_fn,
                 None,
@@ -149,16 +228,10 @@ impl AudioProcessor {
             cpal::SampleFormat::I16 => device.build_input_stream(
                 &config.into(),
                 move |data: &[i16], _: &cpal::InputCallbackInfo| {
-                    Self::process_i16(
-                        data, buffer.clone(), tx.as_ref(),
-                        noise_gate_open_db, noise_gate_close_db,
-                        compressor_threshold_db, compressor_ratio,
-                        auto_gain_level,
-                        expander_threshold_db, expander_ratio,
-                        presence_eq_gain_db,
-                        deesser_threshold_db, deesser_ratio,
-                        agc_target_db, sample_rate,
-                    );
+                    let samples: Vec<f32> = data.iter().map(|&s| s as f32 / 32768.0).collect();
+                    state.update_live_settings(*live_settings.lock().unwrap());
+                    Self::process_f32(&samples, channels, &mut state,
+                        &buffer, tx.as_ref(), auto_gain_level);
                 },
                 err_fn,
                 None,
@@ -171,143 +244,40 @@ impl AudioProcessor {
             .play()
             .map_err(|e| format!("Failed to start stream: {}", e))?;
 
-        self.is_running = true;
         info!("Audio processor started successfully");
-        Ok(())
+        Ok(stream)
     }
 
     // ── Callbacks ──────────────────────────────────────────────────────────
 
     fn process_f32(
-        data: &[f32],
-        buffer: Arc<Mutex<VecDeque<f32>>>,
-        tx: Option<&mpsc::Sender<Vec<f32>>>,
-        noise_gate_open_db: f32, noise_gate_close_db: f32,
-        compressor_threshold_db: f32, compressor_ratio: f32,
+        data: &[f32], channels: u16, state: &mut ProcessorState,
+        buffer: &Arc<Mutex<VecDeque<f32>>>, tx: Option<&mpsc::Sender<Vec<f32>>>,
         auto_gain_level: f32,
-        expander_threshold_db: f32, expander_ratio: f32,
-        presence_eq_gain_db: f32,
-        deesser_threshold_db: f32, deesser_ratio: f32,
-        agc_target_db: f32, sample_rate: f32,
     ) {
-        thread_local! {
-            static STATE: std::cell::RefCell<Option<ProcessorState>> = std::cell::RefCell::new(None);
-        }
-
-        let mut processed = Vec::with_capacity(data.len());
-
-        STATE.with(|cell| {
-            let mut borrow = cell.borrow_mut();
-            let state = borrow.get_or_insert_with(|| ProcessorState::new(
-                noise_gate_open_db, noise_gate_close_db,
-                compressor_threshold_db, compressor_ratio,
-                expander_threshold_db, expander_ratio,
-                presence_eq_gain_db,
-                deesser_threshold_db, deesser_ratio,
-                agc_target_db, sample_rate,
-            ));
-            for &sample in data.iter() {
-                processed.push(state.process_sample(sample));
-            }
-        });
-
-        // Apply fixed makeup gain (after adaptive AGC)
-        if auto_gain_level != 1.0 {
-            for s in processed.iter_mut() {
-                *s *= auto_gain_level;
-            }
-        }
-
-        // Final hard limiter at -1dBFS (0.891 linear)
-        for s in processed.iter_mut() {
-            *s = s.clamp(-0.891, 0.891);
-        }
-
-        // Store in shared buffer
+        // Device samples are interleaved. Emit mono at the device sample rate.
+        let processed: Vec<f32> = data.chunks_exact(channels as usize)
+            .map(|frame| {
+                let mono = frame.iter().sum::<f32>() / channels as f32;
+                (state.process_sample(mono) * auto_gain_level).clamp(-0.891, 0.891)
+            }).collect();
         {
             let mut buf = buffer.lock().unwrap();
-            for sample in processed.iter() {
-                buf.push_back(*sample);
-            }
-            while buf.len() > 48000 * 2 {
-                buf.pop_front();
-            }
+            buf.extend(processed.iter().copied());
+            while buf.len() > 48000 * 2 { buf.pop_front(); }
         }
-
-        // Send to callback (only full frames)
-        if let Some(sender) = tx {
-            if processed.len() >= 480 {
-                let _ = sender.try_send(processed);
-            }
-        }
-    }
-
-    fn process_i16(
-        data: &[i16],
-        buffer: Arc<Mutex<VecDeque<f32>>>,
-        tx: Option<&mpsc::Sender<Vec<f32>>>,
-        noise_gate_open_db: f32, noise_gate_close_db: f32,
-        compressor_threshold_db: f32, compressor_ratio: f32,
-        auto_gain_level: f32,
-        expander_threshold_db: f32, expander_ratio: f32,
-        presence_eq_gain_db: f32,
-        deesser_threshold_db: f32, deesser_ratio: f32,
-        agc_target_db: f32, sample_rate: f32,
-    ) {
-        thread_local! {
-            static STATE: std::cell::RefCell<Option<ProcessorState>> = std::cell::RefCell::new(None);
-        }
-
-        let mut processed = Vec::with_capacity(data.len());
-
-        STATE.with(|cell| {
-            let mut borrow = cell.borrow_mut();
-            let state = borrow.get_or_insert_with(|| ProcessorState::new(
-                noise_gate_open_db, noise_gate_close_db,
-                compressor_threshold_db, compressor_ratio,
-                expander_threshold_db, expander_ratio,
-                presence_eq_gain_db,
-                deesser_threshold_db, deesser_ratio,
-                agc_target_db, sample_rate,
-            ));
-            for &sample in data.iter() {
-                let float_sample = sample as f32 / 32768.0;
-                processed.push(state.process_sample(float_sample));
-            }
-        });
-
-        if auto_gain_level != 1.0 {
-            for s in processed.iter_mut() {
-                *s *= auto_gain_level;
-            }
-        }
-
-        for s in processed.iter_mut() {
-            *s = s.clamp(-0.891, 0.891);
-        }
-
-        {
-            let mut buf = buffer.lock().unwrap();
-            for sample in processed.iter() {
-                buf.push_back(*sample);
-            }
-            while buf.len() > 48000 * 2 {
-                buf.pop_front();
-            }
-        }
-
-        if let Some(sender) = tx {
-            if processed.len() >= 480 {
-                let _ = sender.try_send(processed);
-            }
+        // CPAL may deliver callbacks smaller than 480 samples. Never discard them.
+        if !processed.is_empty() {
+            if let Some(sender) = tx { let _ = sender.try_send(processed); }
         }
     }
 
     pub fn stop(&mut self) {
-        if !self.is_running {
-            return;
-        }
-        info!("Stopping audio processor...");
+        if let Some(tx) = self.stop_tx.take() { let _ = tx.send(()); }
+        if let Some(worker) = self.capture_thread.take() { let _ = worker.join(); }
+        self.error_tx = None;
+        self.tx = None; // closes the event forwarder once capture releases its sender
+        self.buffer.lock().unwrap().clear();
         self.is_running = false;
     }
 
@@ -333,12 +303,18 @@ impl AudioProcessor {
     pub fn set_noise_gate(&mut self, open_db: f32, close_db: f32) {
         self.noise_gate_open_db = open_db;
         self.noise_gate_close_db = close_db;
+        let mut settings = self.live_settings.lock().unwrap();
+        settings.noise_gate_open_db = open_db;
+        settings.noise_gate_close_db = close_db;
         info!("Noise gate set to open={}dB close={}dB", open_db, close_db);
     }
 
     pub fn set_compressor(&mut self, threshold_db: f32, ratio: f32) {
         self.compressor_threshold_db = threshold_db;
         self.compressor_ratio = ratio;
+        let mut settings = self.live_settings.lock().unwrap();
+        settings.compressor_threshold_db = threshold_db;
+        settings.compressor_ratio = ratio;
         info!("Compressor set to {}dB threshold, {}:1 ratio", threshold_db, ratio);
     }
 }
@@ -372,6 +348,8 @@ struct ProcessorState {
 
     // High-pass state
     hp_y_prev: f32,
+    hp_x_prev: f32,
+    hp_alpha: f32,
 
     // ── Presence EQ (biquad peaking filter) ──
     // Coefficients (normalized by a0)
@@ -404,6 +382,13 @@ struct ProcessorState {
 }
 
 impl ProcessorState {
+    fn update_live_settings(&mut self, settings: LiveSettings) {
+        self.noise_gate_open_db = settings.noise_gate_open_db;
+        self.noise_gate_close_db = settings.noise_gate_close_db;
+        self.compressor_threshold_db = settings.compressor_threshold_db;
+        self.compressor_ratio = settings.compressor_ratio;
+    }
+
     fn new(
         noise_gate_open_db: f32, noise_gate_close_db: f32,
         compressor_threshold_db: f32, compressor_ratio: f32,
@@ -436,6 +421,8 @@ impl ProcessorState {
             gate_envelope: 0.0,
             frame_buffer: Vec::with_capacity(480),
             hp_y_prev: 0.0,
+            hp_x_prev: 0.0,
+            hp_alpha: sample_rate / (sample_rate + 2.0 * PI * 80.0),
             // Presence EQ coeffs
             eq_b0, eq_b1, eq_b2, eq_a1, eq_a2,
             eq_x1: 0.0, eq_x2: 0.0,
@@ -630,9 +617,7 @@ impl ProcessorState {
         }
 
         // 1. High-pass filter (80Hz) — removes low rumble
-        let alpha = 0.01047;
-        let hp = alpha * (self.hp_y_prev + sample - self.hp_y_prev);
-        self.hp_y_prev = hp;
+        let hp = self.apply_high_pass(sample);
 
         // 2. Expander gain reduction (smoothed, applied per sample)
         let expanded = hp * self.expander_gain;
@@ -659,6 +644,14 @@ impl ProcessorState {
 
         // 8. Hard limiter (-1dBFS) — final safety net
         gained.clamp(-0.891, 0.891)
+    }
+
+    #[inline]
+    fn apply_high_pass(&mut self, sample: f32) -> f32 {
+        let out = self.hp_alpha * (self.hp_y_prev + sample - self.hp_x_prev);
+        self.hp_x_prev = sample;
+        self.hp_y_prev = out;
+        out
     }
 
     // ── Individual processing stages ───────────────────────────────────────
@@ -761,4 +754,57 @@ pub struct AudioInfo {
     pub deesser_threshold_db: f32,
     pub deesser_ratio: f32,
     pub agc_target_db: f32,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn state(rate: f32) -> ProcessorState {
+        ProcessorState::new(-48.0, -52.0, -18.0, 4.0, -50.0, 3.0, 3.0, -25.0, 4.0, -12.0, rate)
+    }
+    #[test]
+    fn high_pass_rejects_dc_and_preserves_speech_at_device_rates() {
+        for rate in [44100.0, 48000.0] {
+            let mut filter = state(rate);
+            let mut dc = 0.0;
+            for _ in 0..48000 { dc = filter.apply_high_pass(1.0); }
+            assert!(dc.abs() < 0.001);
+            let mut filter = state(rate);
+            let mut power = 0.0;
+            for n in 0..48000 {
+                let input = (2.0 * PI * 1000.0 * n as f32 / rate).sin();
+                let output = filter.apply_high_pass(input);
+                if n >= 24000 { power += output * output; }
+            }
+            assert!((power / 24000.0).sqrt() > 0.65);
+        }
+    }
+    #[test]
+    fn short_stereo_callbacks_are_downmixed_and_forwarded() {
+        let (tx, mut rx) = mpsc::channel(2);
+        let buffer = Arc::new(Mutex::new(VecDeque::new()));
+        AudioProcessor::process_f32(&[0.5, -0.5, 0.25, -0.25], 2, &mut state(44100.0), &buffer, Some(&tx), 1.0);
+        let samples = rx.try_recv().unwrap();
+        assert_eq!(samples, vec![0.0, 0.0]);
+    }
+    #[test]
+    fn active_configuration_updates_existing_callback_state() {
+        let mut processor = AudioProcessor::new();
+        let shared = processor.live_settings.clone();
+        let mut callback_state = state(48000.0);
+        processor.set_noise_gate(-35.0, -39.0);
+        processor.set_compressor(-12.0, 2.0);
+        callback_state.update_live_settings(*shared.lock().unwrap());
+        assert_eq!(callback_state.noise_gate_open_db, -35.0);
+        assert_eq!(callback_state.noise_gate_close_db, -39.0);
+        assert_eq!(callback_state.compressor_threshold_db, -12.0);
+        assert_eq!(callback_state.compressor_ratio, 2.0);
+    }
+    #[test]
+    fn runtime_capture_errors_reach_error_forwarder() {
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        AudioProcessor::report_runtime_error(&tx, "device disconnected".to_string());
+        assert_eq!(rx.try_recv().unwrap(), "device disconnected");
+    }
+
 }

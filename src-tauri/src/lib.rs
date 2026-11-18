@@ -38,6 +38,10 @@ fn get_processor() -> &'static tokio::sync::Mutex<AudioProcessor> {
 async fn start_audio_processor(app: tauri::AppHandle) -> Result<String, String> {
     info!("[RUST] start_audio_processor called");
     
+    let mut processor = get_processor().lock().await;
+    if processor.get_info().is_running {
+        return Ok("Audio processor already running".to_string());
+    }
     let (tx, mut rx) = mpsc::channel::<Vec<f32>>(100);
     
     // Clone app handle for the background task
@@ -63,12 +67,20 @@ async fn start_audio_processor(app: tauri::AppHandle) -> Result<String, String> 
         }
     });
     
+    let (error_tx, mut error_rx) = mpsc::unbounded_channel::<String>();
+    let error_app = app.clone();
+    tokio::spawn(async move {
+        while let Some(message) = error_rx.recv().await {
+            if let Err(error) = error_app.emit("audio-error", message) {
+                info!("[RUST] Failed to emit audio error: {}", error);
+            }
+        }
+    });
+    processor.set_error_callback(error_tx);
+
     // Set the sender in the processor
-    {
-        let mut processor = get_processor().lock().await;
-        processor.set_audio_callback(tx);
-        processor.start()?;
-    }
+    processor.set_audio_callback(tx);
+    processor.start()?;
     
     info!("[RUST] Audio processor started successfully");
     Ok("Audio processor started with audio streaming".to_string())

@@ -1,13 +1,16 @@
 {
   "identifier": "main-capability",
   "description": "Main window capabilities",
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "permissions": [
-    "core:default",
-    "core:event:default",
     "core:event:allow-listen",
-    "core:event:allow-emit",
-    "core:window:default",
-    "core:app:default"
-  ]
+    "core:event:allow-unlisten"
+  ],
+  "remote": {
+    "urls": [
+      "https://voice-chat-production-a794.up.railway.app"
+    ]
+  }
 }

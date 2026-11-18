@@ -1321,10 +1321,11 @@ async function handleJoinVoice() {
                 if (window.tauriAudioBridge && window.tauriAudioBridge.isTauri) {
                     try {
                         console.log('[JOIN] Starting Tauri audio bridge (Rust audio processing)...');
-                        await window.tauriAudioBridge.start();
-                        // Connect to LiveKit client for publishing
                         window.tauriAudioBridge.setLiveKitClient(window.livekitClient);
-                        console.log('[JOIN] Tauri audio bridge ready');
+                        if (!await window.tauriAudioBridge.start()) {
+                            console.warn('[JOIN] Native capture unavailable, using normal microphone');
+                        }
+                        console.log('[JOIN] Native audio initialization finished');
                     } catch (e) {
                         console.warn('[JOIN] Tauri audio bridge failed:', e?.message);
                     }
@@ -1335,16 +1336,6 @@ async function handleJoinVoice() {
                     try {
                         await window.livekitClient.publishMicrophone();
                         console.log('[JOIN] Microphone published! (attempt', attempt, ')');
-                        
-                        // If Tauri bridge is running, try to publish processed audio
-                        if (window.tauriAudioBridge && window.tauriAudioBridge.isRunning) {
-                            try {
-                                await window.tauriAudioBridge.publishToLiveKit();
-                                console.log('[JOIN] ✅ Using processed audio from Rust');
-                            } catch (e) {
-                                console.warn('[JOIN] Could not publish processed audio:', e?.message);
-                            }
-                        }
                         
                         return true;
                     } catch (error) {
@@ -1503,6 +1494,7 @@ function stopParticipantsUpdateInterval() {
 
 function handleLeaveVoice() {
     console.log('[LEAVE] handleLeaveVoice CLICKED! - Observer mode');
+    if (window.tauriAudioBridge) window.tauriAudioBridge.stop();
     
     // MODO OBSERVER: Nos desconectamos del audio pero seguimos en el room
     // para ver quién está conectado
@@ -4598,3 +4590,5 @@ if (document.readyState === 'loading') {
 } else {
     init();
 }
+
+window.addEventListener('voice-audio-error', (event) => showToast(event.detail, 'error', 8000));

@@ -486,26 +486,29 @@ class LiveKitClient {
         console.log('=== PUBLISH MICROPHONE ===');
         
         if (!this.room || this.room.state !== 'connected') {
-            console.warn('[AUDIO] Room not connected, cannot publish');
-            return;
+            throw new Error('Room not connected, cannot publish microphone');
         }
         
         if (!this.localParticipant) {
             this.localParticipant = this.room.localParticipant;
             if (!this.localParticipant) {
-                console.error('[AUDIO] No localParticipant available');
-                return;
+                throw new Error('No local participant available');
             }
         }
         
-        // Check if Tauri audio bridge is available and running
-        if (window.tauriAudioBridge && window.tauriAudioBridge.isTauri && window.tauriAudioBridge.isRunning) {
-            console.log('[AUDIO] Using Tauri processed audio from Rust');
-            // Audio is already being processed by Rust, just ensure LiveKit is ready
-            // The bridge handles the actual publishing
-            return;
+        const bridge = window.tauriAudioBridge;
+        if (bridge?.isTauri && bridge.isRunning) {
+            bridge.setLiveKitClient(this);
+            if (await bridge.publishToLiveKit()) return true;
+            // A running processor is not a publication: release it before fallback.
+            await bridge.stop();
         }
-        
+
+        if (this._isMuted) {
+            await this.localParticipant.setMicrophoneEnabled(false);
+            return true; // Capture is intentionally disabled until unmute.
+        }
+
         // Wait for room to be fully connected with retry
         await this._waitForRoomConnected();
         
@@ -537,12 +540,14 @@ class LiveKitClient {
         console.log('[AUDIO] audioTrackPublications:', this.localParticipant.audioTrackPublications?.size);
         
         // Verify the mic track was actually published — prevents silent failure
-        const hasMicTrack = this.localParticipant.audioTrackPublications?.size > 0;
+        const hasMicTrack = Array.from(this.localParticipant.audioTrackPublications?.values() || [])
+            .some(pub => pub.source === 'microphone' && pub.track);
         if (!hasMicTrack) {
             throw new Error('Microphone track was not published after setMicrophoneEnabled');
         }
         
         console.log('=== MICROPHONE READY (NATIVE) ===');
+        return true;
     }
     
     /**
@@ -572,6 +577,10 @@ class LiveKitClient {
      */
     async setAutoGain(enabled) {
         this._autoGainEnabled = enabled;
+        if (window.tauriAudioBridge?.isRunning) {
+            // Rust already performs AGC. Rewrapping its track would stop the source.
+            return;
+        }
         console.log('[AUTO-GAIN] Changed to:', enabled);
         
         if (!this.localParticipant) {
@@ -643,6 +652,12 @@ class LiveKitClient {
      */
     async setMicVolume(volume) {
         console.log('[VOLUME] setMicVolume called:', volume);
+        const bridge = window.tauriAudioBridge;
+        if (bridge?.isRunning && bridge.outputGain) {
+            this._micVolume = Math.max(0, Math.min(100, volume));
+            bridge.outputGain.gain.value = this._micVolume / 100;
+            return;
+        }
         
         // Special case: volume 0 = mute the track directly
         if (volume === 0) {
@@ -836,6 +851,8 @@ class LiveKitClient {
             console.log('[LIVEKIT] Disconnect already in progress, skipping duplicate call');
             return;
         }
+
+        if (window.tauriAudioBridge) await window.tauriAudioBridge.stop();
 
         if (!this.room) {
             console.log('[LIVEKIT] No room to disconnect');

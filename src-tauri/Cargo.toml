@@ -1,6 +1,6 @@
 [package]
 name = "voicespace"
-version = "1.0.0"
+version = "1.0.1"
 description = "VoiceSpace - Desktop Voice Chat Application"
 authors = ["VoiceSpace Team"]
 edition = "2021"
